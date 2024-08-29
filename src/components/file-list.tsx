@@ -16,6 +16,7 @@ import { ScrollArea } from "./ui/scroll-area";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import React from "react";
+import { KeyManagement } from "./download-key";
 
 type MimeTypeCategory =
   | "Images"
@@ -171,6 +172,8 @@ export const FileList: React.FC = () => {
 
   return (
     <div>
+      {!localStorage.getItem("aes-gcm-key") && <KeyManagement />}
+
       <div className="flex flex-col gap-4 mb-4">
         <div className="flex justify-between items-center">
           <div className="bg-zinc-100 dark:bg-zinc-900 rounded-md p-2 rounded-none flex gap-2">

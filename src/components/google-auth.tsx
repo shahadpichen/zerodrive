@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { gapi } from "gapi-script";
 import { Button } from "./ui/button";
+import { clearStoredKey } from "../utils/cryptoUtils";
 
 interface GoogleAuthProps {
   onAuthChange: (authenticated: boolean) => void;
@@ -13,19 +14,40 @@ export const GoogleAuth: React.FC<GoogleAuthProps> = ({ onAuthChange }) => {
     const initClient = () => {
       gapi.client
         .init({
-          clientId: process.env.REACT_APP_CLIENT_ID,
-          scope: process.env.REACT_APP_SCOPE,
+          clientId: process.env.REACT_APP_PUBLIC_CLIENT_ID,
+          scope: process.env.REACT_APP_PUBLIC_SCOPE,
         })
         .then(() => {
           const authInstance = gapi.auth2.getAuthInstance();
-          setIsAuthenticated(authInstance.isSignedIn.get());
+          const isSignedIn = authInstance.isSignedIn.get();
+          setIsAuthenticated(isSignedIn);
+          onAuthChange(isSignedIn);
+
+          if (isSignedIn) {
+            localStorage.setItem("isAuthenticated", "true");
+          } else {
+            localStorage.removeItem("isAuthenticated");
+          }
+
           authInstance.isSignedIn.listen((signedIn) => {
             setIsAuthenticated(signedIn);
             onAuthChange(signedIn);
+
+            if (signedIn) {
+              localStorage.setItem("isAuthenticated", "true");
+            } else {
+              localStorage.removeItem("isAuthenticated");
+            }
           });
         });
     };
     gapi.load("client:auth2", initClient);
+
+    const storedAuthState = localStorage.getItem("isAuthenticated");
+    if (storedAuthState === "true") {
+      setIsAuthenticated(true);
+      onAuthChange(true);
+    }
   }, [onAuthChange]);
 
   const handleLogin = () => {
@@ -36,6 +58,7 @@ export const GoogleAuth: React.FC<GoogleAuthProps> = ({ onAuthChange }) => {
     gapi.auth2.getAuthInstance().signOut();
     setIsAuthenticated(false);
     onAuthChange(false);
+    clearStoredKey();
   };
 
   return (

@@ -58,6 +58,7 @@ export const KeyManagement: React.FC = () => {
           description: "Your encryption key has been added to storage.",
         });
         setIsDialogOpen(false);
+        window.location.reload();
       } catch (error) {
         setError(
           "Invalid key format. Please ensure the key is a valid JSON object and follows the correct structure."
@@ -67,14 +68,10 @@ export const KeyManagement: React.FC = () => {
   };
 
   return (
-    <Dialog>
-      <DialogContent className="sm:max-w-[425px]">
-        <DialogHeader>
-          <DialogTitle>Add Encryption Key</DialogTitle>
-          <DialogDescription>
-            Please provide your encryption key to secure your files.
-          </DialogDescription>
-        </DialogHeader>
+    <div className="fixed z-10 bg-white flex justify-center items-center top-12 left-0 w-full min-h-screen">
+      <div className="border-2 sm:max-w-[425px] rounded-md p-5">
+        <h1>Add Encryption key</h1>
+        <p>Please provide your encryption key to secure your files.</p>
         <div className="grid gap-4 py-4">
           <div className="flex flex-col gap-1">
             <div className="flex gap-2">
@@ -93,7 +90,7 @@ export const KeyManagement: React.FC = () => {
             Generate Encryption Key
           </Button>
         </div>
-      </DialogContent>
-    </Dialog>
+      </div>
+    </div>
   );
 };
