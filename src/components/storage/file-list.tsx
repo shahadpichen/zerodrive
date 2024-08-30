@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { FileMeta, getAllFilesForUser } from "../utils/dexieDB";
+import { FileMeta, getAllFilesForUser } from "../../utils/dexieDB";
 import { gapi } from "gapi-script";
 import {
   FaImages,
@@ -12,9 +12,9 @@ import {
   FaRegFileExcel,
   FaRegFilePowerpoint,
 } from "react-icons/fa6";
-import { ScrollArea } from "./ui/scroll-area";
-import { Button } from "./ui/button";
-import { Input } from "./ui/input";
+import { ScrollArea } from "../ui/scroll-area";
+import { Button } from "../ui/button";
+import { Input } from "../ui/input";
 import React from "react";
 import { KeyManagement } from "./download-key";
 

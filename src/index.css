@@ -67,3 +67,7 @@
     @apply bg-background text-foreground;
   }
 }
+
+u {
+  color: #3182ce;
+}

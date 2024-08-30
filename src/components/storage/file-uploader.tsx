@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { gapi } from "gapi-script";
-import { getStoredKey } from "../utils/cryptoUtils";
-import { addFile } from "../utils/dexieDB";
+import { getStoredKey } from "../../utils/cryptoUtils";
+import { addFile } from "../../utils/dexieDB";
 import {
   Dialog,
   DialogContent,
@@ -10,12 +10,12 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-} from "./ui/dialog";
+} from "../ui/dialog";
 import { HiMiniPlus } from "react-icons/hi2";
-import { Button } from "./ui/button";
+import { Button } from "../ui/button";
 import React from "react";
 
-import { Input } from "./ui/input";
+import { Input } from "../ui/input";
 
 const encryptFile = async (file: File): Promise<Blob> => {
   const key = await getStoredKey();

@@ -1,15 +1,15 @@
 import { useEffect, useState } from "react";
-import { generateKey, storeKey } from "../utils/cryptoUtils";
-import { Button } from "./ui/button";
+import { generateKey, storeKey } from "../../utils/cryptoUtils";
+import { Button } from "../ui/button";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
-} from "./ui/dialogKey";
-import { Input } from "./ui/input";
-import { useToast } from "./ui/use-toast";
+} from "../ui/dialogKey";
+import { Input } from "../ui/input";
+import { useToast } from "../ui/use-toast";
 import React from "react";
 
 export const KeyManagement: React.FC = () => {

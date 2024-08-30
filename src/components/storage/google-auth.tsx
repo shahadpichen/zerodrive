@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { gapi } from "gapi-script";
-import { Button } from "./ui/button";
-import { clearStoredKey } from "../utils/cryptoUtils";
+import { Button } from "../ui/button";
+import { clearStoredKey } from "../../utils/cryptoUtils";
 
 interface GoogleAuthProps {
   onAuthChange: (authenticated: boolean) => void;
