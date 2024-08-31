@@ -46,6 +46,7 @@ export const EncryptedFileUploader: React.FC = () => {
   const [files, setFiles] = useState<File[]>([]);
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(false);
+  const [fileNames, setFileNames] = useState<string[]>([]);
 
   useEffect(() => {
     const initClient = () => {
@@ -64,8 +65,13 @@ export const EncryptedFileUploader: React.FC = () => {
   }, []);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files) {
-      setFiles(Array.from(e.target.files));
+    const files = e.target.files;
+    if (files) {
+      setFiles(Array.from(files));
+    }
+    if (files) {
+      const fileList = Array.from(files).map((file) => file.name);
+      setFileNames(fileList);
     }
   };
 
@@ -151,7 +157,7 @@ export const EncryptedFileUploader: React.FC = () => {
         </DialogHeader>
         <form
           action="/file-upload"
-          className="flex items-center justify-center border-2 border-dashed border-gray-300 rounded-lg h-32 bg-gray-100 relative cursor-pointer hover:bg-gray-200"
+          className="flex items-center justify-center border-2 border-dashed border-gray-300 rounded-lg min-h-32 py-5 bg-gray-100 relative cursor-pointer hover:bg-gray-200"
           id="my-awesome-dropzone"
         >
           <Input
@@ -160,14 +166,27 @@ export const EncryptedFileUploader: React.FC = () => {
             multiple
             className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
           />
-          <div className="text-center pointer-events-none">
-            <p className="text-gray-500">
-              Drag and drop files here, or{" "}
-              <span className="text-blue-500 font-semibold underline mt-2">
-                Browse
-              </span>
-            </p>
-          </div>
+
+          {fileNames.length > 0 ? (
+            <div className="">
+              <ul className="list-disc list-inside">
+                {fileNames.map((name, index) => (
+                  <li key={index} className="text-gray-600">
+                    {name}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : (
+            <div className="text-center pointer-events-none">
+              <p className="text-gray-500">
+                Drag and drop files here, or{" "}
+                <span className="text-blue-500 font-semibold underline mt-2">
+                  Browse
+                </span>
+              </p>
+            </div>
+          )}
         </form>
 
         <DialogFooter>

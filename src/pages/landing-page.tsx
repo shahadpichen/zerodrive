@@ -1,11 +1,25 @@
 import { Button } from "../components/ui/button";
-import React from "react";
+import React, { useState } from "react";
 import Markdown from "markdown-to-jsx";
 import { content } from "../components/landing-page/content";
+import { GoogleAuth } from "../components/storage/google-auth";
 
 function LandingPage() {
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
+    return localStorage.getItem("isAuthenticated") === "true";
+  });
+
+  const handleAuthChange = (authenticated: boolean) => {
+    setIsAuthenticated(authenticated);
+  };
   return (
     <section className="w-full h-screen">
+      <header className="flex z-10 justify-between pt-5 items-center gap-4 px-4 lg:h-[60px] lg:px-10">
+        <h1 className="text-2xl font-bold">Private Drive</h1>
+        <div className="flex gap-2">
+          <GoogleAuth onAuthChange={handleAuthChange} />
+        </div>
+      </header>
       <div className="px-4 mx-auto mt-10 max-w-screen-xl sm:mt-12 sm:px-6 md:mt-16 lg:mt-20 xl:mt-28">
         <div className="text-center">
           <h1 className="text-3xl font-extrabold tracking-tight text-gray-900 leading-10 sm:text-4xl sm:leading-none md:text-5xl">

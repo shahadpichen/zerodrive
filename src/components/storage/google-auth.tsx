@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { gapi } from "gapi-script";
 import { Button } from "../ui/button";
 import { clearStoredKey } from "../../utils/cryptoUtils";
+import { useNavigate } from "react-router-dom";
 
 interface GoogleAuthProps {
   onAuthChange: (authenticated: boolean) => void;
@@ -9,6 +10,7 @@ interface GoogleAuthProps {
 
 export const GoogleAuth: React.FC<GoogleAuthProps> = ({ onAuthChange }) => {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
+  const navigate = useNavigate();
 
   useEffect(() => {
     const initClient = () => {
@@ -25,6 +27,7 @@ export const GoogleAuth: React.FC<GoogleAuthProps> = ({ onAuthChange }) => {
 
           if (isSignedIn) {
             localStorage.setItem("isAuthenticated", "true");
+            navigate("/storage");
           } else {
             localStorage.removeItem("isAuthenticated");
           }
@@ -35,6 +38,7 @@ export const GoogleAuth: React.FC<GoogleAuthProps> = ({ onAuthChange }) => {
 
             if (signedIn) {
               localStorage.setItem("isAuthenticated", "true");
+              navigate("/storage");
             } else {
               localStorage.removeItem("isAuthenticated");
             }
@@ -48,7 +52,7 @@ export const GoogleAuth: React.FC<GoogleAuthProps> = ({ onAuthChange }) => {
       setIsAuthenticated(true);
       onAuthChange(true);
     }
-  }, [onAuthChange]);
+  }, [onAuthChange, navigate]);
 
   const handleLogin = () => {
     gapi.auth2.getAuthInstance().signIn();

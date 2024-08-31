@@ -241,9 +241,7 @@ export const FileList: React.FC = () => {
             <TableHeader>
               <TableRow>
                 <TableHead>Name</TableHead>
-                <TableHead>Uploaded Date</TableHead>{" "}
-                {/* New column for uploaded date */}
-                <TableHead>Type</TableHead>
+                <TableHead>Uploaded Date</TableHead> <TableHead>Type</TableHead>
                 <TableHead className="text-right">Download</TableHead>
               </TableRow>
             </TableHeader>

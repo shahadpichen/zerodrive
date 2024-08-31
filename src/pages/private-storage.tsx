@@ -1,7 +1,7 @@
 import React, { useState } from "react";
-import { EncryptedFileUploader } from "../components/storage/file-uploader";
 import { FileList } from "../components/storage/file-list";
 import { GoogleAuth } from "../components/storage/google-auth";
+import { Toaster } from "../components/ui/toaster";
 
 function PrivateStorage() {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
@@ -14,6 +14,7 @@ function PrivateStorage() {
 
   return (
     <section className="bg-[#FAF9F6] h-screen">
+      <Toaster />
       <header className="flex z-10 justify-between pt-5 items-center gap-4 px-4 lg:h-[60px] lg:px-10">
         <h1 className="text-2xl font-bold">Private Drive</h1>
         <div className="flex gap-2">
