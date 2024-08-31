@@ -34,4 +34,7 @@ export const content = [
     description:
       "Our tool is trusted by a growing community of users who value their <u>privacy</u>. By choosing our solution, you're not just securing your files—you're joining a movement towards a safer, more <u>private digital world</u>.",
   },
+  {
+    description: "We hope you enjoy Private Drive! <br/> Regards, <br/> Shahad",
+  },
 ];

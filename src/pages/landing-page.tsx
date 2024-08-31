@@ -10,7 +10,7 @@ function LandingPage() {
         <div className="text-center">
           <h1 className="text-3xl font-extrabold tracking-tight text-gray-900 leading-10 sm:text-4xl sm:leading-none md:text-5xl">
             End-to-End Encrypted Files on{" "}
-            <span className="text-indigo-600">
+            <span className="text-blue-600">
               Google <br></br> Drive for Secure Storage
             </span>
           </h1>
@@ -21,13 +21,25 @@ function LandingPage() {
             designed for your peace of mind.
           </p>
           <div className="max-w-md mx-auto mt-5 sm:flex sm:justify-center md:mt-8">
-            <Button className="text-lg p-6 bg-indigo-600 hover:bg-indigo-700">
+            <Button className="text-lg p-6 bg-blue-600 hover:bg-blue-700">
               <a href="/storage">Get Started</a>
             </Button>
           </div>
         </div>
       </div>
 
+      <div className="flex flex-col justify-center items-center my-[15vh]">
+        <div className="h-10 bg-[#1C1B21] w-[1200px] relative rounded-t-xl rounded-b-none">
+          <div className="rounded-full h-[10px] w-[10px] bg-[#EA6B6C] absolute top-4 left-4"></div>
+          <div className="rounded-full h-[10px] w-[10px] bg-[#F6BE4D] absolute top-4 left-8"></div>
+          <div className="rounded-full h-[10px] w-[10px] bg-[#63C554] absolute top-4 left-12"></div>
+        </div>
+        <img
+          src="/bg.png"
+          width="1200"
+          className="shadow-2xl border-2 rounded-b-xl rounded-t-none"
+        ></img>
+      </div>
       <div className="container my-[10vh] mx-auto flex flex-col gap-6">
         {content.map((section, index) => (
           <div key={index} className="mb-[20px]">

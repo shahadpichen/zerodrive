@@ -5,12 +5,13 @@ export interface FileMeta {
   name: string;
   mimeType: string;
   userEmail: string;
+  uploadedDate: Date;
 }
 
 const db = new Dexie("CryptoDriveDB");
 
 db.version(1).stores({
-  files: "id, name, mimeType, userEmail",
+  files: "id, name, mimeType, userEmail, uploadedDate",
 });
 
 const addFile = async (file: FileMeta) => {

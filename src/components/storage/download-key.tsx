@@ -68,29 +68,32 @@ export const KeyManagement: React.FC = () => {
   };
 
   return (
-    <div className="fixed z-10 bg-white flex justify-center items-center top-12 left-0 w-full min-h-screen">
-      <div className="border-2 sm:max-w-[425px] rounded-md p-5">
-        <h1>Add Encryption key</h1>
-        <p>Please provide your encryption key to secure your files.</p>
-        <div className="grid gap-4 py-4">
-          <div className="flex flex-col gap-1">
-            <div className="flex gap-2">
-              <Input
-                type="text"
-                placeholder="Enter your encryption key"
-                value={keyInput || ""}
-                onChange={(e) => setKeyInput(e.target.value)}
-              />
-              <Button onClick={handleKeyChange}>Store Key</Button>
+    <>
+      <div className="fixed z-10 bg-black opacity-75 top-0 left-0 w-full min-h-screen"></div>
+      <div className="fixed z-10 flex justify-center top-0 left-0 items-center w-full min-h-screen">
+        <div className="border-2  bg-white sm:max-w-[425px] rounded-md p-5">
+          <h1>Add Encryption key</h1>
+          <p>Please provide your encryption key to secure your files.</p>
+          <div className="grid gap-4 py-4">
+            <div className="flex flex-col gap-1">
+              <div className="flex gap-2">
+                <Input
+                  type="text"
+                  placeholder="Enter your encryption key"
+                  value={keyInput || ""}
+                  onChange={(e) => setKeyInput(e.target.value)}
+                />
+                <Button onClick={handleKeyChange}>Store Key</Button>
+              </div>
+              <p className="text-red-500 text-sm">{error}</p>
             </div>
-            <p className="text-red-500 text-sm">{error}</p>
+            <p className="text-center">----- or -----</p>
+            <Button onClick={handleGenerateAndDownloadKey}>
+              Generate Encryption Key
+            </Button>
           </div>
-          <p className="text-center">----- or -----</p>
-          <Button onClick={handleGenerateAndDownloadKey}>
-            Generate Encryption Key
-          </Button>
         </div>
       </div>
-    </div>
+    </>
   );
 };

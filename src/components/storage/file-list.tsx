@@ -17,6 +17,17 @@ import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import React from "react";
 import { KeyManagement } from "./download-key";
+import { EncryptedFileUploader } from "./file-uploader";
+import { SlGrid, SlList } from "react-icons/sl";
+import {
+  Table,
+  TableBody,
+  TableCaption,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "../ui/table";
 
 type MimeTypeCategory =
   | "Images"
@@ -170,54 +181,112 @@ export const FileList: React.FC = () => {
     return iconMap[mimeType] || <FaRegFileLines />;
   };
 
-  return (
-    <div>
-      {!localStorage.getItem("aes-gcm-key") && <KeyManagement />}
+  const [isOn, setIsOn] = useState(true);
 
-      <div className="flex flex-col gap-4 mb-4">
-        <div className="flex justify-between items-center">
-          <div className="bg-zinc-100 dark:bg-zinc-900 rounded-md p-2 rounded-none flex gap-2">
-            {availableFilters.map((category) => (
-              <Button
-                key={category}
-                onClick={() =>
-                  setFilter(category as MimeTypeCategory | "All Files")
-                }
-                variant={filter === category ? "default" : "ghost"}
-                className="text-xs font-semibold p-3 rounded-none"
-              >
-                {category}
-              </Button>
-            ))}
-          </div>
-          <Input
-            type="text"
-            placeholder=" Search files..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="p-2 bg-zinc-100 border w-[60%] sm:w-[30%]"
-          />
+  const handleToggle = () => {
+    setIsOn(!isOn);
+  };
+
+  return (
+    <div className="p-6">
+      {!localStorage.getItem("aes-gcm-key") && <KeyManagement />}
+      <div className="flex flex-col justify-center gap-5 items-center">
+        <Input
+          type="text"
+          placeholder=" Search files..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="p-5 shadow-xl text-base bg-white rounded-full border w-[60%]"
+        />
+      </div>
+      <div className="flex justify-between mx-20 my-5">
+        <EncryptedFileUploader />
+        <div className="flex justify-between gap-4 items-center">
+          {availableFilters.map((category) => (
+            <Button
+              key={category}
+              onClick={() =>
+                setFilter(category as MimeTypeCategory | "All Files")
+              }
+              variant={filter === category ? "default" : "outline"}
+              className="text-sm shadow-xl p-3 rounded-full"
+            >
+              {category}
+            </Button>
+          ))}
+        </div>
+        <div className="flex">
+          <Button
+            className="rounded-l-full shadow-xl py-5 pl-5 rounded-r-none"
+            variant={isOn ? "default" : "outline"}
+            onClick={handleToggle}
+          >
+            <SlList />
+          </Button>
+          <Button
+            className="rounded-r-full py-5 pr-5 rounded-l-none"
+            variant={!isOn ? "default" : "outline"}
+            onClick={handleToggle}
+          >
+            <SlGrid />
+          </Button>
         </div>
       </div>
       <ScrollArea
-        className={`flex flex-1 p-6 bg-zinc-100 dark:bg-zinc-900 rounded-none border border-dashed shadow-sm`}
-        style={{ minHeight: "calc(100vh - 20vh)" }}
+        className={`flex flex-1 p-6 shadow-xl overflow-scroll rounded-3xl`}
+        style={{ height: "calc(100vh - 34vh)" }}
       >
-        <ul className="flex gap-3 content-start flex-wrap">
-          {filteredFiles.length !== 0 &&
-            filteredFiles.map((file) => (
-              <li key={file.id}>
-                <Button
-                  className="p-6 flex gap-2 rounded-none"
-                  onClick={() => downloadAndDecryptFile(file.id, file.name)}
-                  variant="outline"
-                >
-                  {getIconForMimeType(file.mimeType)}
-                  {file.name}
-                </Button>
-              </li>
-            ))}
-        </ul>
+        {isOn ? (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Name</TableHead>
+                <TableHead>Uploaded Date</TableHead>{" "}
+                {/* New column for uploaded date */}
+                <TableHead>Type</TableHead>
+                <TableHead className="text-right">Download</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filteredFiles.length !== 0 &&
+                filteredFiles.map((file) => (
+                  <TableRow key={file.id}>
+                    <TableCell className="font-medium">{file.name}</TableCell>
+                    <TableCell>
+                      {file.uploadedDate?.toLocaleString().split(",")[0]}
+                    </TableCell>
+                    <TableCell>{file.mimeType}</TableCell>
+                    <TableCell className="text-right">
+                      <Button
+                        onClick={() =>
+                          downloadAndDecryptFile(file.id, file.name)
+                        }
+                        variant="outline"
+                      >
+                        Download
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+            </TableBody>
+          </Table>
+        ) : (
+          <ul className="flex gap-3 content-start flex-wrap">
+            {filteredFiles.length !== 0 &&
+              filteredFiles.map((file) => (
+                <li key={file.id}>
+                  <Button
+                    className="p-6 flex gap-2 shadow-xl border-0"
+                    onClick={() => downloadAndDecryptFile(file.id, file.name)}
+                    variant="outline"
+                  >
+                    {getIconForMimeType(file.mimeType)}
+                    {file.name}
+                  </Button>
+                </li>
+              ))}
+          </ul>
+        )}
       </ScrollArea>
     </div>
   );

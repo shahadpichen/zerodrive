@@ -13,9 +13,9 @@ function PrivateStorage() {
   };
 
   return (
-    <section>
-      <header className="flex z-10 justify-between h-14 items-center gap-4 border-b bg-muted/40 px-4 lg:h-[60px] lg:px-6">
-        <h1 className="font-bold">Private Drive</h1>
+    <section className="bg-[#FAF9F6] h-screen">
+      <header className="flex z-10 justify-between pt-5 items-center gap-4 px-4 lg:h-[60px] lg:px-10">
+        <h1 className="text-2xl font-bold">Private Drive</h1>
         <div className="flex gap-2">
           <GoogleAuth onAuthChange={handleAuthChange} />
         </div>
@@ -30,7 +30,6 @@ function PrivateStorage() {
           )}
         </main>
       </div>
-      {isAuthenticated && <EncryptedFileUploader />}
     </section>
   );
 }

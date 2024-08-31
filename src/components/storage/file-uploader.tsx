@@ -72,7 +72,7 @@ export const EncryptedFileUploader: React.FC = () => {
   const uploadFiles = async () => {
     if (files.length === 0 || !isAuthenticated) return;
 
-    setLoading(true); // Start loading
+    setLoading(true);
 
     try {
       const key = await getStoredKey();
@@ -112,9 +112,7 @@ export const EncryptedFileUploader: React.FC = () => {
 
         const data = await response.json();
 
-        console.log("File uploaded successfully:", data);
-
-        // Store file metadata in Dexie.js
+        // Store file metadata in Dexie.js with uploadedDate
         await addFile({
           id: data.id,
           name: file.name,
@@ -124,20 +122,24 @@ export const EncryptedFileUploader: React.FC = () => {
             .currentUser.get()
             .getBasicProfile()
             .getEmail(),
+          uploadedDate: new Date(), // Add uploadedDate here
         });
       }
     } catch (error) {
       console.error("Error uploading files:", error);
     } finally {
-      setLoading(false); // End loading
+      setLoading(false);
     }
   };
 
   return (
     <Dialog>
-      <DialogTrigger asChild className="fixed bottom-10 right-10">
-        <Button variant="default" className="rounded-full flex py-7 gap-1">
-          <HiMiniPlus className="text-2xl" />
+      <DialogTrigger asChild>
+        <Button
+          variant="default"
+          className="flex gap-1 shadow-xl rounded-full py-6"
+        >
+          Add File <HiMiniPlus className="text-xl" />
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-[465px]">
