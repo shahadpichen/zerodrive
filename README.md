@@ -15,7 +15,7 @@
 1. **Clone the Repository:**
 
    ```bash
-   git clone https://github.com/yourusername/Private-Drive.git
+   git clone https://github.com/shahadpichen/private-drive.git
    ```
 2. **Install Dependencies:**
    ```bash
