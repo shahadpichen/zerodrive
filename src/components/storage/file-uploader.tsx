@@ -118,7 +118,6 @@ export const EncryptedFileUploader: React.FC = () => {
 
         const data = await response.json();
 
-        // Store file metadata in Dexie.js with uploadedDate
         await addFile({
           id: data.id,
           name: file.name,
@@ -131,6 +130,8 @@ export const EncryptedFileUploader: React.FC = () => {
           uploadedDate: new Date(), // Add uploadedDate here
         });
       }
+
+      window.location.reload();
     } catch (error) {
       console.error("Error uploading files:", error);
     } finally {

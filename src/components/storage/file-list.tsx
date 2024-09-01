@@ -230,7 +230,7 @@ export const FileList: React.FC = () => {
             </Button>
           ))}
         </div>
-        <div className="hidden md:flex gap-1 md:gap-2">
+        <div className="hidden md:flex">
           <Button
             className="rounded-l-full shadow-xl py-3 px-3 md:py-5 md:pl-5 md:rounded-r-none"
             variant={isOn ? "default" : "outline"}
