@@ -17,7 +17,12 @@ function LandingPage() {
       <header className="flex z-10 justify-between pt-5 items-center gap-4 px-4 lg:h-[60px] lg:px-10">
         <h1 className="text-2xl font-bold">Private Drive</h1>
         <div className="flex gap-2">
-          <GoogleAuth onAuthChange={handleAuthChange} />
+          <GoogleAuth
+            onAuthChange={handleAuthChange}
+            padding={3}
+            text={"sm"}
+            content={"Login with google"}
+          />
         </div>
       </header>
       <div className="px-4 mx-auto mt-10 max-w-screen-xl sm:mt-12 sm:px-6 md:mt-16 lg:mt-20 xl:mt-28">
@@ -35,26 +40,27 @@ function LandingPage() {
             designed for your peace of mind.
           </p>
           <div className="max-w-md mx-auto mt-5 sm:flex sm:justify-center md:mt-8">
-            <Button className="text-lg p-6 bg-blue-600 hover:bg-blue-700">
+            {/* <Button className="text-lg p-6 bg-blue-600 hover:bg-blue-700">
               <a href="/storage">Get Started</a>
-            </Button>
+            </Button> */}
+            <GoogleAuth
+              onAuthChange={handleAuthChange}
+              padding={6}
+              text={"lg"}
+              content={"Get Started"}
+            />
           </div>
         </div>
       </div>
 
       <div className="flex flex-col justify-center items-center my-[15vh]">
-        <div className="h-10 bg-[#1C1B21] w-[1200px] relative rounded-t-xl rounded-b-none">
-          <div className="rounded-full h-[10px] w-[10px] bg-[#EA6B6C] absolute top-4 left-4"></div>
-          <div className="rounded-full h-[10px] w-[10px] bg-[#F6BE4D] absolute top-4 left-8"></div>
-          <div className="rounded-full h-[10px] w-[10px] bg-[#63C554] absolute top-4 left-12"></div>
-        </div>
         <img
-          src="/bg.png"
+          src="/bg4.png"
           width="1200"
-          className="shadow-2xl border-2 rounded-b-xl rounded-t-none"
+          className="shadow-2xl rounded-xl"
         ></img>
       </div>
-      <div className="container my-[10vh] mx-auto flex flex-col gap-6">
+      <div className="lg:container my-[10vh] lg:mx-auto px-5 flex flex-col gap-6">
         {content.map((section, index) => (
           <div key={index} className="mb-[20px]">
             <h2 className="text-2xl font-medium mb-[20px]">

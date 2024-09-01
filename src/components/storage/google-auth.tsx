@@ -6,9 +6,17 @@ import { useNavigate } from "react-router-dom";
 
 interface GoogleAuthProps {
   onAuthChange: (authenticated: boolean) => void;
+  padding: number;
+  content: string;
+  text: string;
 }
 
-export const GoogleAuth: React.FC<GoogleAuthProps> = ({ onAuthChange }) => {
+export const GoogleAuth: React.FC<GoogleAuthProps> = ({
+  onAuthChange,
+  content,
+  padding,
+  text,
+}) => {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const navigate = useNavigate();
 
@@ -30,6 +38,7 @@ export const GoogleAuth: React.FC<GoogleAuthProps> = ({ onAuthChange }) => {
             navigate("/storage");
           } else {
             localStorage.removeItem("isAuthenticated");
+            navigate("/");
           }
 
           authInstance.isSignedIn.listen((signedIn) => {
@@ -41,6 +50,7 @@ export const GoogleAuth: React.FC<GoogleAuthProps> = ({ onAuthChange }) => {
               navigate("/storage");
             } else {
               localStorage.removeItem("isAuthenticated");
+              navigate("/");
             }
           });
         });
@@ -70,7 +80,12 @@ export const GoogleAuth: React.FC<GoogleAuthProps> = ({ onAuthChange }) => {
       {isAuthenticated ? (
         <Button onClick={handleLogout}>Logout</Button>
       ) : (
-        <Button onClick={handleLogin}>Login with Google</Button>
+        <Button
+          onClick={handleLogin}
+          className={`bg-blue-500 hover:bg-blue-600 p-${padding} text-${text}`}
+        >
+          {content}
+        </Button>
       )}
     </>
   );
