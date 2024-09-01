@@ -187,8 +187,23 @@ export const FileList: React.FC = () => {
     setIsOn(!isOn);
   };
 
+  useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth < 768) {
+        setIsOn(false);
+      } else {
+        setIsOn(true);
+      }
+    };
+
+    handleResize();
+
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
   return (
-    <div className="p-6">
+    <div className="md:p-6">
       {!localStorage.getItem("aes-gcm-key") && <KeyManagement />}
       <div className="flex flex-col justify-center gap-5 items-center">
         <Input
@@ -196,12 +211,12 @@ export const FileList: React.FC = () => {
           placeholder=" Search files..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          className="p-5 shadow-xl text-base bg-white rounded-full border w-[60%]"
+          className="p-5 shadow-xl text-base bg-white rounded-full border w-full md:w-[60%]"
         />
       </div>
-      <div className="flex justify-between mx-20 my-5">
+      <div className="flex flex-col md:flex-row justify-between items-center md:items-start gap-4 mt-5">
         <EncryptedFileUploader />
-        <div className="flex justify-between gap-4 items-center">
+        <div className="flex justify-center flex-wrap gap-2 md:gap-4 items-center">
           {availableFilters.map((category) => (
             <Button
               key={category}
@@ -215,16 +230,16 @@ export const FileList: React.FC = () => {
             </Button>
           ))}
         </div>
-        <div className="flex">
+        <div className="hidden md:flex gap-1 md:gap-2">
           <Button
-            className="rounded-l-full shadow-xl py-5 pl-5 rounded-r-none"
+            className="rounded-l-full shadow-xl py-3 px-3 md:py-5 md:pl-5 md:rounded-r-none"
             variant={isOn ? "default" : "outline"}
             onClick={handleToggle}
           >
             <SlList />
           </Button>
           <Button
-            className="rounded-r-full py-5 pr-5 rounded-l-none"
+            className="rounded-r-full py-3 px-3 md:py-5 md:pr-5 md:rounded-l-none"
             variant={!isOn ? "default" : "outline"}
             onClick={handleToggle}
           >
@@ -233,7 +248,7 @@ export const FileList: React.FC = () => {
         </div>
       </div>
       <ScrollArea
-        className={`flex flex-1 p-6 shadow-xl overflow-scroll rounded-3xl`}
+        className={`flex flex-1 p-4 md:p-6 shadow-xl overflow-auto rounded-3xl mt-4`}
         style={{ height: "calc(100vh - 34vh)" }}
       >
         {isOn ? (
@@ -241,7 +256,8 @@ export const FileList: React.FC = () => {
             <TableHeader>
               <TableRow>
                 <TableHead>Name</TableHead>
-                <TableHead>Uploaded Date</TableHead> <TableHead>Type</TableHead>
+                <TableHead>Uploaded Date</TableHead>
+                <TableHead className="hidden md:flex">Type</TableHead>
                 <TableHead className="text-right">Download</TableHead>
               </TableRow>
             </TableHeader>
@@ -253,7 +269,9 @@ export const FileList: React.FC = () => {
                     <TableCell>
                       {file.uploadedDate?.toLocaleString().split(",")[0]}
                     </TableCell>
-                    <TableCell>{file.mimeType}</TableCell>
+                    <TableCell className="hidden md:flex">
+                      {file.mimeType}
+                    </TableCell>
                     <TableCell className="text-right">
                       <Button
                         onClick={() =>

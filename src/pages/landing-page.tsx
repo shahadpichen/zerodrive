@@ -40,9 +40,6 @@ function LandingPage() {
             designed for your peace of mind.
           </p>
           <div className="max-w-md mx-auto mt-5 sm:flex sm:justify-center md:mt-8">
-            {/* <Button className="text-lg p-6 bg-blue-600 hover:bg-blue-700">
-              <a href="/storage">Get Started</a>
-            </Button> */}
             <GoogleAuth
               onAuthChange={handleAuthChange}
               padding={6}
@@ -57,7 +54,7 @@ function LandingPage() {
         <img
           src="/bg4.png"
           width="1200"
-          className="shadow-2xl rounded-xl"
+          className="shadow-2xl rounded-xl px-1"
         ></img>
       </div>
       <div className="lg:container my-[10vh] lg:mx-auto px-5 flex flex-col gap-6">
