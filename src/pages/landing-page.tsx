@@ -28,10 +28,8 @@ function LandingPage() {
       <div className="px-4 mx-auto mt-10 max-w-screen-xl sm:mt-12 sm:px-6 md:mt-16 lg:mt-20 xl:mt-28">
         <div className="text-center">
           <h1 className="text-3xl font-extrabold tracking-tight text-gray-900 leading-10 sm:text-4xl sm:leading-none md:text-5xl">
-            End-to-End Encrypted Files on{" "}
-            <span className="text-blue-600">
-              Google <br></br> Drive for Secure Storage
-            </span>
+            End-to-End Encrypted Files on<br></br>
+            <span className="text-blue-600">Google Drive</span>
           </h1>
           <p className="max-w-md leading-relaxed text-zinc-500 font-light mx-auto mt-3 text-base text-gray-500 sm:text-lg md:mt-5 md:text-xl md:max-w-3xl">
             A simple, privacy-focused solution for secure file storage on Google

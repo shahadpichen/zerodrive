@@ -12,7 +12,7 @@ export const content = [
   {
     heading: "Transparency Through Open Source",
     description:
-      "Trust is crucial in digital tools, and our solution is fully <u>open source</u>. Every line of code is available for inspection, ensuring there are no <u>hidden backdoors</u> or vulnerabilities. With our <u>transparent</u> approach, you can trust that your data is protected by the community's rigorous scrutiny.",
+      "Trust is crucial in digital tools, and our solution is fully <u>open source</u>. Every line of code is available for inspection, ensuring there are no <u>hidden backdoors</u> or vulnerabilities. With our <u>transparent</u> approach, you can trust that your data is protected.",
   },
   {
     heading: "Effortless Encryption",

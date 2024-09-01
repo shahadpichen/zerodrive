@@ -1,83 +1,32 @@
-import { useState, useEffect } from "react";
-import { FileMeta, getAllFilesForUser } from "../../utils/dexieDB";
+import React, { useState, useEffect } from "react";
+import { FileMeta, getAllFilesForUser, addFile } from "../../utils/dexieDB";
 import { gapi } from "gapi-script";
-import {
-  FaImages,
-  FaRegFilePdf,
-  FaRegFileLines,
-  FaRegFileCode,
-  FaRegFileZipper,
-  FaRegFileVideo,
-  FaRegFileAudio,
-  FaRegFileExcel,
-  FaRegFilePowerpoint,
-} from "react-icons/fa6";
 import { ScrollArea } from "../ui/scroll-area";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
-import React from "react";
 import { KeyManagement } from "./download-key";
 import { EncryptedFileUploader } from "./file-uploader";
 import { SlGrid, SlList } from "react-icons/sl";
+import { MdOutlineCloudUpload } from "react-icons/md";
+import { RxCross2 } from "react-icons/rx";
 import {
   Table,
   TableBody,
-  TableCaption,
   TableCell,
   TableHead,
   TableHeader,
   TableRow,
 } from "../ui/table";
 
-type MimeTypeCategory =
-  | "Images"
-  | "PDFs"
-  | "Text"
-  | "Archives"
-  | "Videos"
-  | "Audio"
-  | "Spreadsheets"
-  | "Presentations"
-  | "Others";
-
-const iconMap: Record<string, JSX.Element> = {
-  "image/jpeg": <FaImages />,
-  "image/png": <FaImages />,
-  "image/svg+xml": <FaImages />,
-  "text/plain": <FaRegFileLines />,
-  "application/pdf": <FaRegFilePdf />,
-  "text/html": <FaRegFileCode />,
-  "application/zip": <FaRegFileZipper />,
-  "video/mp4": <FaRegFileVideo />,
-  "audio/mpeg": <FaRegFileAudio />,
-  "audio/wav": <FaRegFileAudio />,
-  "application/vnd.ms-excel": <FaRegFileExcel />,
-  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": (
-    <FaRegFileExcel />
-  ),
-  "application/vnd.ms-powerpoint": <FaRegFilePowerpoint />,
-  "application/vnd.openxmlformats-officedocument.presentationml.presentation": (
-    <FaRegFilePowerpoint />
-  ),
-};
-
-const mimeTypeCategories: Record<MimeTypeCategory, string[]> = {
-  Images: ["image/jpeg", "image/png", "image/svg+xml"],
-  PDFs: ["application/pdf"],
-  Text: ["text/plain", "text/html"],
-  Archives: ["application/zip"],
-  Videos: ["video/mp4"],
-  Audio: ["audio/mpeg", "audio/wav"],
-  Spreadsheets: [
-    "application/vnd.ms-excel",
-    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-  ],
-  Presentations: [
-    "application/vnd.ms-powerpoint",
-    "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-  ],
-  Others: [""],
-};
+import { decryptFile } from "../../utils/decryptFile";
+import { FaRegFileLines } from "react-icons/fa6";
+import {
+  MimeTypeCategory,
+  iconMap,
+  mimeTypeCategories,
+} from "../../lib/mime-types";
+import { encryptFile } from "../../utils/encryptFile";
+import { getStoredKey } from "../../utils/cryptoUtils";
 
 export const FileList: React.FC = () => {
   const [files, setFiles] = useState<FileMeta[]>([]);
@@ -90,8 +39,8 @@ export const FileList: React.FC = () => {
     (MimeTypeCategory | "All Files")[]
   >([]);
   const [searchQuery, setSearchQuery] = useState<string>("");
-
-  // const { theme } = useTheme();
+  const [droppedFiles, setDroppedFiles] = useState<File[]>([]);
+  const [loading, setLoading] = useState<boolean>(false);
 
   useEffect(() => {
     const initClient = () => {
@@ -202,6 +151,85 @@ export const FileList: React.FC = () => {
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    if (e.dataTransfer.files.length > 0) {
+      setDroppedFiles(Array.from(e.dataTransfer.files));
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  const uploadDroppedFiles = async () => {
+    if (droppedFiles.length === 0 || !userEmail) return;
+
+    setLoading(true);
+
+    try {
+      const key = await getStoredKey();
+      if (!key) {
+        alert("No key found. Please enter a key or download one.");
+        return;
+      }
+
+      const authInstance = gapi.auth2.getAuthInstance();
+      const token = authInstance.currentUser
+        .get()
+        .getAuthResponse().access_token;
+
+      for (const file of droppedFiles) {
+        const encryptedBlob = await encryptFile(file);
+
+        const metadata = {
+          name: file.name,
+          mimeType: file.type,
+        };
+
+        const form = new FormData();
+        form.append(
+          "metadata",
+          new Blob([JSON.stringify(metadata)], { type: "application/json" })
+        );
+        form.append("file", encryptedBlob);
+
+        const response = await fetch(
+          "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart",
+          {
+            method: "POST",
+            headers: new Headers({ Authorization: `Bearer ${token}` }),
+            body: form,
+          }
+        );
+
+        const data = await response.json();
+
+        await addFile({
+          id: data.id,
+          name: file.name,
+          mimeType: file.type,
+          userEmail: userEmail,
+          uploadedDate: new Date(),
+        });
+      }
+
+      setDroppedFiles([]);
+      window.location.reload();
+    } catch (error) {
+      console.error("Error uploading files:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCancelUpload = () => {
+    setDroppedFiles([]);
+  };
+
   return (
     <div className="md:p-6">
       {!localStorage.getItem("aes-gcm-key") && <KeyManagement />}
@@ -247,90 +275,88 @@ export const FileList: React.FC = () => {
           </Button>
         </div>
       </div>
-      <ScrollArea
-        className={`flex flex-1 p-4 md:p-6 shadow-xl overflow-auto rounded-3xl mt-4`}
-        style={{ height: "calc(100vh - 34vh)" }}
-      >
-        {isOn ? (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Uploaded Date</TableHead>
-                <TableHead className="hidden md:flex">Type</TableHead>
-                <TableHead className="text-right">Download</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
+      <form action="/file-upload" id="my-awesome-dropzone">
+        <ScrollArea
+          className={`flex flex-1 p-4 md:p-6 shadow-xl overflow-auto rounded-3xl mt-4`}
+          style={{ height: "calc(100vh - 34vh)" }}
+          onDrop={handleDrop}
+          onDragOver={handleDragOver}
+        >
+          {isOn ? (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Uploaded Date</TableHead>
+                  <TableHead className="hidden md:flex">Type</TableHead>
+                  <TableHead className="text-right">Download</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredFiles.length !== 0 &&
+                  filteredFiles.map((file) => (
+                    <TableRow key={file.id}>
+                      <TableCell className="font-medium">{file.name}</TableCell>
+                      <TableCell>
+                        {file.uploadedDate?.toLocaleString().split(",")[0]}
+                      </TableCell>
+                      <TableCell className="hidden md:flex">
+                        {file.mimeType}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Button
+                          onClick={() =>
+                            downloadAndDecryptFile(file.id, file.name)
+                          }
+                          variant="outline"
+                        >
+                          Download
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+              </TableBody>
+            </Table>
+          ) : (
+            <ul className="flex gap-3 content-start flex-wrap">
               {filteredFiles.length !== 0 &&
                 filteredFiles.map((file) => (
-                  <TableRow key={file.id}>
-                    <TableCell className="font-medium">{file.name}</TableCell>
-                    <TableCell>
-                      {file.uploadedDate?.toLocaleString().split(",")[0]}
-                    </TableCell>
-                    <TableCell className="hidden md:flex">
-                      {file.mimeType}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Button
-                        onClick={() =>
-                          downloadAndDecryptFile(file.id, file.name)
-                        }
-                        variant="outline"
-                      >
-                        Download
-                      </Button>
-                    </TableCell>
-                  </TableRow>
+                  <li key={file.id}>
+                    <Button
+                      className="p-6 flex gap-2 shadow-xl border-0"
+                      onClick={() => downloadAndDecryptFile(file.id, file.name)}
+                      variant="outline"
+                    >
+                      {getIconForMimeType(file.mimeType)}
+                      {file.name}
+                    </Button>
+                  </li>
                 ))}
-            </TableBody>
-          </Table>
-        ) : (
-          <ul className="flex gap-3 content-start flex-wrap">
-            {filteredFiles.length !== 0 &&
-              filteredFiles.map((file) => (
-                <li key={file.id}>
-                  <Button
-                    className="p-6 flex gap-2 shadow-xl border-0"
-                    onClick={() => downloadAndDecryptFile(file.id, file.name)}
-                    variant="outline"
-                  >
-                    {getIconForMimeType(file.mimeType)}
-                    {file.name}
-                  </Button>
-                </li>
-              ))}
-          </ul>
-        )}
-      </ScrollArea>
+            </ul>
+          )}
+          {droppedFiles.length > 0 && (
+            <div className="mt-4 flex justify-center">
+              <Button
+                onClick={uploadDroppedFiles}
+                variant="outline"
+                className="absolute flex flex-col text-2xl font-semibold w-full h-full bg-black/20 top-0 hover:bg-black/25"
+                disabled={loading}
+              >
+                <MdOutlineCloudUpload className="text-8xl" />
+                {loading ? "Uploading..." : "Click to Upload Files"}
+              </Button>
+              <Button
+                onClick={handleCancelUpload}
+                variant="ghost"
+                className="absolute top-2 right-2 hover:bg-transparent"
+                disabled={loading}
+              >
+                <RxCross2 className="text-2xl" />
+              </Button>
+            </div>
+          )}
+        </ScrollArea>
+      </form>
     </div>
   );
-};
-
-const decryptFile = async (fileBlob: Blob): Promise<Blob> => {
-  const keyJWK = JSON.parse(localStorage.getItem("aes-gcm-key") || "{}");
-  const key = await crypto.subtle.importKey(
-    "jwk",
-    keyJWK,
-    { name: "AES-GCM" },
-    true,
-    ["decrypt"]
-  );
-
-  const fileArrayBuffer = await fileBlob.arrayBuffer();
-  const iv = new Uint8Array(12);
-  iv.set(new Uint8Array(fileArrayBuffer.slice(0, 12)));
-  const encryptedData = new Uint8Array(fileArrayBuffer.slice(12));
-
-  const decryptedBuffer = await crypto.subtle.decrypt(
-    {
-      name: "AES-GCM",
-      iv: iv,
-    },
-    key,
-    encryptedData
-  );
-
-  return new Blob([decryptedBuffer]);
 };
