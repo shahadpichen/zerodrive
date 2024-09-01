@@ -51,11 +51,7 @@ function LandingPage() {
       </div>
 
       <div className="flex flex-col justify-center items-center my-[15vh]">
-        <img
-          src="/bg4.png"
-          width="1200"
-          className="shadow-2xl rounded-xl px-1"
-        ></img>
+        <img src="/bg3.png" width="1200" className="rounded-xl px-1"></img>
       </div>
       <div className="lg:container my-[10vh] lg:mx-auto px-5 flex flex-col gap-6">
         {content.map((section, index) => (
