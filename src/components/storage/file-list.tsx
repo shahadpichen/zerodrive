@@ -216,7 +216,7 @@ export const FileList: React.FC = () => {
       </div>
       <div className="flex flex-col md:flex-row justify-between items-center md:items-start gap-4 mt-5">
         <EncryptedFileUploader />
-        <div className="flex justify-center flex-wrap gap-2 md:gap-4 items-center">
+        <div className="hidden md:flex justify-center flex-wrap gap-2 md:gap-4 items-center">
           {availableFilters.map((category) => (
             <Button
               key={category}
