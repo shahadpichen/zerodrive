@@ -6,17 +6,9 @@ import { useNavigate } from "react-router-dom";
 
 interface GoogleAuthProps {
   onAuthChange: (authenticated: boolean) => void;
-  padding: number;
-  content: string;
-  text: string;
 }
 
-export const GoogleAuth: React.FC<GoogleAuthProps> = ({
-  onAuthChange,
-  content,
-  padding,
-  text,
-}) => {
+export const GoogleAuth: React.FC<GoogleAuthProps> = ({ onAuthChange }) => {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const navigate = useNavigate();
 
@@ -62,6 +54,39 @@ export const GoogleAuth: React.FC<GoogleAuthProps> = ({
       setIsAuthenticated(true);
       onAuthChange(true);
     }
+
+    // Render the Google Sign-In button only after the element is available
+    const renderSignInButton = () => {
+      const buttonElement = document.getElementById("google-signin-button");
+      if (buttonElement) {
+        gapi.signin2.render(buttonElement, {
+          scope: process.env.REACT_APP_PUBLIC_SCOPE,
+          width: 240,
+          height: 50,
+          longtitle: true,
+          theme: "dark",
+          onsuccess: (googleUser: any) => {
+            setIsAuthenticated(true);
+            onAuthChange(true);
+            navigate("/storage");
+          },
+          onfailure: () => {
+            setIsAuthenticated(false);
+            onAuthChange(false);
+          },
+        });
+      }
+    };
+
+    renderSignInButton();
+
+    // Cleanup
+    return () => {
+      const buttonElement = document.getElementById("google-signin-button");
+      if (buttonElement) {
+        buttonElement.innerHTML = ""; // Clear the button when unmounting
+      }
+    };
   }, [onAuthChange, navigate]);
 
   const handleLogin = () => {
@@ -80,12 +105,7 @@ export const GoogleAuth: React.FC<GoogleAuthProps> = ({
       {isAuthenticated ? (
         <Button onClick={handleLogout}>Logout</Button>
       ) : (
-        <Button
-          onClick={handleLogin}
-          className={`bg-blue-500 hover:bg-blue-600 p-${padding} text-${text}`}
-        >
-          {content}
-        </Button>
+        <div id="google-signin-button" onClick={handleLogin}></div>
       )}
     </>
   );

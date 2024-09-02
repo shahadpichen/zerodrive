@@ -119,6 +119,12 @@ export const KeyManagement: React.FC = () => {
               <Button onClick={handleGenerateAndDownloadKey}>
                 Generate Encryption Key
               </Button>
+              <p className="text-sm text-red-500 mt-4">
+                <strong>Important:</strong> Please save your encryption key
+                securely. You will need to upload it on your next login to
+                access your files. If you lose this key, you will not be able to
+                recover your encrypted files.
+              </p>
             </div>
           </CardContent>
         </Card>

@@ -18,12 +18,7 @@ function PrivateStorage() {
       <header className="flex z-10 justify-between pt-5 md:pb-0 pb-3 items-center gap-4 px-4 lg:h-[60px] lg:px-10">
         <h1 className="text-2xl font-bold">Private Drive</h1>
         <div className="flex gap-2">
-          <GoogleAuth
-            onAuthChange={handleAuthChange}
-            padding={2}
-            text={"sm"}
-            content={"Login with google"}
-          />
+          <GoogleAuth onAuthChange={handleAuthChange} />
         </div>
       </header>
 
