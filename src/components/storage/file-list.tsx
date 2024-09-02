@@ -318,17 +318,25 @@ export const FileList: React.FC = () => {
               </TableBody>
             </Table>
           ) : (
-            <ul className="flex gap-3 content-start flex-wrap">
+            <ul className="flex gap-3 justify-center md:justify-start content-start flex-wrap">
               {filteredFiles.length !== 0 &&
                 filteredFiles.map((file) => (
                   <li key={file.id}>
                     <Button
-                      className="p-6 flex gap-2 shadow-xl border-0"
+                      className="h-36 w-36  md:h-40 md:w-40 bg-zinc-100/25 flex flex-col gap-2 shadow-xl overflow-hidden rounded-xl border-0"
                       onClick={() => downloadAndDecryptFile(file.id, file.name)}
                       variant="outline"
                     >
-                      {getIconForMimeType(file.mimeType)}
-                      {file.name}
+                      <p className="flex items-center h-[10%]">
+                        {getIconForMimeType(file.mimeType)}
+                        {file.name}
+                      </p>
+                      <div className="h-[80%] rounded-xl text-2xl bg-white w-full flex items-center justify-center">
+                        {getIconForMimeType(file.mimeType)}
+                      </div>
+                      <p className="h-[10%]">
+                        {file.uploadedDate?.toLocaleString().split(",")[0]}
+                      </p>
                     </Button>
                   </li>
                 ))}
