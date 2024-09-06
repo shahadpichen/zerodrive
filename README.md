@@ -1,6 +1,6 @@
-# Private Drive
+# ZeroBox
 
-**Private Drive** is a tool that keeps your Google Drive files secure with end-to-end encryption. Here’s what you need to know:
+**ZeroBox** is a tool that keeps your Google Drive files secure with end-to-end encryption. Here’s what you need to know:
 
 ## Key Features
 
