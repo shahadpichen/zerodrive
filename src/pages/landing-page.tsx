@@ -1,5 +1,5 @@
-import { Button } from "../components/ui/button";
 import React, { useState } from "react";
+import { FaGithub } from "react-icons/fa";
 import Markdown from "markdown-to-jsx";
 import { content } from "../components/landing-page/content";
 import { GoogleAuth } from "../components/storage/google-auth";
@@ -15,7 +15,17 @@ function LandingPage() {
   return (
     <section className="w-full h-screen">
       <header className="flex z-10 justify-between pt-5 items-center gap-4 px-4 lg:h-[60px] lg:px-10">
-        <h1 className="text-2xl font-bold">Private Drive</h1>
+        <h1 className="text-2xl font-bold">ZeroBox</h1>
+        <a
+          href="https://github.com/shahadpichen/zerobox"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          <h1 className="flex gap-2">
+            <FaGithub className="text-2xl" />
+            View on GitHub
+          </h1>
+        </a>
       </header>
       <div className="px-4 mx-auto mt-10 max-w-screen-xl sm:mt-12 sm:px-6 md:mt-16 lg:mt-20 xl:mt-28">
         <div className="text-center">

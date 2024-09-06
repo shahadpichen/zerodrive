@@ -16,7 +16,7 @@ function PrivateStorage() {
     <section className="bg-[#FAF9F6] w-full h-screen">
       <Toaster />
       <header className="flex z-10 justify-between pt-5 md:pb-0 pb-3 items-center gap-4 px-4 lg:h-[60px] lg:px-10">
-        <h1 className="text-2xl font-bold">Private Drive</h1>
+        <h1 className="text-2xl font-bold">ZeroBox</h1>
         <div className="flex gap-2">
           <GoogleAuth onAuthChange={handleAuthChange} />
         </div>

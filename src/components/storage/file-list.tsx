@@ -318,7 +318,7 @@ export const FileList: React.FC = () => {
               </TableBody>
             </Table>
           ) : (
-            <ul className="flex gap-3 justify-center md:justify-start content-start flex-wrap">
+            <ul className="flex gap-3 justify-center md:justifyy-start content-start flex-wrap">
               {filteredFiles.length !== 0 &&
                 filteredFiles.map((file) => (
                   <li key={file.id}>
