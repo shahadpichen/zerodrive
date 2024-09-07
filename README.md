@@ -22,7 +22,16 @@
    cd Private-Drive
    npm install
    ```
-3. **Run the Application:**
+3. **Set Environment Variables:**
+   
+    Before starting the application, make sure to add the following environment variables:
+   
+   ```bash
+   REACT_APP_PUBLIC_CLIENT_ID
+   REACT_APP_PUBLIC_SCOPE
+   ```
+   You can add these variables in a .env.local file in the project root.
+5. **Run the Application:**
    ```bash
    npm start
    ```
