@@ -14,6 +14,6 @@ export const content = [
       "Privacy through E2E encryption; Reliability of Google; Freedom of open-source.",
   },
   {
-    description: "We hope you enjoy ZeroBox! <br/> Regards, <br/> Shahad",
+    description: "We hope you enjoy ZeroDrive! <br/> Regards, <br/> Shahad",
   },
 ];
