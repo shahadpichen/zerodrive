@@ -1,6 +1,6 @@
-# ZeroBox
+# ZeroDrive
 
-**ZeroBox** is a tool that keeps your Google Drive files secure with end-to-end encryption. Here’s what you need to know:
+**ZeroDrive** is a tool that keeps your Google Drive files secure with end-to-end encryption. Here’s what you need to know:
 
 ## Key Features
 
@@ -15,12 +15,12 @@
 1. **Clone the Repository:**
 
    ```bash
-   git clone https://github.com/shahadpichen/private-drive.git
+   git clone https://github.com/shahadpichen/zerodrive.git
    ```
 
 2. **Install Dependencies:**
    ```bash
-   cd Private-Drive
+   cd ZeroDrive
    npm install
    ```
 3. **Set Environment Variables:**
@@ -36,7 +36,7 @@
    ```bash
    npm start
    ```
-4. Visit localhost:3000 in your browser to start using Private Drive.
+4. Visit localhost:3000 in your browser to start using ZeroDrive.
 
 ## Contact
 
