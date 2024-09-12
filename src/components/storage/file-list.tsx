@@ -112,19 +112,24 @@ export const FileList: React.FC = () => {
 
     const fileBlob = await response.blob();
     const decryptedBlob = await decryptFile(fileBlob);
-    const url = URL.createObjectURL(decryptedBlob);
 
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = fileName;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const url = reader.result as string;
 
-    document.body.appendChild(a);
-    a.click();
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = fileName;
 
-    setTimeout(() => {
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-    }, 1000);
+      if (navigator.userAgent.match(/iPhone|iPad|iPod/i)) {
+        window.open(url, "_blank");
+      } else {
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+      }
+    };
+    reader.readAsDataURL(decryptedBlob);
   };
 
   const getIconForMimeType = (mimeType: string) => {
