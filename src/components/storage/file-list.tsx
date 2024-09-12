@@ -101,7 +101,7 @@ export const FileList: React.FC = () => {
   const downloadAndDecryptFile = async (fileId: string, fileName: string) => {
     const authInstance = gapi.auth2.getAuthInstance();
     const token = authInstance.currentUser.get().getAuthResponse().access_token;
-    console.log(token);
+
     const response = await fetch(
       `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`,
       {
@@ -112,17 +112,19 @@ export const FileList: React.FC = () => {
 
     const fileBlob = await response.blob();
     const decryptedBlob = await decryptFile(fileBlob);
-
     const url = URL.createObjectURL(decryptedBlob);
 
     const a = document.createElement("a");
     a.href = url;
     a.download = fileName;
+
     document.body.appendChild(a);
     a.click();
-    document.body.removeChild(a);
 
-    URL.revokeObjectURL(url);
+    setTimeout(() => {
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }, 1000);
   };
 
   const getIconForMimeType = (mimeType: string) => {
