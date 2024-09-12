@@ -30,7 +30,6 @@ export const GoogleAuth: React.FC<GoogleAuthProps> = ({ onAuthChange }) => {
             navigate("/storage");
           } else {
             localStorage.removeItem("isAuthenticated");
-            navigate("/");
           }
 
           authInstance.isSignedIn.listen((signedIn) => {
@@ -42,7 +41,6 @@ export const GoogleAuth: React.FC<GoogleAuthProps> = ({ onAuthChange }) => {
               navigate("/storage");
             } else {
               localStorage.removeItem("isAuthenticated");
-              navigate("/");
             }
           });
         });
@@ -55,7 +53,6 @@ export const GoogleAuth: React.FC<GoogleAuthProps> = ({ onAuthChange }) => {
       onAuthChange(true);
     }
 
-    // Render the Google Sign-In button only after the element is available
     const renderSignInButton = () => {
       const buttonElement = document.getElementById("google-signin-button");
       if (buttonElement) {
@@ -80,11 +77,10 @@ export const GoogleAuth: React.FC<GoogleAuthProps> = ({ onAuthChange }) => {
 
     renderSignInButton();
 
-    // Cleanup
     return () => {
       const buttonElement = document.getElementById("google-signin-button");
       if (buttonElement) {
-        buttonElement.innerHTML = ""; // Clear the button when unmounting
+        buttonElement.innerHTML = "";
       }
     };
   }, [onAuthChange, navigate]);
