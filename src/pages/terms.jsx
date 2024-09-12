@@ -8,7 +8,7 @@ function Terms() {
   return (
     <main>
       <Header />
-      <div className="lg:container pb-[5vh] px-[10vh] my-[10vh] lg:mx-auto flex flex-col">
+      <div className="lg:container pb-[5vh] px-5 my-[10vh] lg:mx-auto flex flex-col">
         <h1 className="font-bold text-3xl">ZeroDrive Terms of Service</h1>
         {termsOfService.map((section, index) => (
           <div key={index} className="mb-[20px]">
