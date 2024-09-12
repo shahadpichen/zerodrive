@@ -110,7 +110,7 @@ export const KeyManagement: React.FC = () => {
 
               <p className="text-center">----- Already have a key? -----</p>
               <div className="flex flex-col gap-1">
-                <Label className="block text-sm cursor-pointer border border-gray-300 rounded-md p-2 text-center bg-white hover:bg-gray-50">
+                <Label className="block text-sm text-white cursor-pointer border border-gray-300 bg-zinc-800 rounded-md p-2 text-center hover:bg-zinc-700">
                   <span>Upload your encryption key</span>
                   <Input
                     type="file"
