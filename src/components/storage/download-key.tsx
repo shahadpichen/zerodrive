@@ -96,16 +96,22 @@ export const KeyManagement: React.FC = () => {
       <div className="fixed z-10 flex justify-center top-0 left-0 items-center w-full min-h-screen">
         <Card className="sm:max-w-[425px]">
           <CardHeader>
-            <CardTitle>Add Encryption Key</CardTitle>
+            <CardTitle>Encryption Key Management</CardTitle>
             <CardDescription>
-              Please upload your encryption key to secure your files.
+              For first-time users, generate and download your encryption key.
+              Store it securely—losing it means losing access to your files.
             </CardDescription>
           </CardHeader>
           <CardContent>
             <div className="grid gap-4">
+              <Button onClick={handleGenerateAndDownloadKey}>
+                Generate Encryption Key
+              </Button>
+
+              <p className="text-center">----- Already have a key? -----</p>
               <div className="flex flex-col gap-1">
                 <Label className="block text-sm cursor-pointer border border-gray-300 rounded-md p-2 text-center bg-white hover:bg-gray-50">
-                  <span>Add your encryption key</span>
+                  <span>Upload your encryption key</span>
                   <Input
                     type="file"
                     accept=".json"
@@ -115,16 +121,6 @@ export const KeyManagement: React.FC = () => {
                 </Label>
                 <p className="text-red-500 text-sm">{error}</p>
               </div>
-              <p className="text-center">----- or -----</p>
-              <Button onClick={handleGenerateAndDownloadKey}>
-                Generate Encryption Key
-              </Button>
-              <p className="text-sm text-red-500 mt-4">
-                <strong>Important:</strong> Please save your encryption key
-                securely. You will need to upload it on your next login to
-                access your files. If you lose this key, you will not be able to
-                recover your encrypted files.
-              </p>
             </div>
           </CardContent>
         </Card>

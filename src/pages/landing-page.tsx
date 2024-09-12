@@ -4,8 +4,11 @@ import { content } from "../components/landing-page/content";
 import { GoogleAuth } from "../components/storage/google-auth";
 import Footer from "../components/landing-page/footer";
 import Header from "../components/landing-page/header";
+import { Button } from "../components/ui/button";
+import { useNavigate } from "react-router-dom";
 
 function LandingPage() {
+  const navigate = useNavigate();
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
     return localStorage.getItem("isAuthenticated") === "true";
   });
@@ -32,16 +35,27 @@ function LandingPage() {
               <GoogleAuth onAuthChange={handleAuthChange} />
             </div>
           ) : (
-            <></>
+            <div className="max-w-md mx-auto mt-5 flex justify-center md:mt-8">
+              <Button
+                variant="secondary"
+                className="p-7 text-lg"
+                onClick={() => {
+                  navigate("/storage");
+                }}
+              >
+                Go to Storage
+              </Button>
+            </div>
           )}
         </div>
       </div>
 
       <div className="flex flex-col justify-center items-center my-[10vh]">
+        <u className="text-center text-lg mb-10">"Free forever"</u>
+
         <img src="/bg3.png" width="1200" className="rounded-xl px-1"></img>
       </div>
       <div className="lg:container pb-[5vh] lg:mx-auto px-5 flex flex-col gap-6">
-        <u className="text-center text-lg mb-10">"Free forever"</u>
         {content.map((section, index) => (
           <div key={index} className="mb-[20px]">
             <h2 className="text-2xl font-medium mb-[20px]">

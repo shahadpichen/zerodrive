@@ -65,7 +65,6 @@ export const FileList: React.FC = () => {
         setFiles(files);
         setFilteredFiles(files);
 
-        // Determine available filters
         const available = Object.keys(mimeTypeCategories).filter((category) => {
           const mimeTypes = mimeTypeCategories[category as MimeTypeCategory];
           return files.some((file) => mimeTypes.includes(file.mimeType));
@@ -102,7 +101,7 @@ export const FileList: React.FC = () => {
   const downloadAndDecryptFile = async (fileId: string, fileName: string) => {
     const authInstance = gapi.auth2.getAuthInstance();
     const token = authInstance.currentUser.get().getAuthResponse().access_token;
-
+    console.log(token);
     const response = await fetch(
       `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`,
       {
@@ -275,7 +274,14 @@ export const FileList: React.FC = () => {
           </Button>
         </div>
       </div>
-      <form action="/file-upload" id="my-awesome-dropzone">
+      <form
+        action="/file-upload"
+        id="my-awesome-dropzone"
+        onSubmit={(e) => {
+          e.preventDefault();
+          uploadDroppedFiles();
+        }}
+      >
         <ScrollArea
           className={`flex flex-1 p-4 md:p-6 shadow-xl overflow-auto rounded-3xl mt-4`}
           style={{ height: "calc(100vh - 34vh)" }}
@@ -318,22 +324,19 @@ export const FileList: React.FC = () => {
               </TableBody>
             </Table>
           ) : (
-            <ul className="flex gap-3 justify-center md:justifyy-start content-start flex-wrap">
+            <ul className="flex gap-3 flex-wrap">
               {filteredFiles.length !== 0 &&
                 filteredFiles.map((file) => (
                   <li key={file.id}>
                     <Button
-                      className="h-36 w-36  md:h-40 md:w-40 bg-zinc-100/25 flex flex-col gap-2 shadow-xl overflow-hidden rounded-xl border-0"
+                      className="h-36 w-36  md:h-40 md:w-40 bg-zinc-100/25 flex flex-col gap-2  overflow-hidden rounded-xl border-0"
                       onClick={() => downloadAndDecryptFile(file.id, file.name)}
                       variant="outline"
                     >
-                      <p className="flex items-center h-[10%]">
-                        {getIconForMimeType(file.mimeType)}
-                        {file.name}
-                      </p>
-                      <div className="h-[80%] rounded-xl text-2xl bg-white w-full flex items-center justify-center">
+                      <div className="h-[80%] rounded-xl text-6xl w-full flex items-center justify-center">
                         {getIconForMimeType(file.mimeType)}
                       </div>
+                      <p className="flex items-center h-[10%]">{file.name}</p>
                       <p className="h-[10%]">
                         {file.uploadedDate?.toLocaleString().split(",")[0]}
                       </p>
