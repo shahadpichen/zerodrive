@@ -1,8 +1,9 @@
 import React, { useState } from "react";
-import { FaGithub } from "react-icons/fa";
 import Markdown from "markdown-to-jsx";
 import { content } from "../components/landing-page/content";
 import { GoogleAuth } from "../components/storage/google-auth";
+import Footer from "../components/landing-page/footer";
+import Header from "../components/landing-page/header";
 
 function LandingPage() {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
@@ -14,19 +15,7 @@ function LandingPage() {
   };
   return (
     <section className="w-full h-screen">
-      <header className="flex z-10 justify-between pt-5 items-center gap-4 px-4 lg:h-[60px] lg:px-10">
-        <h1 className="text-2xl font-bold">ZeroDrive</h1>
-        <a
-          href="https://github.com/shahadpichen/zerobox"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h1 className="flex gap-2">
-            <FaGithub className="text-2xl" />
-            View on GitHub
-          </h1>
-        </a>
-      </header>
+      <Header />
       <div className="px-4 mx-auto mt-10 max-w-screen-xl sm:mt-12 sm:px-6 md:mt-16 lg:mt-20 xl:mt-28">
         <div className="text-center">
           <h1 className="text-3xl font-extrabold tracking-tight text-gray-900 leading-10 sm:text-4xl sm:leading-none md:text-5xl">
@@ -38,9 +27,13 @@ function LandingPage() {
             Drive. Our open-source tool encrypts your files locally on your
             device and stores them in your Google Account.
           </p>
-          <div className="max-w-md mx-auto mt-5 sm:flex sm:justify-center md:mt-8">
-            <GoogleAuth onAuthChange={handleAuthChange} />
-          </div>
+          {!isAuthenticated ? (
+            <div className="max-w-md mx-auto mt-5 flex justify-center md:mt-8">
+              <GoogleAuth onAuthChange={handleAuthChange} />
+            </div>
+          ) : (
+            <></>
+          )}
         </div>
       </div>
 
@@ -60,6 +53,7 @@ function LandingPage() {
           </div>
         ))}
       </div>
+      <Footer />
     </section>
   );
 }
