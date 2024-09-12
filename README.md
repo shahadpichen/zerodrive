@@ -20,7 +20,7 @@
 
 2. **Install Dependencies:**
    ```bash
-   cd ZeroDrive
+   cd zerodrive
    npm install
    ```
 3. **Set Environment Variables:**
