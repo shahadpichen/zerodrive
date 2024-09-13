@@ -94,6 +94,8 @@ export const GoogleAuth: React.FC<GoogleAuthProps> = ({ onAuthChange }) => {
     setIsAuthenticated(false);
     onAuthChange(false);
     clearStoredKey();
+    navigate("/");
+    window.location.reload();
   };
 
   return (

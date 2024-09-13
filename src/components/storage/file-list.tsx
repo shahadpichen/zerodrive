@@ -28,6 +28,12 @@ import {
 import { encryptFile } from "../../utils/encryptFile";
 import { getStoredKey } from "../../utils/cryptoUtils";
 
+declare global {
+  interface Window {
+    MSStream?: any;
+  }
+}
+
 export const FileList: React.FC = () => {
   const [files, setFiles] = useState<FileMeta[]>([]);
   const [filteredFiles, setFilteredFiles] = useState<FileMeta[]>([]);
@@ -112,24 +118,30 @@ export const FileList: React.FC = () => {
 
     const fileBlob = await response.blob();
     const decryptedBlob = await decryptFile(fileBlob);
+    const url = URL.createObjectURL(decryptedBlob);
 
-    const reader = new FileReader();
-    reader.onload = () => {
-      const url = reader.result as string;
+    const isIOS =
+      /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
 
+    if (isIOS) {
+      const iframe = document.createElement("iframe");
+      iframe.style.display = "none";
+      iframe.src = url;
+      document.body.appendChild(iframe);
+
+      setTimeout(() => {
+        document.body.removeChild(iframe);
+      }, 1000);
+    } else {
       const a = document.createElement("a");
       a.href = url;
       a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    }
 
-      if (navigator.userAgent.match(/iPhone|iPad|iPod/i)) {
-        window.open(url, "_blank");
-      } else {
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-      }
-    };
-    reader.readAsDataURL(decryptedBlob);
+    URL.revokeObjectURL(url);
   };
 
   const getIconForMimeType = (mimeType: string) => {
