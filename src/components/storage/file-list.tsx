@@ -28,12 +28,6 @@ import {
 import { encryptFile } from "../../utils/encryptFile";
 import { getStoredKey } from "../../utils/cryptoUtils";
 
-declare global {
-  interface Window {
-    MSStream?: any;
-  }
-}
-
 export const FileList: React.FC = () => {
   const [files, setFiles] = useState<FileMeta[]>([]);
   const [filteredFiles, setFilteredFiles] = useState<FileMeta[]>([]);
@@ -120,28 +114,17 @@ export const FileList: React.FC = () => {
     const decryptedBlob = await decryptFile(fileBlob);
     const url = URL.createObjectURL(decryptedBlob);
 
-    const isIOS =
-      /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = fileName;
 
-    if (isIOS) {
-      const iframe = document.createElement("iframe");
-      iframe.style.display = "none";
-      iframe.src = url;
-      document.body.appendChild(iframe);
+    document.body.appendChild(a);
+    a.click();
 
-      setTimeout(() => {
-        document.body.removeChild(iframe);
-      }, 1000);
-    } else {
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = fileName;
-      document.body.appendChild(a);
-      a.click();
+    setTimeout(() => {
       document.body.removeChild(a);
-    }
-
-    URL.revokeObjectURL(url);
+      URL.revokeObjectURL(url);
+    }, 1000);
   };
 
   const getIconForMimeType = (mimeType: string) => {
