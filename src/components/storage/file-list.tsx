@@ -27,11 +27,13 @@ import {
 } from "../../lib/mime-types";
 import { encryptFile } from "../../utils/encryptFile";
 import { getStoredKey } from "../../utils/cryptoUtils";
+import Spinner from "../ui/spinner";
 
 export const FileList: React.FC = () => {
   const [files, setFiles] = useState<FileMeta[]>([]);
   const [filteredFiles, setFilteredFiles] = useState<FileMeta[]>([]);
   const [userEmail, setUserEmail] = useState<string | null>(null);
+  const [isLoadingFiles, setIsLoadingFiles] = useState<boolean>(true);
   const [filter, setFilter] = useState<MimeTypeCategory | "All Files">(
     "All Files"
   );
@@ -60,6 +62,7 @@ export const FileList: React.FC = () => {
 
   useEffect(() => {
     const fetchFiles = async () => {
+      setIsLoadingFiles(true);
       if (userEmail) {
         const files = await getAllFilesForUser(userEmail);
         setFiles(files);
@@ -71,6 +74,7 @@ export const FileList: React.FC = () => {
         }) as (MimeTypeCategory | "All Files")[];
         setAvailableFilters(["All Files", ...available]);
       }
+      setIsLoadingFiles(false);
     };
     fetchFiles();
   }, [userEmail]);
@@ -284,91 +288,111 @@ export const FileList: React.FC = () => {
           uploadDroppedFiles();
         }}
       >
-        <ScrollArea
-          className={`flex flex-1 p-4 md:p-6 shadow-xl overflow-auto rounded-3xl mt-4`}
-          style={{ height: "calc(100vh - 34vh)" }}
-          onDrop={handleDrop}
-          onDragOver={handleDragOver}
-        >
-          {isOn ? (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Uploaded Date</TableHead>
-                  <TableHead className="hidden md:flex">Type</TableHead>
-                  <TableHead className="text-right">Download</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
+        {isLoadingFiles ? (
+          <div
+            className="flex justify-center items-center flex-1 p-4 md:p-6 shadow-lg overflow-auto rounded-xl mt-4"
+            style={{ height: "calc(100vh - 34vh)" }}
+          >
+            <Spinner />
+          </div>
+        ) : filteredFiles.length === 0 ? (
+          <div
+            className="flex justify-center items-center flex-1 p-4 md:p-6 shadow-lg overflow-auto rounded-xl mt-4 "
+            style={{ height: "calc(100vh - 34vh)" }}
+          >
+            <p>No files available</p>
+          </div>
+        ) : (
+          <ScrollArea
+            className={`flex flex-1 p-4 md:p-6 shadow-xl overflow-auto rounded-lg mt-4`}
+            style={{ height: "calc(100vh - 34vh)" }}
+            onDrop={handleDrop}
+            onDragOver={handleDragOver}
+          >
+            {isOn ? (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Uploaded Date</TableHead>
+                    <TableHead className="hidden md:flex">Type</TableHead>
+                    <TableHead className="text-right">Download</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredFiles.length !== 0 &&
+                    filteredFiles.map((file) => (
+                      <TableRow key={file.id}>
+                        <TableCell className="font-medium">
+                          {file.name}
+                        </TableCell>
+                        <TableCell>
+                          {file.uploadedDate?.toLocaleString().split(",")[0]}
+                        </TableCell>
+                        <TableCell className="hidden md:flex">
+                          {file.mimeType}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Button
+                            onClick={() =>
+                              downloadAndDecryptFile(file.id, file.name)
+                            }
+                            variant="outline"
+                          >
+                            Download
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                </TableBody>
+              </Table>
+            ) : (
+              <ul className="flex gap-3 flex-wrap">
                 {filteredFiles.length !== 0 &&
                   filteredFiles.map((file) => (
-                    <TableRow key={file.id}>
-                      <TableCell className="font-medium">{file.name}</TableCell>
-                      <TableCell>
-                        {file.uploadedDate?.toLocaleString().split(",")[0]}
-                      </TableCell>
-                      <TableCell className="hidden md:flex">
-                        {file.mimeType}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Button
-                          onClick={() =>
-                            downloadAndDecryptFile(file.id, file.name)
-                          }
-                          variant="outline"
-                        >
-                          Download
-                        </Button>
-                      </TableCell>
-                    </TableRow>
+                    <li key={file.id}>
+                      <Button
+                        className="h-36 w-36 md:h-40 md:w-40 bg-transparent flex flex-col gap-3 overflow-hidden rounded-md border-0 hover:bg-zinc-400/10 shadow-none"
+                        onClick={() =>
+                          downloadAndDecryptFile(file.id, file.name)
+                        }
+                        variant="outline"
+                      >
+                        <div className="h-[80%] rounded-xl text-6xl w-full flex items-center justify-center">
+                          {getIconForMimeType(file.mimeType)}
+                        </div>
+                        <p className="flex items-center h-[10%]">{file.name}</p>
+                        <p className="h-[10%]">
+                          {file.uploadedDate?.toLocaleString().split(",")[0]}
+                        </p>
+                      </Button>
+                    </li>
                   ))}
-              </TableBody>
-            </Table>
-          ) : (
-            <ul className="flex gap-3 flex-wrap">
-              {filteredFiles.length !== 0 &&
-                filteredFiles.map((file) => (
-                  <li key={file.id}>
-                    <Button
-                      className="h-36 w-36  md:h-40 md:w-40 bg-zinc-100/25 flex flex-col gap-2  overflow-hidden rounded-xl border-0"
-                      onClick={() => downloadAndDecryptFile(file.id, file.name)}
-                      variant="outline"
-                    >
-                      <div className="h-[80%] rounded-xl text-6xl w-full flex items-center justify-center">
-                        {getIconForMimeType(file.mimeType)}
-                      </div>
-                      <p className="flex items-center h-[10%]">{file.name}</p>
-                      <p className="h-[10%]">
-                        {file.uploadedDate?.toLocaleString().split(",")[0]}
-                      </p>
-                    </Button>
-                  </li>
-                ))}
-            </ul>
-          )}
-          {droppedFiles.length > 0 && (
-            <div className="mt-4 flex justify-center">
-              <Button
-                onClick={uploadDroppedFiles}
-                variant="outline"
-                className="absolute flex flex-col text-2xl font-semibold w-full h-full bg-black/20 top-0 hover:bg-black/25"
-                disabled={loading}
-              >
-                <MdOutlineCloudUpload className="text-8xl" />
-                {loading ? "Uploading..." : "Click to Upload Files"}
-              </Button>
-              <Button
-                onClick={handleCancelUpload}
-                variant="ghost"
-                className="absolute top-2 right-2 hover:bg-transparent"
-                disabled={loading}
-              >
-                <RxCross2 className="text-2xl" />
-              </Button>
-            </div>
-          )}
-        </ScrollArea>
+              </ul>
+            )}
+            {droppedFiles.length > 0 && (
+              <div className="mt-4 flex justify-center">
+                <Button
+                  onClick={uploadDroppedFiles}
+                  variant="outline"
+                  className="absolute flex flex-col text-2xl font-semibold w-full h-full bg-black/20 top-0 hover:bg-black/25"
+                  disabled={loading}
+                >
+                  <MdOutlineCloudUpload className="text-8xl" />
+                  {loading ? "Uploading..." : "Click to Upload Files"}
+                </Button>
+                <Button
+                  onClick={handleCancelUpload}
+                  variant="ghost"
+                  className="absolute top-2 right-2 hover:bg-transparent"
+                  disabled={loading}
+                >
+                  <RxCross2 className="text-2xl" />
+                </Button>
+              </div>
+            )}
+          </ScrollArea>
+        )}
       </form>
     </div>
   );

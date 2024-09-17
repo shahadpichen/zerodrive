@@ -23,27 +23,35 @@ export type MimeTypeCategory =
   | "Others";
 
 export const iconMap: Record<string, JSX.Element> = {
-  "application/pdf": <FaRegFilePdf />,
-  "text/plain": <FaRegFileLines />,
-  "application/json": <FaRegFileCode />,
-  "application/zip": <FaRegFileZipper />,
-  "application/x-7z-compressed": <FaRegFileZipper />,
-  "video/mp4": <FaRegFileVideo />,
-  "audio/mpeg": <FaRegFileAudio />,
-  "audio/wav": <FaRegFileAudio />,
-  "image/jpeg": <FaImages />,
-  "image/png": <FaImages />,
-  "image/gif": <FaImages />,
-  "image/webp": <FaImages />,
-  "image/svg+xml": <FaImages />,
+  "application/pdf": <img src="006-pdf.png" alt="PDF Icon" width="50px" />,
+  "text/plain": <img src="005-txt-file.png" alt="TEXT Icon" width="50px" />,
+  "application/json": (
+    <img src="007-source-code.png" alt="CODE Icon" width="50px" />
+  ),
+  "application/zip": <img src="004-zip-file.png" alt="ZIP Icon" width="50px" />,
+  "application/x-7z-compressed": (
+    <img src="004-zip-file.png" alt="ZIP Icon" width="50px" />
+  ),
+  "video/mp4": <img src="008-video.png" alt="VIDEO Icon" width="50px" />,
+  "audio/mpeg": <img src="003-audio.png" alt="AUDIO Icon" width="50px" />,
+  "audio/wav": <img src="003-audio.png" alt="AUDIO Icon" width="50px" />,
+  "image/jpeg": <img src="009-img.png" alt="IMG Icon" width="50px" />,
+  "image/png": <img src="002-png.png" alt="IMG Icon" width="50px" />,
+  "image/gif": <img src="010-gif.png" alt="GIF Icon" width="50px" />,
+  "image/webp": <img src="009-img.png" alt="IMG Icon" width="50px" />,
+  "image/svg+xml": <img src="009-img.png" alt="IMG Icon" width="50px" />,
   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": (
-    <FaRegFileExcel />
+    <img src="001-excel.png" alt="EXCEL Icon" width="50px" />
   ),
-  "application/vnd.ms-excel": <FaRegFileExcel />,
+  "application/vnd.ms-excel": (
+    <img src="001-excel.png" alt="EXCEL Icon" width="50px" />
+  ),
   "application/vnd.openxmlformats-officedocument.presentationml.presentation": (
-    <FaRegFilePowerpoint />
+    <img src="ppt.png" alt="PPT Icon" width="50px" />
   ),
-  "application/vnd.ms-powerpoint": <FaRegFilePowerpoint />,
+  "application/vnd.ms-powerpoint": (
+    <img src="ppt.png" alt="PPT Icon" width="50px" />
+  ),
 };
 
 export const mimeTypeCategories: Record<MimeTypeCategory, string[]> = {
