@@ -1,16 +1,4 @@
 import React from "react";
-import {
-  FaImages,
-  FaRegFilePdf,
-  FaRegFileLines,
-  FaRegFileCode,
-  FaRegFileZipper,
-  FaRegFileVideo,
-  FaRegFileAudio,
-  FaRegFileExcel,
-  FaRegFilePowerpoint,
-} from "react-icons/fa6";
-
 export type MimeTypeCategory =
   | "Images"
   | "PDFs"
