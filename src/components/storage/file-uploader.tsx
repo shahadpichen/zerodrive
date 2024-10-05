@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { gapi } from "gapi-script";
 import { getStoredKey } from "../../utils/cryptoUtils";
 import { addFile } from "../../utils/dexieDB";
+import { sendToGoogleDrive } from "../../utils/dexieDB";
 import {
   Dialog,
   DialogContent,
@@ -102,6 +103,8 @@ export const EncryptedFileUploader: React.FC = () => {
           uploadedDate: new Date(),
         });
       }
+
+      await sendToGoogleDrive();
 
       window.location.reload();
     } catch (error) {
