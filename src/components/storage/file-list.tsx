@@ -1,5 +1,10 @@
 import React, { useState, useEffect } from "react";
-import { FileMeta, getAllFilesForUser, addFile } from "../../utils/dexieDB";
+import {
+  FileMeta,
+  getAllFilesForUser,
+  addFile,
+  fetchAndStoreFileMetadata,
+} from "../../utils/dexieDB";
 import { gapi } from "gapi-script";
 import { ScrollArea } from "../ui/scroll-area";
 import { Button } from "../ui/button";
@@ -62,6 +67,7 @@ export const FileList: React.FC = () => {
 
   useEffect(() => {
     const fetchFiles = async () => {
+      fetchAndStoreFileMetadata();
       setIsLoadingFiles(true);
       if (userEmail) {
         const files = await getAllFilesForUser(userEmail);
@@ -238,6 +244,9 @@ export const FileList: React.FC = () => {
   return (
     <div className="md:p-6">
       {!localStorage.getItem("aes-gcm-key") && <KeyManagement />}
+
+      {/* Search Section */}
+
       <div className="flex flex-col justify-center gap-5 items-center">
         <Input
           type="text"
@@ -249,6 +258,9 @@ export const FileList: React.FC = () => {
       </div>
       <div className="flex flex-col md:flex-row justify-between items-center md:items-start gap-4 mt-5">
         <EncryptedFileUploader />
+
+        {/* Section selection */}
+
         <div className="hidden md:flex justify-center flex-wrap gap-2 md:gap-4 items-center">
           {availableFilters.map((category) => (
             <Button
@@ -263,6 +275,9 @@ export const FileList: React.FC = () => {
             </Button>
           ))}
         </div>
+
+        {/* Toggle */}
+
         <div className="hidden md:flex">
           <Button
             className="rounded-l-full shadow-xl py-3 px-3 md:py-5 md:pl-5 md:rounded-r-none"
@@ -280,6 +295,9 @@ export const FileList: React.FC = () => {
           </Button>
         </div>
       </div>
+
+      {/* File List */}
+
       <form
         action="/file-upload"
         id="my-awesome-dropzone"
@@ -315,7 +333,7 @@ export const FileList: React.FC = () => {
                   <TableRow>
                     <TableHead>Name</TableHead>
                     <TableHead>Uploaded Date</TableHead>
-                    <TableHead className="hidden md:flex">Type</TableHead>
+                    <TableHead>Type</TableHead>
                     <TableHead className="text-right">Download</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -329,9 +347,7 @@ export const FileList: React.FC = () => {
                         <TableCell>
                           {file.uploadedDate?.toLocaleString().split(",")[0]}
                         </TableCell>
-                        <TableCell className="hidden md:flex">
-                          {file.mimeType}
-                        </TableCell>
+                        <TableCell>{file.mimeType}</TableCell>
                         <TableCell className="text-right">
                           <Button
                             onClick={() =>
@@ -358,13 +374,17 @@ export const FileList: React.FC = () => {
                         }
                         variant="outline"
                       >
-                        <div className="h-[80%] rounded-xl text-6xl w-full flex items-center justify-center">
+                        <div className="h-[70%] rounded-xl text-6xl w-full flex items-center justify-center">
                           {getIconForMimeType(file.mimeType)}
                         </div>
-                        <p className="flex items-center h-[10%]">{file.name}</p>
-                        <p className="h-[10%]">
-                          {file.uploadedDate?.toLocaleString().split(",")[0]}
-                        </p>
+                        <div className="h-[30%] max-w-full">
+                          <p className="flex text-sm items-center truncate">
+                            {file.name}
+                          </p>
+                          <p className="text-xs text-zinc-500">
+                            {file.uploadedDate?.toLocaleString().split(",")[0]}
+                          </p>
+                        </div>
                       </Button>
                     </li>
                   ))}
