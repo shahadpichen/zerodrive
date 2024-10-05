@@ -25,7 +25,7 @@ function LandingPage() {
             End-to-End Encrypted File Storage on<br></br>
             <span className="text-blue-600">Google Drive</span>
           </h1>
-          <p className="max-w-md leading-relaxed text-zinc-500 font-light mx-auto mt-3 text-base text-gray-500 sm:text-lg md:mt-5 md:text-xl md:max-w-3xl">
+          <p className="max-w-md leading-relaxed text-zinc-500 font-light mx-auto mt-3 text-base sm:text-lg md:mt-5 md:text-xl md:max-w-3xl">
             A simple, privacy-focused solution for secure file storage on Google
             Drive. Our open-source tool encrypts your files locally on your
             device and stores them in your Google Account.
