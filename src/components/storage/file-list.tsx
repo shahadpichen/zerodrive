@@ -33,6 +33,7 @@ import {
 import { encryptFile } from "../../utils/encryptFile";
 import { getStoredKey } from "../../utils/cryptoUtils";
 import Spinner from "../ui/spinner";
+import { toast } from "sonner";
 
 export const FileList: React.FC = () => {
   const [files, setFiles] = useState<FileMeta[]>([]);
@@ -109,32 +110,51 @@ export const FileList: React.FC = () => {
   }, [filter, files, searchQuery]);
 
   const downloadAndDecryptFile = async (fileId: string, fileName: string) => {
-    const authInstance = gapi.auth2.getAuthInstance();
-    const token = authInstance.currentUser.get().getAuthResponse().access_token;
+    try {
+      const authInstance = gapi.auth2.getAuthInstance();
+      const token = authInstance.currentUser
+        .get()
+        .getAuthResponse().access_token;
 
-    const response = await fetch(
-      `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`,
-      {
-        method: "GET",
-        headers: new Headers({ Authorization: `Bearer ${token}` }),
+      const response = await fetch(
+        `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`,
+        {
+          method: "GET",
+          headers: new Headers({ Authorization: `Bearer ${token}` }),
+        }
+      );
+
+      if (!response.ok) {
+        toast.error("Failed to download file:", {
+          description: response.statusText,
+        });
       }
-    );
 
-    const fileBlob = await response.blob();
-    const decryptedBlob = await decryptFile(fileBlob);
-    const url = URL.createObjectURL(decryptedBlob);
+      const fileBlob = await response.blob();
 
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = fileName;
+      let decryptedBlob;
+      try {
+        decryptedBlob = await decryptFile(fileBlob);
+      } catch (decryptionError) {
+        toast.error("Decryption failed: The key might be incorrect.");
+      }
 
-    document.body.appendChild(a);
-    a.click();
+      const url = URL.createObjectURL(decryptedBlob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
 
-    setTimeout(() => {
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-    }, 1000);
+      setTimeout(() => {
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }, 1000);
+    } catch (error) {
+      toast.error("Error during file download or decryption:", {
+        description: error.message,
+      });
+    }
   };
 
   const getIconForMimeType = (mimeType: string) => {
@@ -184,7 +204,7 @@ export const FileList: React.FC = () => {
     try {
       const key = await getStoredKey();
       if (!key) {
-        alert("No key found. Please enter a key or download one.");
+        toast("No key found. Please enter a key or download one.");
         return;
       }
 

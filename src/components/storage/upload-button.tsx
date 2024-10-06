@@ -1,6 +1,5 @@
 import React from "react";
 import { Button } from "../ui/button";
-import { HiMiniPlus } from "react-icons/hi2";
 
 interface UploadButtonProps {
   onClick: () => void;

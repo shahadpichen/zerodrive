@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { FileList } from "../components/storage/file-list";
 import { GoogleAuth } from "../components/storage/google-auth";
-import { Toaster } from "../components/ui/toaster";
+import { Toaster } from "../components/ui/sonner";
 
 function PrivateStorage() {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {

@@ -1,5 +1,6 @@
 import Dexie from "dexie";
 import { gapi } from "gapi-script";
+import { toast } from "sonner";
 
 export interface FileMeta {
   id: string;
@@ -70,7 +71,6 @@ const sendToGoogleDrive = async () => {
             Authorization: `Bearer ${token}`,
           },
         });
-        console.log("Existing file deleted successfully");
       }
 
       const formData = new FormData();
@@ -101,9 +101,9 @@ const sendToGoogleDrive = async () => {
       }
 
       const result = await uploadResponse.json();
-      console.log("File uploaded successfully:", result);
+      toast.success("File uploaded successfully:", result);
     } catch (error) {
-      console.error("Error handling Google Drive file:", error);
+      toast.error("Error handling Google Drive file:", error);
     }
   }
 };
@@ -171,13 +171,11 @@ const fetchAndStoreFileMetadata = async () => {
         })
       );
 
-      console.log("Files stored successfully in IndexedDB.");
+      toast.success("Files stored successfully in IndexedDB.");
     } else {
-      console.log("No db-list.json file found in Google Drive.");
+      toast.error("No db-list.json file found in Google Drive.");
     }
-  } catch (error) {
-    console.error("Error fetching or storing file metadata:", error);
-  }
+  } catch (error) {}
 };
 
 export {
