@@ -8,14 +8,13 @@ import {
   CardHeader,
   CardTitle,
 } from "../ui/card";
-import { useToast } from "../ui/use-toast";
 import React from "react";
 import { Input } from "../ui/input";
 import { Label } from "../ui/label";
+import { toast } from "sonner";
 
 export const KeyManagement: React.FC = () => {
   const [error, setError] = useState("");
-  const { toast } = useToast();
 
   const handleGenerateAndDownloadKey = async () => {
     try {
@@ -33,8 +32,7 @@ export const KeyManagement: React.FC = () => {
       a.click();
       URL.revokeObjectURL(url);
 
-      toast({
-        title: "Encryption key generated",
+      toast.success("Encryption key generated", {
         description: "Your encryption key has been generated and stored.",
       });
       setTimeout(() => {
@@ -73,8 +71,7 @@ export const KeyManagement: React.FC = () => {
             ["encrypt", "decrypt"]
           );
           await storeKey(key);
-          toast({
-            title: "Encryption key added",
+          toast.success("Encryption key added", {
             description: "Your encryption key has been added to storage.",
           });
           setTimeout(() => {
