@@ -173,7 +173,7 @@ const fetchAndStoreFileMetadata = async () => {
 
       toast.success("Files stored successfully in IndexedDB.");
     } else {
-      toast.error("No db-list.json file found in Google Drive.");
+      console.error("No db-list.json file found in Google Drive.");
     }
   } catch (error) {}
 };
