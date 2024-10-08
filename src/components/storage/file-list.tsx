@@ -34,6 +34,7 @@ import { encryptFile } from "../../utils/encryptFile";
 import { getStoredKey } from "../../utils/cryptoUtils";
 import Spinner from "../ui/spinner";
 import { toast } from "sonner";
+import { Loader2 } from "lucide-react";
 
 export const FileList: React.FC = () => {
   const [files, setFiles] = useState<FileMeta[]>([]);
@@ -49,6 +50,9 @@ export const FileList: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [droppedFiles, setDroppedFiles] = useState<File[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
+  const [downloadingFileId, setDownloadingFileId] = useState<string | null>(
+    null
+  );
 
   useEffect(() => {
     const initClient = () => {
@@ -110,6 +114,7 @@ export const FileList: React.FC = () => {
   }, [filter, files, searchQuery]);
 
   const downloadAndDecryptFile = async (fileId: string, fileName: string) => {
+    setDownloadingFileId(fileId);
     try {
       const authInstance = gapi.auth2.getAuthInstance();
       const token = authInstance.currentUser
@@ -128,6 +133,7 @@ export const FileList: React.FC = () => {
         toast.error("Failed to download file:", {
           description: response.statusText,
         });
+        setDownloadingFileId(null);
       }
 
       const fileBlob = await response.blob();
@@ -137,6 +143,7 @@ export const FileList: React.FC = () => {
         decryptedBlob = await decryptFile(fileBlob);
       } catch (decryptionError) {
         toast.error("Decryption failed: The key might be incorrect.");
+        setDownloadingFileId(null);
       }
 
       const url = URL.createObjectURL(decryptedBlob);
@@ -154,6 +161,8 @@ export const FileList: React.FC = () => {
       toast.error("Error during file download or decryption:", {
         description: error.message,
       });
+    } finally {
+      setDownloadingFileId(null);
     }
   };
 
@@ -262,63 +271,66 @@ export const FileList: React.FC = () => {
   };
 
   return (
-    <div className="md:p-6">
+    <div className="h-[90vh] overflow-hidden md:pl-6 md:pr-6">
       {!localStorage.getItem("aes-gcm-key") && <KeyManagement />}
 
       {/* Search Section */}
 
-      <div className="flex flex-col justify-center gap-5 items-center">
-        <Input
-          type="text"
-          placeholder=" Search files..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          className="p-5 shadow-xl text-base bg-white rounded-full border w-full md:w-[60%]"
-        />
-      </div>
-      <div className="flex flex-col md:flex-row justify-between items-center md:items-start gap-4 mt-5">
-        <EncryptedFileUploader />
-
-        {/* Section selection */}
-
-        <div className="hidden md:flex justify-center flex-wrap gap-2 md:gap-4 items-center">
-          {availableFilters.map((category) => (
-            <Button
-              key={category}
-              onClick={() =>
-                setFilter(category as MimeTypeCategory | "All Files")
-              }
-              variant={filter === category ? "default" : "outline"}
-              className="text-sm shadow-xl p-3 rounded-full"
-            >
-              {category}
-            </Button>
-          ))}
+      <div className="flex flex-col h-fit">
+        <div className="flex flex-col justify-center gap-5 items-center">
+          <Input
+            type="text"
+            placeholder=" Search files..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="p-5 shadow-xl text-base bg-white rounded-full border w-full md:w-[60%]"
+          />
         </div>
+        <div className="flex flex-col md:flex-row justify-between items-center md:items-start gap-4 mt-5">
+          <EncryptedFileUploader />
 
-        {/* Toggle */}
+          {/* Section selection */}
 
-        <div className="hidden md:flex">
-          <Button
-            className="rounded-l-full shadow-xl py-3 px-3 md:py-5 md:pl-5 md:rounded-r-none"
-            variant={isOn ? "default" : "outline"}
-            onClick={handleToggle}
-          >
-            <SlList />
-          </Button>
-          <Button
-            className="rounded-r-full py-3 px-3 md:py-5 md:pr-5 md:rounded-l-none"
-            variant={!isOn ? "default" : "outline"}
-            onClick={handleToggle}
-          >
-            <SlGrid />
-          </Button>
+          <div className="hidden md:flex justify-center flex-wrap gap-2 md:gap-4 items-center">
+            {availableFilters.map((category) => (
+              <Button
+                key={category}
+                onClick={() =>
+                  setFilter(category as MimeTypeCategory | "All Files")
+                }
+                variant={filter === category ? "default" : "outline"}
+                className="text-sm shadow-xl p-3 rounded-full"
+              >
+                {category}
+              </Button>
+            ))}
+          </div>
+
+          {/* Toggle */}
+
+          <div className="hidden md:flex">
+            <Button
+              className="rounded-l-full shadow-xl py-3 px-3 md:py-5 md:pl-5 md:rounded-r-none"
+              variant={isOn ? "default" : "outline"}
+              onClick={handleToggle}
+            >
+              <SlList />
+            </Button>
+            <Button
+              className="rounded-r-full py-3 px-3 md:py-5 md:pr-5 md:rounded-l-none"
+              variant={!isOn ? "default" : "outline"}
+              onClick={handleToggle}
+            >
+              <SlGrid />
+            </Button>
+          </div>
         </div>
       </div>
 
       {/* File List */}
 
       <form
+        className="h-full overflow-hidden"
         action="/file-upload"
         id="my-awesome-dropzone"
         onSubmit={(e) => {
@@ -328,22 +340,21 @@ export const FileList: React.FC = () => {
       >
         {isLoadingFiles ? (
           <div
-            className="flex justify-center items-center flex-1 p-4 md:p-6 shadow-lg overflow-auto rounded-xl mt-4"
+            className="flex justify-center items-center flex-1 p-4 md:p-6 rounded-xl mt-4"
             style={{ height: "calc(100vh - 34vh)" }}
           >
             <Spinner />
           </div>
         ) : filteredFiles.length === 0 ? (
           <div
-            className="flex justify-center items-center flex-1 p-4 md:p-6 shadow-lg overflow-auto rounded-xl mt-4 "
+            className="flex justify-center items-center flex-1 p-4 md:p-6 rounded-xl mt-4 "
             style={{ height: "calc(100vh - 34vh)" }}
           >
             <p>No files available</p>
           </div>
         ) : (
           <ScrollArea
-            className={`flex flex-1 p-4 md:p-6 shadow-xl overflow-auto rounded-lg mt-4`}
-            style={{ height: "calc(100vh - 34vh)" }}
+            className={`h-full p-4 overflow-y-auto w-full rounded-lg mt-4`}
             onDrop={handleDrop}
             onDragOver={handleDragOver}
           >
@@ -374,8 +385,13 @@ export const FileList: React.FC = () => {
                               downloadAndDecryptFile(file.id, file.name)
                             }
                             variant="outline"
+                            disabled={downloadingFileId === file.id}
                           >
-                            Download
+                            {downloadingFileId === file.id ? (
+                              <Loader2 className="animate-spin size-4" />
+                            ) : (
+                              "Download"
+                            )}
                           </Button>
                         </TableCell>
                       </TableRow>
@@ -386,12 +402,13 @@ export const FileList: React.FC = () => {
               <ul className="flex gap-3 flex-wrap">
                 {filteredFiles.length !== 0 &&
                   filteredFiles.map((file) => (
-                    <li key={file.id}>
+                    <li key={file.id} className="relative">
                       <Button
                         className="h-36 w-36 md:h-40 md:w-40 bg-transparent flex flex-col gap-3 overflow-hidden rounded-md border-0 hover:bg-zinc-400/10 shadow-none"
                         onClick={() =>
                           downloadAndDecryptFile(file.id, file.name)
                         }
+                        disabled={downloadingFileId === file.id}
                         variant="outline"
                       >
                         <div className="h-[70%] rounded-xl text-6xl w-full flex items-center justify-center">
@@ -406,6 +423,13 @@ export const FileList: React.FC = () => {
                           </p>
                         </div>
                       </Button>
+                      <div className="absolute top-4 right-4">
+                        {downloadingFileId === file.id ? (
+                          <Loader2 className="animate-spin size-4" />
+                        ) : (
+                          ""
+                        )}
+                      </div>
                     </li>
                   ))}
               </ul>
