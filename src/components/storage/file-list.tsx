@@ -283,7 +283,7 @@ export const FileList: React.FC = () => {
             placeholder=" Search files..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="p-5 shadow-xl text-base bg-white rounded-full border w-full md:w-[60%]"
+            className="p-5 text-base bg-white rounded-full border w-full md:w-[60%]"
           />
         </div>
         <div className="flex flex-col md:flex-row justify-between items-center md:items-start gap-4 mt-5">
@@ -299,7 +299,7 @@ export const FileList: React.FC = () => {
                   setFilter(category as MimeTypeCategory | "All Files")
                 }
                 variant={filter === category ? "default" : "outline"}
-                className="text-sm shadow-xl p-3 rounded-full"
+                className="text-sm  p-3 rounded-full"
               >
                 {category}
               </Button>
@@ -310,7 +310,7 @@ export const FileList: React.FC = () => {
 
           <div className="hidden md:flex">
             <Button
-              className="rounded-l-full shadow-xl py-3 px-3 md:py-5 md:pl-5 md:rounded-r-none"
+              className="rounded-l-full  py-3 px-3 md:py-5 md:pl-5 md:rounded-r-none"
               variant={isOn ? "default" : "outline"}
               onClick={handleToggle}
             >
