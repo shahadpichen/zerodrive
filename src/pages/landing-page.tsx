@@ -1,14 +1,11 @@
 import React, { useState } from "react";
 import Markdown from "markdown-to-jsx";
 import { content } from "../components/landing-page/content";
-import { GoogleAuth } from "../components/storage/google-auth";
+import { GoogleAuth } from "../components/landing-page/google-auth";
 import Footer from "../components/landing-page/footer";
 import Header from "../components/landing-page/header";
-import { Button } from "../components/ui/button";
-import { useNavigate } from "react-router-dom";
 
 function LandingPage() {
-  const navigate = useNavigate();
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
     return localStorage.getItem("isAuthenticated") === "true";
   });
@@ -16,6 +13,11 @@ function LandingPage() {
   const handleAuthChange = (authenticated: boolean) => {
     setIsAuthenticated(authenticated);
   };
+
+  if (isAuthenticated) {
+    return null;
+  }
+
   return (
     <section className="w-full h-screen">
       <Header />
@@ -30,29 +32,14 @@ function LandingPage() {
             Drive. Our open-source tool encrypts your files locally on your
             device and stores them in your Google Account.
           </p>
-          {!isAuthenticated ? (
-            <div className="max-w-md mx-auto mt-5 flex justify-center md:mt-8">
-              <GoogleAuth onAuthChange={handleAuthChange} />
-            </div>
-          ) : (
-            <div className="max-w-md mx-auto mt-5 flex justify-center md:mt-8">
-              <Button
-                variant="secondary"
-                className="p-7 text-lg"
-                onClick={() => {
-                  navigate("/storage");
-                }}
-              >
-                Go to Storage
-              </Button>
-            </div>
-          )}
+          <div className="max-w-md mx-auto mt-5 flex justify-center md:mt-8">
+            <GoogleAuth onAuthChange={handleAuthChange} />
+          </div>
         </div>
       </div>
 
       <div className="flex flex-col justify-center items-center my-[10vh]">
         <u className="text-center text-lg mb-10">"Free forever"</u>
-
         <img
           src="/bg3.png"
           alt="bg"
