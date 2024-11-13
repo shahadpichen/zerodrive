@@ -1,6 +1,7 @@
 import Dexie from "dexie";
 import { gapi } from "gapi-script";
 import { toast } from "sonner";
+import { initializeGapi, refreshGapiToken } from "./gapiInit";
 
 export interface FileMeta {
   id: string;
@@ -108,74 +109,69 @@ const sendToGoogleDrive = async () => {
   }
 };
 
-const loadGapi = (): Promise<void> => {
-  return new Promise((resolve, reject) => {
-    if (!window.gapi) {
-      reject(new Error("gapi not loaded"));
-      return;
-    }
-
-    window.gapi.load("client:auth2", () => {
-      if (window.gapi.auth2) {
-        resolve();
-      } else {
-        reject(new Error("gapi.auth2 not available"));
-      }
-    });
-  });
-};
-
 const fetchAndStoreFileMetadata = async () => {
-  await loadGapi();
-
-  const authInstance = gapi.auth2.getAuthInstance();
-  const token = authInstance.currentUser.get().getAuthResponse().access_token;
-
   try {
-    const response = await fetch(
-      "https://www.googleapis.com/drive/v3/files?q=name='db-list.json' and trashed=false",
-      {
-        method: "GET",
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+    // Initialize GAPI first
+    await initializeGapi();
+
+    const response = await gapi.client.request({
+      path: "https://www.googleapis.com/drive/v3/files",
+      params: {
+        q: "name='db-list.json' and trashed=false",
+        fields: "files(id, name, modifiedTime)",
+      },
+    });
+
+    const existingFiles = response.result.files;
+
+    if (existingFiles.length > 0) {
+      const fileId = existingFiles[0].id;
+      const fileResponse = await gapi.client.request({
+        path: `https://www.googleapis.com/drive/v3/files/${fileId}`,
+        params: { alt: "media" },
+      });
+
+      const fileContent = fileResponse.result;
+
+      // Clear existing records before adding new ones
+      await db.table("files").clear();
+
+      if (fileContent && fileContent.files) {
+        await Promise.all(
+          fileContent.files.map(async (file) => {
+            try {
+              await addFile({
+                id: file.id,
+                name: file.name,
+                mimeType: file.mimeType,
+                userEmail: file.userEmail,
+                uploadedDate: new Date(file.uploadedDate),
+              });
+            } catch (error) {
+              console.error("Error adding file:", error);
+            }
+          })
+        );
+        toast.success("Files stored successfully in IndexedDB.");
       }
-    );
-
-    const existingFiles = await response.json();
-
-    if (existingFiles.files.length > 0) {
-      const fileId = existingFiles.files[0].id;
-      const fileResponse = await fetch(
-        `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`,
-        {
-          method: "GET",
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
-
-      const fileContent = await fileResponse.json();
-
-      const filesList = fileContent.files;
-      await Promise.all(
-        filesList.map(async (file) => {
-          await addFile({
-            id: file.id,
-            name: file.name,
-            mimeType: file.mimeType,
-            userEmail: file.userEmail,
-            uploadedDate: new Date(file.uploadedDate),
-          });
-        })
-      );
-
-      toast.success("Files stored successfully in IndexedDB.");
     } else {
-      console.error("No db-list.json file found in Google Drive.");
+      console.log("No db-list.json file found in Google Drive.");
     }
-  } catch (error) {}
+  } catch (error) {
+    if (error.status === 401) {
+      try {
+        await refreshGapiToken();
+        // Retry the request after token refresh
+        await fetchAndStoreFileMetadata(); // Recursive call after token refresh
+      } catch (refreshError) {
+        console.error("Error after token refresh:", refreshError);
+        window.location.href = "/";
+      }
+    } else {
+      console.error("Error fetching file metadata:", error);
+      throw error;
+    }
+  }
 };
 
 export {
