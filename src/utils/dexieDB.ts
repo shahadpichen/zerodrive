@@ -174,6 +174,37 @@ const fetchAndStoreFileMetadata = async () => {
   }
 };
 
+const deleteFiles = async (fileIds: string[]) => {
+  const authInstance = gapi.auth2.getAuthInstance();
+  const token = authInstance.currentUser.get().getAuthResponse().access_token;
+
+  try {
+    // Delete files from Google Drive
+    await Promise.all(
+      fileIds.map(async (fileId) => {
+        await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}`, {
+          method: "DELETE",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+      })
+    );
+
+    // Delete files from IndexedDB
+    await db.table("files").where("id").anyOf(fileIds).delete();
+
+    // Update db-list.json on Google Drive
+    await sendToGoogleDrive();
+
+    toast.success("Files deleted successfully");
+    return true;
+  } catch (error) {
+    toast.error("Error deleting files: " + error.message);
+    return false;
+  }
+};
+
 export {
   db,
   addFile,
@@ -181,4 +212,5 @@ export {
   getFileByIdForUser,
   sendToGoogleDrive,
   fetchAndStoreFileMetadata,
+  deleteFiles,
 };
