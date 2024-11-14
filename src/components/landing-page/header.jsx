@@ -15,7 +15,7 @@ function Header() {
         <img src="/logo192.png" alt="ZeroDrive Logo" className="h-10 w-10" />
         <span className="font-bold text-lg sm:inline-block">ZeroDrive</span>
       </a>
-      <div className="flex items-center gap-5">
+      <div className="flex flex-row items-center gap-5">
         <h1
           className="flex items-center gap-1 cursor-pointer"
           onClick={() => navigate("/how-it-works")}

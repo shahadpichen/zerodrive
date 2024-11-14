@@ -6,7 +6,7 @@ import { termsOfService } from "../components/terms-content";
 
 function Terms() {
   return (
-    <main className="px-[5vw] md:px-[12vw] w-full bg-[#F5F8F9] plus-jakarta-sans-uniquifier">
+    <main className="px-[2vw] md:px-[12vw] w-full bg-[#F5F8F9] plus-jakarta-sans-uniquifier">
       <Header />
       <div className="lg:px-[12vw] pb-[5vh] px-5 flex flex-col gap-6">
         {termsOfService.map((section, index) => (
