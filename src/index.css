@@ -68,6 +68,31 @@
   }
 }
 
+.plus-jakarta-sans-uniquifier {
+  font-family: "Plus Jakarta Sans", sans-serif;
+  font-optical-sizing: auto;
+  font-weight: 400;
+}
+
+/* Roboto Mono */
+.roboto-mono-uniquifier {
+  font-family: "Roboto Mono", serif;
+  font-optical-sizing: auto;
+  font-weight: 400;
+}
+
 u {
-  color: #3182ce;
+  color: #296fb0;
+}
+
+#google-signin-button div:hover {
+  box-shadow: none !important;
+}
+#google-signin-button div {
+  box-shadow: none !important;
+  font-size: 1rem !important;
+}
+
+#not_signed_in35qfawpxhggu {
+  font-size: 15px !important;
 }

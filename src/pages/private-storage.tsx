@@ -6,7 +6,7 @@ import { Sidebar } from "../components/storage/sidebar";
 type Section = "files" | "favorites" | "trash";
 
 function PrivateStorage() {
-  const [isAuthenticated, setIsAuthenticated] = useState(true);
+  const [_isAuthenticated, setIsAuthenticated] = useState(true);
   const [activeSection, setActiveSection] = useState<Section>("files");
 
   const renderContent = () => {
@@ -24,14 +24,14 @@ function PrivateStorage() {
   };
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background plus-jakarta-sans-uniquifier">
       <Header setIsAuthenticated={setIsAuthenticated} />
-      <div className="flex h-[92vh]">
+      <div className="flex h-[90vh]">
         <Sidebar
           activeSection={activeSection}
           setActiveSection={setActiveSection}
         />
-        <div className="flex-1 p-6 overflow-auto">{renderContent()}</div>
+        <div className="flex-1 overflow-auto">{renderContent()}</div>
       </div>
     </div>
   );

@@ -8,6 +8,8 @@ import {
 import PrivateStorage from "./pages/private-storage";
 import LandingPage from "./pages/landing-page";
 import ProtectedRoute from "./components/protected-route";
+import Privacy from "./pages/privacy";
+import Terms from "./pages/terms";
 
 function App() {
   const isAuthenticated = localStorage.getItem("isAuthenticated") === "true";
@@ -33,6 +35,8 @@ function App() {
             </ProtectedRoute>
           }
         />
+        <Route path="/privacy" element={<Privacy />} />
+        <Route path="/terms" element={<Terms />} />
       </Routes>
     </Router>
   );

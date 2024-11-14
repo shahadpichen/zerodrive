@@ -6,22 +6,8 @@ import {
   fetchAndStoreFileMetadata,
 } from "../../utils/dexieDB";
 import { gapi } from "gapi-script";
-import { ScrollArea } from "../ui/scroll-area";
-import { Button } from "../ui/button";
-import { Input } from "../ui/input";
+
 import { KeyManagement } from "./download-key";
-import { EncryptedFileUploader } from "./file-uploader";
-import { SlGrid, SlList } from "react-icons/sl";
-import { MdOutlineCloudUpload } from "react-icons/md";
-import { RxCross2 } from "react-icons/rx";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "../ui/table";
 
 import { decryptFile } from "../../utils/decryptFile";
 import { FaRegFileLines } from "react-icons/fa6";
@@ -32,9 +18,10 @@ import {
 } from "../../lib/mime-types";
 import { encryptFile } from "../../utils/encryptFile";
 import { getStoredKey } from "../../utils/cryptoUtils";
-import Spinner from "../ui/spinner";
 import { toast } from "sonner";
-import { Loader2 } from "lucide-react";
+import { FileListHeader } from "./file-list/header";
+import { FilterButtons } from "./file-list/filter-buttons";
+import { FileListContent } from "./file-list/content";
 
 export const FileList: React.FC = () => {
   const [files, setFiles] = useState<FileMeta[]>([]);
@@ -271,66 +258,25 @@ export const FileList: React.FC = () => {
   };
 
   return (
-    <div className="h-[90vh] overflow-hidden md:pl-6 md:pr-6">
+    <div className="h-[90vh] px-6 py-10 w-[80vw]">
       {!localStorage.getItem("aes-gcm-key") && <KeyManagement />}
+      <div className="flex flex-col h-[15vh] mb-2">
+        <FileListHeader
+          searchQuery={searchQuery}
+          setSearchQuery={setSearchQuery}
+          isOn={isOn}
+          setIsOn={setIsOn}
+        />
 
-      {/* Search Section */}
-
-      <div className="flex flex-col h-fit">
-        <div className="flex flex-col justify-center gap-5 items-center">
-          <Input
-            type="text"
-            placeholder=" Search files..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="p-5 text-base bg-white rounded-full border w-full md:w-[60%]"
-          />
-        </div>
-        <div className="flex flex-col md:flex-row justify-between items-center md:items-start gap-4 mt-5">
-          <EncryptedFileUploader />
-
-          {/* Section selection */}
-
-          <div className="hidden md:flex justify-center flex-wrap gap-2 md:gap-4 items-center">
-            {availableFilters.map((category) => (
-              <Button
-                key={category}
-                onClick={() =>
-                  setFilter(category as MimeTypeCategory | "All Files")
-                }
-                variant={filter === category ? "default" : "outline"}
-                className="text-sm  p-3 rounded-full"
-              >
-                {category}
-              </Button>
-            ))}
-          </div>
-
-          {/* Toggle */}
-
-          <div className="hidden md:flex">
-            <Button
-              className="rounded-l-full  py-3 px-3 md:py-5 md:pl-5 md:rounded-r-none"
-              variant={isOn ? "default" : "outline"}
-              onClick={handleToggle}
-            >
-              <SlList />
-            </Button>
-            <Button
-              className="rounded-r-full py-3 px-3 md:py-5 md:pr-5 md:rounded-l-none"
-              variant={!isOn ? "default" : "outline"}
-              onClick={handleToggle}
-            >
-              <SlGrid />
-            </Button>
-          </div>
-        </div>
+        <FilterButtons
+          filter={filter}
+          setFilter={setFilter}
+          availableFilters={availableFilters}
+        />
       </div>
 
-      {/* File List */}
-
       <form
-        className="h-full overflow-hidden"
+        className="h-fit"
         action="/file-upload"
         id="my-awesome-dropzone"
         onSubmit={(e) => {
@@ -338,125 +284,19 @@ export const FileList: React.FC = () => {
           uploadDroppedFiles();
         }}
       >
-        {isLoadingFiles ? (
-          <div
-            className="flex justify-center items-center flex-1 p-4 md:p-6 rounded-xl mt-4"
-            style={{ height: "calc(100vh - 34vh)" }}
-          >
-            <Spinner />
-          </div>
-        ) : filteredFiles.length === 0 ? (
-          <div
-            className="flex justify-center items-center flex-1 p-4 md:p-6 rounded-xl mt-4 "
-            style={{ height: "calc(100vh - 34vh)" }}
-          >
-            <p>No files available</p>
-          </div>
-        ) : (
-          <ScrollArea
-            className={`h-full p-4 overflow-y-auto w-full rounded-lg mt-4`}
-            onDrop={handleDrop}
-            onDragOver={handleDragOver}
-          >
-            {isOn ? (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Name</TableHead>
-                    <TableHead>Uploaded Date</TableHead>
-                    <TableHead>Type</TableHead>
-                    <TableHead className="text-right">Download</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredFiles.length !== 0 &&
-                    filteredFiles.map((file) => (
-                      <TableRow key={file.id}>
-                        <TableCell className="font-medium">
-                          {file.name}
-                        </TableCell>
-                        <TableCell>
-                          {file.uploadedDate?.toLocaleString().split(",")[0]}
-                        </TableCell>
-                        <TableCell>{file.mimeType}</TableCell>
-                        <TableCell className="text-right">
-                          <Button
-                            onClick={() =>
-                              downloadAndDecryptFile(file.id, file.name)
-                            }
-                            variant="outline"
-                            disabled={downloadingFileId === file.id}
-                          >
-                            {downloadingFileId === file.id ? (
-                              <Loader2 className="animate-spin size-4" />
-                            ) : (
-                              "Download"
-                            )}
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                </TableBody>
-              </Table>
-            ) : (
-              <ul className="flex gap-3 flex-wrap">
-                {filteredFiles.length !== 0 &&
-                  filteredFiles.map((file) => (
-                    <li key={file.id} className="relative">
-                      <Button
-                        className="h-36 w-36 md:h-40 md:w-40 bg-transparent flex flex-col gap-3 overflow-hidden rounded-md border-0 hover:bg-zinc-400/10 shadow-none"
-                        onClick={() =>
-                          downloadAndDecryptFile(file.id, file.name)
-                        }
-                        disabled={downloadingFileId === file.id}
-                        variant="outline"
-                      >
-                        <div className="h-[70%] rounded-xl text-6xl w-full flex items-center justify-center">
-                          {getIconForMimeType(file.mimeType)}
-                        </div>
-                        <div className="h-[30%] max-w-full">
-                          <p className="flex text-sm items-center truncate">
-                            {file.name}
-                          </p>
-                          <p className="text-xs text-zinc-500">
-                            {file.uploadedDate?.toLocaleString().split(",")[0]}
-                          </p>
-                        </div>
-                      </Button>
-                      <div className="absolute top-4 right-4">
-                        {downloadingFileId === file.id ? (
-                          <Loader2 className="animate-spin size-4" />
-                        ) : (
-                          ""
-                        )}
-                      </div>
-                    </li>
-                  ))}
-              </ul>
-            )}
-            {droppedFiles.length > 0 && (
-              <div className="mt-4 flex justify-center">
-                <Button
-                  onClick={uploadDroppedFiles}
-                  variant="outline"
-                  className="absolute flex flex-col text-2xl font-semibold w-full h-full bg-black/20 top-0 hover:bg-black/25"
-                  disabled={loading}
-                >
-                  <MdOutlineCloudUpload className="text-8xl" />
-                  {loading ? "Uploading..." : "Click to Upload Files"}
-                </Button>
-                <Button
-                  onClick={handleCancelUpload}
-                  variant="ghost"
-                  className="absolute top-2 right-2 hover:bg-transparent"
-                  disabled={loading}
-                >
-                  <RxCross2 className="text-2xl" />
-                </Button>
-              </div>
-            )}
-          </ScrollArea>
-        )}
+        <FileListContent
+          isLoadingFiles={isLoadingFiles}
+          filteredFiles={filteredFiles}
+          isOn={isOn}
+          downloadAndDecryptFile={downloadAndDecryptFile}
+          downloadingFileId={downloadingFileId}
+          droppedFiles={droppedFiles}
+          loading={loading}
+          handleDrop={handleDrop}
+          handleDragOver={handleDragOver}
+          uploadDroppedFiles={uploadDroppedFiles}
+          handleCancelUpload={handleCancelUpload}
+        />
       </form>
     </div>
   );

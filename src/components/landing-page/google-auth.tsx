@@ -3,9 +3,13 @@ import { gapi } from "gapi-script";
 
 interface GoogleAuthProps {
   onAuthChange: (authenticated: boolean) => void;
+  theme?: "dark" | "light";
 }
 
-export const GoogleAuth: React.FC<GoogleAuthProps> = ({ onAuthChange }) => {
+export const GoogleAuth: React.FC<GoogleAuthProps> = ({
+  onAuthChange,
+  theme = "dark",
+}) => {
   useEffect(() => {
     const initClient = async () => {
       try {
@@ -20,7 +24,7 @@ export const GoogleAuth: React.FC<GoogleAuthProps> = ({ onAuthChange }) => {
 
         const authInstance = gapi.auth2.getAuthInstance();
 
-        // Render the sign-in button
+        // Render the sign-in button with the chosen theme
         const buttonElement = document.getElementById("google-signin-button");
         if (buttonElement) {
           gapi.signin2.render("google-signin-button", {
@@ -28,11 +32,10 @@ export const GoogleAuth: React.FC<GoogleAuthProps> = ({ onAuthChange }) => {
             width: 240,
             height: 50,
             longtitle: true,
-            theme: "dark",
+            theme, // Use the theme prop here
             onsuccess: () => {
               localStorage.setItem("isAuthenticated", "true");
               onAuthChange(true);
-              // Use window.location instead of navigate
               window.location.href = "/storage";
             },
             onfailure: () => {
@@ -61,7 +64,7 @@ export const GoogleAuth: React.FC<GoogleAuthProps> = ({ onAuthChange }) => {
         buttonElement.innerHTML = "";
       }
     };
-  }, [onAuthChange]);
+  }, [onAuthChange, theme]);
 
   return <div id="google-signin-button"></div>;
 };
