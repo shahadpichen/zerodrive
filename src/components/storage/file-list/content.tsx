@@ -122,7 +122,7 @@ export const FileListContent: React.FC<ContentProps> = ({
               <div className="h-36 w-full md:h-40 flex flex-col gap-3 overflow-hidden rounded-md bg-zinc-300/10 hover:bg-zinc-400/10 cursor-default p-2">
                 <div className="absolute top-2 left-4 flex justify-between w-[calc(100%-1rem)] opacity-0 group-hover:opacity-100 transition-opacity">
                   <button
-                    className="h-8 w-8 text-blue-500 hover:text-blue-600"
+                    className="h-8 w-8 text-zinc-700 hover:text-zinc-900"
                     onClick={(e) => handleDownloadClick(file, e)}
                     disabled={downloadingFileId === file.id}
                   >
