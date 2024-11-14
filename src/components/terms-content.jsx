@@ -1,5 +1,6 @@
 export const termsOfService = [
   {
+    heading: "Terms of Service",
     content:
       "Thank you for choosing ZeroDrive! <br /><br /> When we say “company”, “we”, “our”, “us”, or “service” in this document, we are referring to ZeroDrive.",
   },
