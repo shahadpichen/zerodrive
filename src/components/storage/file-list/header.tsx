@@ -34,21 +34,21 @@ export const FileListHeader: React.FC<HeaderProps> = ({
       </div>
       <div className="flex items-center gap-4">
         <EncryptedFileUploader />
-        <Separator orientation="vertical" />
-        <div className="flex gap-1">
+        <Separator orientation="vertical" className="hidden md:block" />
+        <div className="hidden md:flex gap-1">
           <Button
             className="p-3 rounded-none flex items-center gap-2"
             variant={isOn ? "default" : "outline"}
             onClick={handleToggle}
           >
-            <SlList /> List
+            <SlList /> <span className="hidden md:block">List</span>
           </Button>
           <Button
             className="p-3 rounded-none flex items-center gap-2"
             variant={!isOn ? "default" : "outline"}
             onClick={handleToggle}
           >
-            <SlGrid /> Grid
+            <SlGrid /> <span className="hidden md:block">Grid</span>
           </Button>
         </div>
       </div>

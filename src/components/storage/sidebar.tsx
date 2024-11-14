@@ -1,6 +1,7 @@
-import React from "react";
+import React, { useState } from "react";
 import { cn } from "../../lib/utils";
 import { FaCloud } from "react-icons/fa";
+import { RxHamburgerMenu } from "react-icons/rx";
 import { useNavigate } from "react-router-dom";
 
 type Section = "files" | "favorites" | "trash";
@@ -27,11 +28,16 @@ const sidebarItems = [
 
 export function Sidebar({ activeSection, setActiveSection }: SidebarProps) {
   const navigate = useNavigate();
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
-  return (
-    <div className="w-[20vw] border-r p-6 h-[90vh] flex flex-col justify-between bg-[#FAFAFA]">
-      <div>
-        <div className="flex items-center gap-2 mb-4">
+  const toggleMobileMenu = () => {
+    setIsMobileMenuOpen(!isMobileMenuOpen);
+  };
+
+  const SidebarContent = () => (
+    <>
+      <div className="mt-14 md:mt-0">
+        <div className="flex items-center gap-2 mb-4 ">
           <FaCloud className="text-black" />
           <span className="text-sm font-medium">Your Vault</span>
         </div>
@@ -39,12 +45,15 @@ export function Sidebar({ activeSection, setActiveSection }: SidebarProps) {
           {sidebarItems.map((item) => (
             <button
               key={item.id}
-              onClick={() => setActiveSection(item.id)}
+              onClick={() => {
+                setActiveSection(item.id);
+                setIsMobileMenuOpen(false);
+              }}
               className={cn(
                 "flex items-center gap-3 w-full rounded-lg px-3 py-2 text-sm font-medium transition-colors",
                 activeSection === item.id
                   ? "text-secondary-foreground"
-                  : "hover: text-muted-foreground"
+                  : "hover:text-muted-foreground"
               )}
             >
               {item.label}
@@ -69,6 +78,42 @@ export function Sidebar({ activeSection, setActiveSection }: SidebarProps) {
         </div>
         <p>Copyright &copy; All Rights Reserved</p>
       </div>
-    </div>
+    </>
+  );
+
+  return (
+    <>
+      {/* Mobile Hamburger Button */}
+      <button
+        onClick={toggleMobileMenu}
+        className="md:hidden fixed top-7 left-4 z-50 p-2 rounded-md hover:bg-gray-100"
+      >
+        <RxHamburgerMenu size={24} />
+      </button>
+
+      {/* Mobile Sidebar */}
+      <div
+        className={cn(
+          "fixed inset-0 z-40 md:hidden bg-black bg-opacity-50 transition-opacity",
+          isMobileMenuOpen ? "opacity-100" : "opacity-0 pointer-events-none"
+        )}
+        onClick={() => setIsMobileMenuOpen(false)}
+      >
+        <div
+          className={cn(
+            "fixed inset-y-0 left-0 w-64 bg-[#FAFAFA] p-6 transform transition-transform duration-300 ease-in-out flex flex-col justify-between",
+            isMobileMenuOpen ? "translate-x-0" : "-translate-x-full"
+          )}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <SidebarContent />
+        </div>
+      </div>
+
+      {/* Desktop Sidebar */}
+      <div className="hidden md:flex w-[20vw] border-r p-6 h-[90vh] flex-col justify-between bg-[#FAFAFA]">
+        <SidebarContent />
+      </div>
+    </>
   );
 }

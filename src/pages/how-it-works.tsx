@@ -6,7 +6,7 @@ import { HowItWorksContent } from "../components/how-it-works-content";
 
 function HowItWorks() {
   return (
-    <main className="px-[12vw] w-full bg-[#F5F8F9] plus-jakarta-sans-uniquifier">
+    <main className="px-[5vw] md:px-[12vw]  w-full bg-[#F5F8F9] plus-jakarta-sans-uniquifier">
       <Header />
       <div className="lg:px-[12vw] pb-[5vh] px-5 flex flex-col gap-6">
         {HowItWorksContent.map((section, index) => (

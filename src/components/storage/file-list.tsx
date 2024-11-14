@@ -258,7 +258,7 @@ export const FileList: React.FC = () => {
   };
 
   return (
-    <div className="h-[90vh] px-6 py-10 w-[80vw]">
+    <div className="h-[90vh] px-6 py-10 w-[100vw] md:w-[80vw]">
       {!localStorage.getItem("aes-gcm-key") && <KeyManagement />}
       <div className="flex flex-col h-[15vh] mb-2">
         <FileListHeader

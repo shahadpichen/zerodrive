@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 
 function Footer() {
   return (
-    <footer className="text-center text-gray-600 mt-20 pb-12">
+    <footer className="text-center text-gray-600 mt-10 md:mt-20 pb-12">
       <p>
         &copy; ZeroDrive - A platform for secure file storage on Google Drive.
       </p>

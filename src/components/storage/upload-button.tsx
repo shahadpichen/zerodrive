@@ -12,11 +12,7 @@ const UploadButton: React.FC<UploadButtonProps> = ({
   isLoading,
   isDisabled,
 }) => (
-  <Button
-    onClick={onClick}
-    disabled={isDisabled}
-    className="flex gap-1 shadow-xl rounded-full py-6"
-  >
+  <Button onClick={onClick} disabled={isDisabled} className="rounded-none py-5">
     {isLoading ? (
       <>
         Uploading Files...
@@ -39,7 +35,7 @@ const UploadButton: React.FC<UploadButtonProps> = ({
         </svg>
       </>
     ) : (
-      "Upload Encrypted Files"
+      "Upload"
     )}
   </Button>
 );
