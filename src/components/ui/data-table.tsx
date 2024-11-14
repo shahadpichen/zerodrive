@@ -32,7 +32,12 @@ import { deleteFiles } from "../../utils/dexieDB";
 interface DataTableProps<TData, TValue> {
   columns: ColumnDef<TData, TValue>[];
   data: TData[];
-  meta?: Record<string, any>;
+  meta?: {
+    updateData?: (newData: TData[]) => void;
+    refetch?: () => void;
+    downloadAndDecryptFile?: (fileId: string, fileName: string) => void;
+    downloadingFileId?: string | null;
+  };
 }
 
 export function DataTable<TData, TValue>({
@@ -53,7 +58,9 @@ export function DataTable<TData, TValue>({
     state: {
       rowSelection,
     },
-    meta,
+    meta: {
+      ...meta,
+    },
   });
 
   const handleDelete = async () => {

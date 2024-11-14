@@ -5,7 +5,12 @@ import { Button } from "../../ui/button";
 import { Loader2 } from "lucide-react";
 import { Checkbox } from "../../ui/checkbox";
 
-export const columns: ColumnDef<FileMeta>[] = [
+type TableMeta = {
+  downloadAndDecryptFile?: (fileId: string, fileName: string) => void;
+  downloadingFileId?: string | null;
+};
+
+export const columns: ColumnDef<FileMeta, unknown>[] = [
   {
     id: "select",
     header: ({ table }) => (
@@ -62,16 +67,19 @@ export const columns: ColumnDef<FileMeta>[] = [
     id: "actions",
     header: () => <div className="text-right">Actions</div>,
     cell: ({ row, table }) => {
-      const downloadingFileId = (table.options.meta as any)?.downloadingFileId;
-      const downloadAndDecryptFile = (table.options.meta as any)
-        ?.downloadAndDecryptFile;
+      const meta = table.options.meta as TableMeta;
+      const downloadingFileId = meta?.downloadingFileId;
+      const downloadAndDecryptFile = meta?.downloadAndDecryptFile;
 
       return (
         <div className="text-right">
           <Button
-            onClick={() =>
-              downloadAndDecryptFile(row.original.id, row.original.name)
-            }
+            onClick={() => {
+              if (downloadAndDecryptFile) {
+                const file = row.original;
+                downloadAndDecryptFile(file.id, file.name);
+              }
+            }}
             variant="outline"
             size="sm"
             className="h-8 px-3"
