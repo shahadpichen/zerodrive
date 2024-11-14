@@ -1,7 +1,11 @@
-import React from "react";
-import { FileMeta } from "../../../utils/dexieDB";
+import React, { useState } from "react";
+import {
+  FileMeta,
+  fetchAndStoreFileMetadata,
+  deleteFiles,
+} from "../../../utils/dexieDB";
 import { Button } from "../../ui/button";
-import { Loader2 } from "lucide-react";
+import { Loader2, Trash2, Download } from "lucide-react";
 import { FaRegFileLines } from "react-icons/fa6";
 import { MdOutlineCloudUpload } from "react-icons/md";
 import { RxCross2 } from "react-icons/rx";
@@ -9,6 +13,7 @@ import Spinner from "../../ui/spinner";
 import { DataTable } from "../../ui/data-table";
 import { columns } from "./columns";
 import { iconMap } from "../../../lib/mime-types";
+import { DeleteDialog } from "../../ui/delete-dialog";
 
 interface ContentProps {
   isLoadingFiles: boolean;
@@ -37,8 +42,38 @@ export const FileListContent: React.FC<ContentProps> = ({
   uploadDroppedFiles,
   handleCancelUpload,
 }) => {
+  const [isDeleting, setIsDeleting] = React.useState(false);
+  const [openDeleteDialog, setOpenDeleteDialog] = React.useState(false);
+  const [fileToDelete, setFileToDelete] = React.useState<FileMeta | null>(null);
+
   const getIconForMimeType = (mimeType: string) => {
     return iconMap[mimeType] || <FaRegFileLines />;
+  };
+
+  const handleDeleteClick = (file: FileMeta, e: React.MouseEvent) => {
+    e.stopPropagation(); // Prevent triggering the download
+    setFileToDelete(file);
+    setOpenDeleteDialog(true);
+  };
+
+  const handleDelete = async () => {
+    if (!fileToDelete) return;
+
+    setIsDeleting(true);
+    const success = await deleteFiles([fileToDelete.id]);
+
+    if (success) {
+      window.location.reload();
+    }
+
+    setIsDeleting(false);
+    setOpenDeleteDialog(false);
+    setFileToDelete(null);
+  };
+
+  const handleDownloadClick = (file: FileMeta, e: React.MouseEvent) => {
+    e.stopPropagation();
+    downloadAndDecryptFile(file.id, file.name);
   };
 
   if (isLoadingFiles) {
@@ -74,24 +109,40 @@ export const FileListContent: React.FC<ContentProps> = ({
           columns={columns}
           data={filteredFiles}
           meta={{
-            downloadingFileId,
-            downloadAndDecryptFile,
+            updateData: (newData: FileMeta[]) => {
+              fetchAndStoreFileMetadata();
+            },
+            refetch: fetchAndStoreFileMetadata,
           }}
         />
       ) : (
         <ul className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
           {filteredFiles.map((file) => (
-            <li key={file.id} className="relative">
-              <Button
-                className="h-36 w-full md:h-40 bg-transparent flex flex-col gap-3 overflow-hidden rounded-md border-0 hover:bg-zinc-400/10 shadow-none"
-                onClick={() => downloadAndDecryptFile(file.id, file.name)}
-                disabled={downloadingFileId === file.id}
-                variant="outline"
-              >
+            <li key={file.id} className="relative group">
+              <div className="h-36 w-full md:h-40 flex flex-col gap-3 overflow-hidden rounded-md bg-zinc-300/10 hover:bg-zinc-400/10 cursor-default p-2">
+                <div className="absolute top-2 left-4 flex justify-between w-[calc(100%-1rem)] opacity-0 group-hover:opacity-100 transition-opacity">
+                  <button
+                    className="h-8 w-8 text-blue-500 hover:text-blue-600"
+                    onClick={(e) => handleDownloadClick(file, e)}
+                    disabled={downloadingFileId === file.id}
+                  >
+                    {downloadingFileId === file.id ? (
+                      <Loader2 className="animate-spin h-4 w-4" />
+                    ) : (
+                      <Download className="h-4 w-4" />
+                    )}
+                  </button>
+                  <button
+                    className="h-8 w-8 text-red-500 hover:text-red-600"
+                    onClick={(e) => handleDeleteClick(file, e)}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
                 <div className="h-[70%] rounded-xl text-6xl w-full flex items-center justify-center">
                   {getIconForMimeType(file.mimeType)}
                 </div>
-                <div className="h-[30%] max-w-full">
+                <div className="h-[30%] max-w-full px-2">
                   <p className="flex text-sm items-center truncate">
                     {file.name}
                   </p>
@@ -99,18 +150,20 @@ export const FileListContent: React.FC<ContentProps> = ({
                     {file.uploadedDate?.toLocaleString().split(",")[0]}
                   </p>
                 </div>
-              </Button>
-              <div className="absolute top-4 right-4">
-                {downloadingFileId === file.id ? (
-                  <Loader2 className="animate-spin size-4" />
-                ) : (
-                  ""
-                )}
               </div>
             </li>
           ))}
         </ul>
       )}
+
+      <DeleteDialog
+        open={openDeleteDialog}
+        onOpenChange={setOpenDeleteDialog}
+        onDelete={handleDelete}
+        isDeleting={isDeleting}
+        itemCount={fileToDelete ? 1 : 0}
+      />
+
       {droppedFiles.length > 0 && (
         <div className="mt-4 flex justify-center">
           <Button
