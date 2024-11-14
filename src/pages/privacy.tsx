@@ -6,7 +6,7 @@ import { privacyPolicy } from "../components/privacy-content";
 
 function Privacy() {
   return (
-    <main>
+    <main className="plus-jakarta-sans-uniquifier">
       <Header />
       <div className="lg:container pb-[5vh] px-5 my-[10vh] lg:mx-auto flex flex-col">
         <h1 className="font-bold text-3xl">ZeroDrive Privacy Policy</h1>

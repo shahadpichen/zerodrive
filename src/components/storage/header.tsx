@@ -9,7 +9,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "../ui/dropdown-menu";
-import { initializeGapi } from "../../utils/gapiInit";
+import { BsFillLightningChargeFill } from "react-icons/bs";
 
 interface HeaderProps {
   setIsAuthenticated: (value: boolean) => void;
@@ -144,19 +144,27 @@ function Header({ setIsAuthenticated }: HeaderProps) {
     : 0;
 
   return (
-    <header className="w-full border-b h-[8vh] flex">
-      <div className="flex w-full mx-20">
+    <header className="w-full border-b h-[10vh] flex">
+      <div className="flex w-full mx-14">
         <div className="mr-4 flex">
-          <a className="mr-6 flex items-center space-x-2">
+          <a className="mr-6 flex items-center space-x-1">
+            <img
+              src="/logo192.png"
+              alt="ZeroDrive Logo"
+              className="h-10 w-10"
+            />
             <span className="font-bold text-lg sm:inline-block">ZeroDrive</span>
           </a>
         </div>
         <div className="flex flex-1 items-center space-x-14 justify-end">
           {storageInfo && (
-            <div className="flex flex-col items-end gap-1 min-w-[200px]">
-              <div className="flex justify-between w-full text-sm">
-                <span>Storage</span>
-                <span>
+            <div className="flex flex-col items-end gap-3 min-w-[250px]">
+              <div className="flex justify-between items-center w-full">
+                <span className="flex items-center gap-1 text-sm">
+                  <BsFillLightningChargeFill className="text-green-600" />
+                  Storage
+                </span>
+                <span className="text-xs">
                   {formatBytes(storageInfo.used)} /{" "}
                   {formatBytes(storageInfo.total)}
                 </span>
@@ -164,7 +172,7 @@ function Header({ setIsAuthenticated }: HeaderProps) {
               <div className="w-full">
                 <Progress
                   value={usagePercentage}
-                  className="h-2"
+                  className="h-1.5"
                   style={{
                     ["--progress-background" as string]:
                       getProgressColor(usagePercentage),

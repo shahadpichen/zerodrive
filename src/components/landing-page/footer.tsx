@@ -1,38 +1,24 @@
 import React from "react";
-import { useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 
 function Footer() {
-  const navigate = useNavigate();
-
-  const handleNavigation = (path) => {
-    navigate(path);
-    window.scrollTo(0, 0);
-  };
-
   return (
-    <section className="bg-[#252f3f] h-[15vh] flex items-center justify-around">
-      <h1
-        className="text-2xl text-white font-bold cursor-pointer"
-        onClick={() => handleNavigation("/")}
-      >
-        ZeroDrive
-      </h1>
-      <img src="/logo192.png" alt="logo" className="w-14 h-14"></img>
-      <div className="flex flex-col text-white opacity-75">
-        <h3
-          className="cursor-pointer"
-          onClick={() => handleNavigation("/terms")}
-        >
-          Terms and Conditions
-        </h3>
-        <h3
-          className="cursor-pointer"
-          onClick={() => handleNavigation("/privacy")}
-        >
+    <footer className="text-center text-gray-600 mt-20 pb-12">
+      <p>
+        &copy; ZeroDrive - A platform for secure file storage on Google Drive.
+      </p>
+
+      <div className="flex flex-wrap justify-center gap-4 mt-4">
+        <Link to="/privacy" className="text-blue-600 hover:underline text-sm">
           Privacy Policy
-        </h3>
+        </Link>
+        <Link to="/terms" className="text-blue-600 hover:underline text-sm">
+          Terms of Service
+        </Link>
       </div>
-    </section>
+
+      <p className="mt-4">Created by Shahad Pichen</p>
+    </footer>
   );
 }
 

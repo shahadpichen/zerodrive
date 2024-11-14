@@ -6,7 +6,7 @@ import { termsOfService } from "../components/terms-content";
 
 function Terms() {
   return (
-    <main>
+    <main className="plus-jakarta-sans-uniquifier">
       <Header />
       <div className="lg:container pb-[5vh] px-5 my-[10vh] lg:mx-auto flex flex-col">
         <h1 className="font-bold text-3xl">ZeroDrive Terms of Service</h1>

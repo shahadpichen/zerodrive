@@ -15,7 +15,7 @@ import {
 import Dropzone from "./dropzone";
 import UploadButton from "./upload-button";
 import { Button } from "../ui/button";
-import { HiMiniPlus } from "react-icons/hi2";
+import { HiOutlineUpload } from "react-icons/hi";
 import { encryptFile } from "../../utils/encryptFile";
 
 export const EncryptedFileUploader: React.FC = () => {
@@ -117,11 +117,9 @@ export const EncryptedFileUploader: React.FC = () => {
   return (
     <Dialog>
       <DialogTrigger asChild>
-        <Button
-          variant="default"
-          className="flex gap-1 shadow-xl rounded-full py-6"
-        >
-          Add File <HiMiniPlus className="text-xl" />
+        <Button variant="secondary" className="flex gap-1 rounded-none ">
+          <HiOutlineUpload className="text-lg" />
+          Upload
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-[465px]">
