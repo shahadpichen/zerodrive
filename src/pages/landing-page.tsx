@@ -1,14 +1,13 @@
 import React, { useState } from "react";
 import Markdown from "markdown-to-jsx";
 import { content } from "../components/landing-page/content";
-import { GoogleAuth } from "../components/storage/google-auth";
+import { GoogleAuth } from "../components/landing-page/google-auth";
 import Footer from "../components/landing-page/footer";
 import Header from "../components/landing-page/header";
-import { Button } from "../components/ui/button";
-import { useNavigate } from "react-router-dom";
+import { BsFillPlayCircleFill } from "react-icons/bs";
+import { Dialog, DialogContent, DialogTrigger } from "../components/ui/dialog";
 
 function LandingPage() {
-  const navigate = useNavigate();
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
     return localStorage.getItem("isAuthenticated") === "true";
   });
@@ -16,62 +15,95 @@ function LandingPage() {
   const handleAuthChange = (authenticated: boolean) => {
     setIsAuthenticated(authenticated);
   };
+
+  if (isAuthenticated) {
+    return null;
+  }
+
   return (
-    <section className="w-full h-screen">
+    <section className="px-[2vw] md:px-[12vw] w-full bg-[#F5F8F9] plus-jakarta-sans-uniquifier relative">
       <Header />
       <div className="px-4 mx-auto mt-10 max-w-screen-xl sm:mt-12 sm:px-6 md:mt-16 lg:mt-20 xl:mt-28">
         <div className="text-center">
-          <h1 className="text-3xl font-extrabold tracking-tight text-gray-900 leading-10 sm:text-4xl sm:leading-none md:text-5xl">
-            End-to-End Encrypted File Storage on<br></br>
-            <span className="text-blue-600">Google Drive</span>
+          <h1 className="text-3xl font-bold tracking-tight text-gray-900 sm:text-4xl md:text-5xl">
+            <h1 className="md:w-[70%] text-center mx-auto leading-tight">
+              End-to-End Encrypted File Storage on{" "}
+              <span className="text-[#205EF2]">Google Drive</span>
+            </h1>
           </h1>
-          <p className="max-w-md leading-relaxed text-zinc-500 font-light mx-auto mt-3 text-base sm:text-lg md:mt-5 md:text-xl md:max-w-3xl">
+          <p className="max-w-md leading-relaxed text-zinc-500 font-light mx-auto mt-3 text-base sm:text-lg md:mt-5 md:text-lg md:max-w-3xl">
             A simple, privacy-focused solution for secure file storage on Google
             Drive. Our open-source tool encrypts your files locally on your
             device and stores them in your Google Account.
           </p>
-          {!isAuthenticated ? (
-            <div className="max-w-md mx-auto mt-5 flex justify-center md:mt-8">
-              <GoogleAuth onAuthChange={handleAuthChange} />
-            </div>
-          ) : (
-            <div className="max-w-md mx-auto mt-5 flex justify-center md:mt-8">
-              <Button
-                variant="secondary"
-                className="p-7 text-lg"
-                onClick={() => {
-                  navigate("/storage");
-                }}
-              >
-                Go to Storage
-              </Button>
-            </div>
-          )}
+          <div className="mt-5 flex items-center justify-center md:mt-8 gap-10">
+            <GoogleAuth onAuthChange={handleAuthChange} />
+          </div>
+          <p className="flex items-center justify-center mx-auto text-sm text-zinc-500 mt-4">
+            <span>Free Forever</span> .
+            <Dialog>
+              <DialogTrigger asChild>
+                <button className="bg-transparent px-4 py-2 rounded-none flex items-center underline">
+                  <BsFillPlayCircleFill className="mr-2 text-2xl" />
+                  <span className="text-sm font-medium">Watch Demo</span>
+                </button>
+              </DialogTrigger>
+              <DialogContent className="sm:max-w-[900px] p-0 bg-black border-0">
+                <video controls className="w-full rounded-lg" autoPlay>
+                  <source src="/demo.mp4" type="video/mp4" />
+                  Your browser does not support the video tag.
+                </video>
+              </DialogContent>
+            </Dialog>
+          </p>
         </div>
       </div>
 
-      <div className="flex flex-col justify-center items-center my-[10vh]">
-        <u className="text-center text-lg mb-10">"Free forever"</u>
-
+      <div className="hidden md:flex flex-col justify-center items-center mt-[10vh] mb-[10vh] relative">
         <img
-          src="/bg3.png"
+          src="/updated.png"
           alt="bg"
           width="1200"
-          className="rounded-xl px-1"
+          className="border-[6px] border-zinc-800 rounded-2xl"
+        ></img>
+        <img
+          src="/bgpng2.png"
+          alt="bg"
+          width="150"
+          className="rounded-xl absolute top-0 -right-5 shadow-xl animate-float-3 "
+        ></img>
+        <img
+          src="/dragdrop.png"
+          alt="bg"
+          width="350"
+          className="rounded-xl absolute z-10 top-32 -left-20 shadow-xl animate-float-3"
+        ></img>
+        {/* <img
+          src="/key.png"
+          alt="bg"
+          width="350"
+          className="rounded-xl absolute -bottom-10 -left-10 shadow-xl animate-float-1"
+        ></img> */}
+        <img
+          src="/key.png"
+          alt="bg"
+          width="350"
+          className="rounded-xl absolute bottom-20 -right-20 shadow-xl animate-float-2"
         ></img>
       </div>
-      <div className="lg:container pb-[5vh] lg:mx-auto px-5 flex flex-col gap-6">
+      <div className="lg:px-[12vw] pb-[5vh] px-5 flex flex-col gap-6 mt-[10vh] md:mt-[15vh]">
         {content.map((section, index) => (
-          <div key={index} className="mb-[20px]">
-            <h2 className="text-2xl font-medium mb-[20px]">
+          <div key={index} className="mb-[20px] text-center md:text-left">
+            <h2 className="text-2xl font-semibold mb-[20px]">
               {section.heading}
             </h2>
-            <Markdown className="leading-relaxed font-light text-lg text-zinc-500">
+            <Markdown className="leading-relaxed font-light text-base text-zinc-500">
               {section.description}
             </Markdown>
           </div>
         ))}
       </div>
+
       <Footer />
     </section>
   );

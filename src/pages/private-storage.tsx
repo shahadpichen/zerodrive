@@ -1,35 +1,39 @@
 import React, { useState } from "react";
+import Header from "../components/storage/header";
 import { FileList } from "../components/storage/file-list";
-import { GoogleAuth } from "../components/storage/google-auth";
-import { Toaster } from "../components/ui/sonner";
+import { Sidebar } from "../components/storage/sidebar";
+
+type Section = "files" | "favorites" | "trash";
 
 function PrivateStorage() {
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
-    return localStorage.getItem("isAuthenticated") === "true";
-  });
+  const [_isAuthenticated, setIsAuthenticated] = useState(true);
+  const [activeSection, setActiveSection] = useState<Section>("files");
 
-  const handleAuthChange = (authenticated: boolean) => {
-    setIsAuthenticated(authenticated);
+  const renderContent = () => {
+    switch (activeSection) {
+      case "files":
+        return <FileList />;
+      case "favorites":
+      case "trash":
+        return (
+          <div className="flex items-center justify-center h-full">
+            <p className="text-xl text-muted-foreground">Coming Soon...</p>
+          </div>
+        );
+    }
   };
 
   return (
-    <section className="bg-[#FAF9F6] w-full h-screen">
-      <Toaster />
-      <header className="h-[10vh] flex z-10 justify-between pt-5 md:pb-0 pb-3 items-center gap-4 px-4 lg:h-[60px] lg:px-10">
-        <h1 className="text-2xl font-bold">ZeroDrive</h1>
-        <div className="flex gap-2">
-          <GoogleAuth onAuthChange={handleAuthChange} />
-        </div>
-      </header>
-
-      <main className="flex flex-1 flex-col gap-4 pr-4 pl-4 pt-2 lg:gap-6 lg:pr-6 lg:pl-6 lg:pt-3">
-        {isAuthenticated ? (
-          <FileList />
-        ) : (
-          <p>Please log in to see your files.</p>
-        )}
-      </main>
-    </section>
+    <div className="min-h-screen bg-background plus-jakarta-sans-uniquifier">
+      <Header setIsAuthenticated={setIsAuthenticated} />
+      <div className="flex h-[90vh]">
+        <Sidebar
+          activeSection={activeSection}
+          setActiveSection={setActiveSection}
+        />
+        <div className="flex-1 overflow-auto">{renderContent()}</div>
+      </div>
+    </div>
   );
 }
 
