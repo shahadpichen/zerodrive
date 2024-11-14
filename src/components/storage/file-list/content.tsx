@@ -113,6 +113,8 @@ export const FileListContent: React.FC<ContentProps> = ({
               fetchAndStoreFileMetadata();
             },
             refetch: fetchAndStoreFileMetadata,
+            downloadAndDecryptFile: downloadAndDecryptFile,
+            downloadingFileId: downloadingFileId,
           }}
         />
       ) : (
