@@ -79,11 +79,11 @@ export const FileListContent: React.FC<ContentProps> = ({
           }}
         />
       ) : (
-        <ul className="flex gap-3 flex-wrap">
+        <ul className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
           {filteredFiles.map((file) => (
             <li key={file.id} className="relative">
               <Button
-                className="h-36 w-36 md:h-40 md:w-40 bg-transparent flex flex-col gap-3 overflow-hidden rounded-md border-0 hover:bg-zinc-400/10 shadow-none"
+                className="h-36 w-full md:h-40 bg-transparent flex flex-col gap-3 overflow-hidden rounded-md border-0 hover:bg-zinc-400/10 shadow-none"
                 onClick={() => downloadAndDecryptFile(file.id, file.name)}
                 disabled={downloadingFileId === file.id}
                 variant="outline"

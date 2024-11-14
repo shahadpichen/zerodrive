@@ -28,8 +28,8 @@ export const FilterButtons: React.FC<FilterButtonsProps> = ({
   availableFilters,
 }) => {
   return (
-    <div className="flex py-3 flex-col md:flex-row justify-between items-center md:items-start gap-4">
-      <div className="hidden md:flex justify-center flex-wrap gap-2 md:gap-4 items-center">
+    <div className="flex py-3 flex-col md:flex-row justify-between items-start gap-4">
+      <div className="flex justify-center flex-wrap gap-2 md:gap-4 items-center">
         {availableFilters.map((category, index) => (
           <Badge
             key={category}

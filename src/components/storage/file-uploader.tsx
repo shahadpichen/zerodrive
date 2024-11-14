@@ -119,7 +119,7 @@ export const EncryptedFileUploader: React.FC = () => {
       <DialogTrigger asChild>
         <Button variant="secondary" className="flex gap-1 rounded-none ">
           <HiOutlineUpload className="text-lg" />
-          Upload
+          <span className="hidden md:block">Upload</span>
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-[465px]">

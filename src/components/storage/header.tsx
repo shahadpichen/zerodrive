@@ -27,7 +27,7 @@ function Header({ setIsAuthenticated }: HeaderProps) {
 
   const formatBytes = (bytes: number) => {
     if (bytes === 0) return "0 Bytes";
-    const k = 1024;
+    const k = 768;
     const sizes = ["Bytes", "KB", "MB", "GB", "TB"];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
@@ -158,7 +158,7 @@ function Header({ setIsAuthenticated }: HeaderProps) {
         </div>
         <div className="flex flex-1 items-center space-x-14 justify-end">
           {storageInfo && (
-            <div className="flex flex-col items-end gap-3 min-w-[250px]">
+            <div className="hidden md:flex flex-col items-end gap-3 min-w-[250px]">
               <div className="flex justify-between items-center w-full">
                 <span className="flex items-center gap-1 text-sm">
                   <BsFillLightningChargeFill className="text-green-600" />
