@@ -1,5 +1,6 @@
 export const privacyPolicy = [
   {
+    heading: "Privacy Policy",
     content:
       "At ZeroDrive, we are committed to ensuring your privacy. This policy explains how we protect your data and what we do with the limited information you provide.",
   },
