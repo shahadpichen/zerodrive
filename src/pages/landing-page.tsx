@@ -12,6 +12,8 @@ function LandingPage() {
     return localStorage.getItem("isAuthenticated") === "true";
   });
 
+  const [videoError, setVideoError] = useState(false);
+
   const handleAuthChange = (authenticated: boolean) => {
     setIsAuthenticated(authenticated);
   };
@@ -49,9 +51,24 @@ function LandingPage() {
                 </button>
               </DialogTrigger>
               <DialogContent className="sm:max-w-[900px] p-0 bg-black border-0">
-                <video controls className="w-full rounded-lg" autoPlay>
-                  <source src="/demo.mp4" type="video/mp4" />
-                  Your browser does not support the video tag.
+                <video
+                  controls
+                  className="w-full rounded-lg"
+                  preload="auto"
+                  playsInline
+                  onError={(e) => {
+                    console.error("Video loading error:", e);
+                    setVideoError(true);
+                  }}
+                >
+                  <source src={"/demo.mp4"} type="video/mp4" />
+                  {videoError ? (
+                    <div className="p-4 text-white text-center">
+                      Error loading video. Please try again later.
+                    </div>
+                  ) : (
+                    "Your browser does not support the video tag."
+                  )}
                 </video>
               </DialogContent>
             </Dialog>
