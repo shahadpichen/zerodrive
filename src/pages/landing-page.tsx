@@ -4,8 +4,7 @@ import { content } from "../components/landing-page/content";
 import { GoogleAuth } from "../components/landing-page/google-auth";
 import Footer from "../components/landing-page/footer";
 import Header from "../components/landing-page/header";
-import { BsFillPlayCircleFill } from "react-icons/bs";
-import { Dialog, DialogContent, DialogTrigger } from "../components/ui/dialog";
+import { VideoDialog } from "../components/landing-page/video-dialog";
 
 function LandingPage() {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
@@ -42,36 +41,9 @@ function LandingPage() {
             <GoogleAuth onAuthChange={handleAuthChange} />
           </div>
           <p className="flex items-center justify-center mx-auto text-sm text-zinc-500 mt-4">
-            <span>Free Forever</span> .
-            <Dialog>
-              <DialogTrigger asChild>
-                <button className="bg-transparent px-4 py-2 rounded-none flex items-center underline">
-                  <BsFillPlayCircleFill className="mr-2 text-2xl" />
-                  <span className="text-sm font-medium">Watch Demo</span>
-                </button>
-              </DialogTrigger>
-              <DialogContent className="sm:max-w-[900px] p-0 bg-black border-0">
-                <video
-                  controls
-                  className="w-full rounded-lg"
-                  preload="auto"
-                  playsInline
-                  onError={(e) => {
-                    console.error("Video loading error:", e);
-                    setVideoError(true);
-                  }}
-                >
-                  <source src={"/demo.mp4"} type="video/mp4" />
-                  {videoError ? (
-                    <div className="p-4 text-white text-center">
-                      Error loading video. Please try again later.
-                    </div>
-                  ) : (
-                    "Your browser does not support the video tag."
-                  )}
-                </video>
-              </DialogContent>
-            </Dialog>
+            <span>Free Forever</span>
+            {/* .
+            <VideoDialog /> */}
           </p>
         </div>
       </div>
