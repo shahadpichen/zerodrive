@@ -6,7 +6,7 @@ import {
   DialogTitle,
   DialogDescription,
 } from "../ui/dialog";
-import { PlayCircle } from "lucide-react";
+import { BsFillPlayCircleFill } from "react-icons/bs";
 
 export function VideoDialog() {
   const [videoError, setVideoError] = useState(false);
@@ -16,7 +16,7 @@ export function VideoDialog() {
     <Dialog>
       <DialogTrigger asChild>
         <button className="bg-transparent px-4 py-2 rounded-none flex items-center underline">
-          <PlayCircle className="mr-2 h-6 w-6" />
+          <BsFillPlayCircleFill className="mr-2 text-2xl" />
           <span className="text-sm font-medium">Watch Demo</span>
         </button>
       </DialogTrigger>
@@ -27,12 +27,12 @@ export function VideoDialog() {
         </DialogDescription>
         {isLoading && (
           <div className="absolute inset-0 flex items-center justify-center">
-            <div className="animate-spin  h-8 w-8 border-b-2 border-white"></div>
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
           </div>
         )}
         <video
           controls
-          className="w-full "
+          className="w-full rounded-lg"
           preload="metadata"
           playsInline
           onLoadedData={() => setIsLoading(false)}
