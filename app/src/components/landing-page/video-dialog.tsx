@@ -6,7 +6,7 @@ import {
   DialogTitle,
   DialogDescription,
 } from "../ui/dialog";
-import { BsFillPlayCircleFill } from "react-icons/bs";
+// import { BsFillPlayCircleFill } from "react-icons/bs";
 
 export function VideoDialog() {
   const [videoError, setVideoError] = useState(false);
@@ -16,7 +16,7 @@ export function VideoDialog() {
     <Dialog>
       <DialogTrigger asChild>
         <button className="bg-transparent px-4 py-2 rounded-none flex items-center underline">
-          <BsFillPlayCircleFill className="mr-2 text-2xl" />
+          {/* <BsFillPlayCircleFill className="mr-2 text-2xl" /> */}
           <span className="text-sm font-medium">Watch Demo</span>
         </button>
       </DialogTrigger>
