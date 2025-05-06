@@ -2,7 +2,6 @@ import React, { useState, useEffect } from "react";
 import { gapi } from "gapi-script";
 import { FileList } from "../components/storage/file-list";
 import { ModeToggle } from "../components/mode-toggle";
-import { KeyManagement } from "../components/storage/download-key";
 import { Button } from "../components/ui/button";
 import { toast } from "sonner";
 
@@ -22,7 +21,7 @@ import {
 } from "../components/ui/dropdown-menu";
 import { Progress } from "../components/ui/progress";
 import { Zap } from "lucide-react";
-
+import { Link } from "react-router-dom";
 function PrivateStorage() {
   const [_isAuthenticated, setIsAuthenticated] = useState(true);
   const [showKeyModal, setShowKeyModal] = useState(false);
@@ -308,13 +307,15 @@ function PrivateStorage() {
               >
                 {uploading ? "Uploading..." : "Upload Files"}
               </Button>
-              <Button
-                variant="ghost"
-                className="justify-start md:justify-end px-1 h-auto py-1 text-sm"
-                onClick={() => setShowKeyModal(true)}
-              >
-                Manage Encryption Keys
-              </Button>
+
+              <Link to="/key-management">
+                <Button
+                  variant="ghost"
+                  className="justify-start md:justify-end px-1 h-auto py-1 text-sm"
+                >
+                  Manage Encryption Keys
+                </Button>
+              </Link>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button
@@ -373,7 +374,6 @@ function PrivateStorage() {
           &copy; ZeroDrive - A platform for secure file storage on Google Drive.
         </p>
       </footer>
-      {showKeyModal && <KeyManagement onClose={() => setShowKeyModal(false)} />}
       <ConfirmationDialog
         open={showDeleteConfirm}
         onOpenChange={setShowDeleteConfirm}
