@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect } from "react";
 import {
   BrowserRouter as Router,
   Routes,
@@ -14,12 +14,42 @@ import Terms from "./pages/terms";
 import HowItWorks from "./pages/how-it-works";
 import GoogleOAuthCallback from "./pages/google-oauth-callback";
 import { KeyManagementPage } from "./pages/key-management-page";
+import ShareFilesPage from "./pages/share-files";
+import SharedWithMePage from "./pages/shared-with-me";
+import KeyTestPage from "./pages/KeyTestPage";
+import { toast } from "sonner";
 
 // Polyfill global Buffer for libraries that expect it (e.g., bip39)
 window.Buffer = Buffer as any;
 
+// Check environment variables on app startup
+const checkEnvironmentVariables = () => {
+  const requiredVars = {
+    "Google Client ID": process.env.REACT_APP_PUBLIC_CLIENT_ID,
+    "Google Scope": process.env.REACT_APP_PUBLIC_SCOPE,
+    "Supabase URL": process.env.REACT_APP_SUPABASE_URL,
+    "Supabase Anon Key": process.env.REACT_APP_SUPABASE_ANON_KEY,
+  };
+
+  const missing = Object.entries(requiredVars)
+    .filter(([_, value]) => !value)
+    .map(([name]) => name);
+
+  if (missing.length > 0) {
+    console.error("Missing required environment variables:", missing);
+    toast.error("Missing environment variables", {
+      description: `Please check: ${missing.join(", ")}`,
+      duration: 10000,
+    });
+  }
+};
+
 function App() {
   const isAuthenticated = localStorage.getItem("isAuthenticated") === "true";
+
+  useEffect(() => {
+    checkEnvironmentVariables();
+  }, []);
 
   return (
     <Router>
@@ -47,6 +77,30 @@ function App() {
           element={
             <ProtectedRoute isAuthenticated={isAuthenticated} redirectPath="/">
               <KeyManagementPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/share"
+          element={
+            <ProtectedRoute isAuthenticated={isAuthenticated} redirectPath="/">
+              <ShareFilesPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/shared-with-me"
+          element={
+            <ProtectedRoute isAuthenticated={isAuthenticated} redirectPath="/">
+              <SharedWithMePage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/key-test"
+          element={
+            <ProtectedRoute isAuthenticated={isAuthenticated} redirectPath="/">
+              <KeyTestPage />
             </ProtectedRoute>
           }
         />
