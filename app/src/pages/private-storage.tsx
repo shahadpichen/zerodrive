@@ -6,7 +6,10 @@ import { Button } from "../components/ui/button";
 import { toast } from "sonner";
 
 import { getStoredKey } from "../utils/cryptoUtils";
-import { getAllFilesForUser } from "../utils/dexieDB";
+import {
+  getAllFilesForUser,
+  fetchAndStoreFileMetadata,
+} from "../utils/dexieDB";
 import {
   uploadAndSyncFile,
   deleteAllAndSyncFiles,
@@ -22,6 +25,8 @@ import {
 import { Progress } from "../components/ui/progress";
 import { Zap } from "lucide-react";
 import { Link } from "react-router-dom";
+import { RefreshCw } from "lucide-react";
+
 function PrivateStorage() {
   const [_isAuthenticated, setIsAuthenticated] = useState(true);
   const [showKeyModal, setShowKeyModal] = useState(false);
@@ -40,6 +45,7 @@ function PrivateStorage() {
   } | null>(null);
   const [isLoadingStorage, setIsLoadingStorage] = useState<boolean>(true);
   const [hasEncryptionKey, setHasEncryptionKey] = useState<boolean>(true);
+  const [isRefreshingFiles, setIsRefreshingFiles] = useState<boolean>(false);
 
   const formatBytes = (bytes: number, decimals = 2) => {
     if (bytes === 0) return "0 Bytes";
@@ -121,6 +127,7 @@ function PrivateStorage() {
             setUserEmail(email);
             setUserImage(profile.getImageUrl());
             if (email) {
+              await fetchAndStoreFileMetadata();
               const files = await getAllFilesForUser(email);
               setUserHasFiles(files.length > 0);
               await loadStorageInfo();
@@ -173,6 +180,32 @@ function PrivateStorage() {
       }
     } catch (error) {
       console.error("Error during logout:", error);
+    }
+  };
+
+  const handleRefreshFiles = async () => {
+    if (!userEmail) {
+      toast.error("User information not available to refresh files.");
+      return;
+    }
+    setIsRefreshingFiles(true);
+    const refreshToastId = toast.loading("Refreshing file list...");
+    try {
+      await fetchAndStoreFileMetadata();
+      const files = await getAllFilesForUser(userEmail);
+      setUserHasFiles(files.length > 0);
+      setRefreshFileListKey((prev) => prev + 1);
+      toast.success("File list refreshed successfully.", {
+        id: refreshToastId,
+      });
+    } catch (error: any) {
+      console.error("Error refreshing files:", error);
+      toast.error("Failed to refresh file list.", {
+        description: error.message || "Could not sync with Google Drive.",
+        id: refreshToastId,
+      });
+    } finally {
+      setIsRefreshingFiles(false);
     }
   };
 
@@ -288,9 +321,24 @@ function PrivateStorage() {
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 sm:gap-8">
           <div className="col-span-1">
-            <h2 className="text-base sm:text-lg mb-3 font-mono font-normal">
-              Your Files
-            </h2>
+            <div className="flex items-center mb-3">
+              <h2 className="text-base sm:text-lg font-mono font-normal">
+                Your Files
+              </h2>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={handleRefreshFiles}
+                disabled={isRefreshingFiles || isLoadingUserFiles}
+                className="ml-2 h-7 w-7"
+              >
+                <RefreshCw
+                  className={`h-4 w-4 ${
+                    isRefreshingFiles ? "animate-spin" : ""
+                  }`}
+                />
+              </Button>
+            </div>
             <FileList view="compact" refreshKey={refreshFileListKey} />
           </div>
 
@@ -307,6 +355,24 @@ function PrivateStorage() {
               >
                 {uploading ? "Uploading..." : "Upload Files"}
               </Button>
+
+              <Link to="/share">
+                <Button
+                  variant="ghost"
+                  className="justify-start md:justify-end px-1 h-auto py-1 text-sm"
+                >
+                  Share Files
+                </Button>
+              </Link>
+
+              <Link to="/shared-with-me">
+                <Button
+                  variant="ghost"
+                  className="justify-start md:justify-end px-1 h-auto py-1 text-sm"
+                >
+                  Shared with Me
+                </Button>
+              </Link>
 
               <Link to="/key-management">
                 <Button
