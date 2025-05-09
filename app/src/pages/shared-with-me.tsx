@@ -379,7 +379,7 @@ const SharedWithMePage: FC = () => {
         finalEncryptedFileKey,
         userEmail,
         file.originalFileName,
-        file.mimeType
+        file.mimeType || "application/octet-stream"
       );
 
       const downloadUrl = URL.createObjectURL(decryptedData.decryptedFile);
@@ -489,7 +489,7 @@ const SharedWithMePage: FC = () => {
           );
         }
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error downloading or decrypting file:", error);
       toast.error("Download or Decryption Failed", {
         description: error instanceof Error ? error.message : "Unknown error",

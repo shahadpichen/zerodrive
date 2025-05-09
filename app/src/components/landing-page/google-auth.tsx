@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { gapi } from "gapi-script";
 import { Button } from "../ui/button";
 import { FaGoogle } from "react-icons/fa";
+import google from "../../assets/google.png";
 
 interface GoogleAuthProps {
   onAuthChange: (authenticated: boolean) => void;
@@ -53,6 +54,14 @@ export const GoogleAuth: React.FC<GoogleAuthProps> = ({
 
       if (user) {
         localStorage.setItem("isAuthenticated", "true");
+        // Store the ID token
+        const authResponse = user.getAuthResponse();
+        if (authResponse && authResponse.id_token) {
+          localStorage.setItem("google_id_token", authResponse.id_token);
+          console.log("ID Token stored in localStorage");
+        } else {
+          console.warn("Could not retrieve ID token from auth response.");
+        }
         onAuthChange(true);
         window.location.href = "/storage";
       }
@@ -70,6 +79,7 @@ export const GoogleAuth: React.FC<GoogleAuthProps> = ({
       disabled={!isInitialized}
     >
       {/* <FaGoogle /> */}
+      <img src={google} alt="Google Logo" className="w-4 h-4 mr-2" />
       Sign in with Google
     </Button>
   );

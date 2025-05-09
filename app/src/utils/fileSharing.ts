@@ -11,6 +11,7 @@ import {
   GetObjectCommand,
   DeleteObjectCommand,
 } from "@aws-sdk/client-s3";
+import { JWTCircuitHelper } from "./jwt";
 
 /**
  * Represents the result of preparing a file for sharing (Step 1).
@@ -202,7 +203,7 @@ export async function fetchUserPublicKey(
       true, // extractable
       ["encrypt"] // key usage
     );
-  } catch (importError) {
+  } catch (importError: any) {
     console.error("Error importing public key:", importError);
     throw new Error(`Failed to import public key: ${importError.message}`);
   }
@@ -246,22 +247,72 @@ export async function encryptFileKeyForRecipient(
  * Generates a cryptographic proof of the sender's identity.
  * This is a simplified version that uses email verification and the current timestamp.
  * In a more sophisticated system, this could be a signed JWT or another cryptographic assertion.
- * @param senderEmail The sender's email identifier.
+ * @param userDomain The sender's email domain.
  * @returns A Promise that resolves to a string representing the sender proof.
  */
-export async function generateSenderProof(
-  senderEmail: string
-): Promise<string> {
-  // For a basic proof, we'll use the hash of the sender's email and timestamp
-  const encoder = new TextEncoder();
-  const timestamp = Date.now().toString();
-  const data = encoder.encode(
-    `${senderEmail.toLowerCase().trim()}-${timestamp}`
-  );
-  const hashBuffer = await crypto.subtle.digest("SHA-256", data);
-  const proof = bufferToHex(hashBuffer);
+export async function generateSenderProof(userDomain: string): Promise<string> {
+  try {
+    const idToken = localStorage.getItem("google_id_token");
+    if (!idToken) {
+      throw new Error(
+        "ID token not found in local storage for sender proof generation."
+      );
+    }
 
-  return `${timestamp}:${proof}`;
+    // TODO: Implement robust oidcNonce retrieval and verification strategy.
+    // This nonce must be the one sent during OIDC auth and present in the idToken.
+    // It also needs to be unique per request to prevent replay attacks.
+    const oidcNonce = localStorage.getItem("oidc_nonce");
+    if (!oidcNonce) {
+      throw new Error(
+        "OIDC nonce not found in local storage. This is critical for sender proof."
+      );
+    }
+
+    const jwtPubkey = await JWTCircuitHelper.fetchGooglePublicKeyForIdToken(
+      idToken
+    );
+
+    // JWTCircuitHelper.generateProof should return the raw proof bytes (Uint8Array)
+    // If it returns an object like { proof: Uint8Array, publicInputs: ... }, extract the proof part.
+    const proofResult = await JWTCircuitHelper.generateProof({
+      idToken,
+      jwtPubkey,
+      oidcNonce,
+      domain: userDomain,
+    });
+
+    // Assuming proofResult is either Uint8Array or { proof: Uint8Array, ... }
+    const actualProofBytes =
+      proofResult instanceof Uint8Array ? proofResult : proofResult.proof;
+    if (!(actualProofBytes instanceof Uint8Array)) {
+      throw new Error(
+        "generateProof did not return valid Uint8Array proof bytes."
+      );
+    }
+
+    const proofPackage = {
+      type: "jwtProof", // Mark the type of proof
+      proof: Buffer.from(actualProofBytes).toString("base64"), // Use actualProofBytes
+      publicInputs: {
+        // Store public inputs needed by verifier
+        domain: userDomain,
+        expectedNonceField: oidcNonce,
+        // Optionally, you could include kid or parts of jwtPubkey if verifier needs to fetch/match it
+      },
+    };
+    return JSON.stringify(proofPackage);
+  } catch (error) {
+    console.error("Error in generateSenderProof with JWT:", error);
+    // Instead of returning a fallback, throw an error to stop the process.
+    if (error instanceof Error) {
+      throw new Error(`Failed to generate JWT sender proof: ${error.message}`);
+    } else {
+      throw new Error(
+        "Failed to generate JWT sender proof due to an unknown error."
+      );
+    }
+  }
 }
 
 /**
@@ -464,8 +515,19 @@ export async function prepareFileForSharing(
     const fileExtension = file.name.split(".").pop() || "";
     const fileName = `encrypted_${fileId}.bin`;
 
-    // After generating fileId
-    const senderProof = `${Date.now()}:dummy-proof`;
+    // Determine user's domain for the proof.
+    // This is a simplified approach. A more robust solution might involve
+    // getting the domain from the authenticated user's profile directly if available,
+    // or ensuring it's consistently managed.
+    let userDomain = "gmail.com"; // Default to gmail.com or a configurable default
+    if (senderEmail && senderEmail.includes("@")) {
+      const parts = senderEmail.split("@");
+      if (parts.length === 2 && parts[1]) {
+        userDomain = parts[1];
+      }
+    }
+    // Ensure generateSenderProof is called correctly with the determined domain
+    const senderProof = await generateSenderProof(userDomain);
 
     return {
       encryptedFileBlob,
@@ -706,7 +768,7 @@ export async function decryptSharedFile(
       decryptedFile: decryptedBlob,
       fileName: originalFileName,
     };
-  } catch (error) {
+  } catch (error: any) {
     console.error(
       "Error decrypting shared file:",
       error.name,
@@ -744,7 +806,7 @@ export async function getS3Client() {
 }
 
 // Upload file
-export async function uploadEncryptedFile(filePath, fileBlob) {
+export async function uploadEncryptedFile(filePath: string, fileBlob: any) {
   // Convert Blob to ArrayBuffer
   const arrayBuffer = await fileBlob.arrayBuffer();
 
@@ -760,7 +822,7 @@ export async function uploadEncryptedFile(filePath, fileBlob) {
 }
 
 // Download file
-export async function downloadEncryptedFile(filePath) {
+export async function downloadEncryptedFile(filePath: string) {
   const client = await getS3Client();
   const command = new GetObjectCommand({
     Bucket: "secure-files",
@@ -784,7 +846,7 @@ export async function deleteFileFromSupabaseStorage(
   try {
     await client.send(command);
     console.log(`Successfully deleted ${filePath} from Supabase Storage.`);
-  } catch (error) {
+  } catch (error: any) {
     console.error(`Failed to delete ${filePath} from Supabase Storage:`, error);
     // Optionally re-throw or handle as per application needs, e.g., toast notification
     throw new Error(`Failed to delete from storage: ${error.message}`);
