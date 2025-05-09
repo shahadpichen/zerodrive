@@ -17,6 +17,8 @@ import {
   decryptSharedFile,
   hashEmail,
   arrayBufferToBase64,
+  UserKeyPair,
+  storeUserPublicKey,
 } from "../utils/fileSharing";
 import {
   Table,
@@ -26,9 +28,16 @@ import {
   TableHeader,
   TableRow,
 } from "../components/ui/table";
-import { userHasStoredKeys } from "../utils/keyStorage";
+import {
+  userHasStoredKeys,
+  getUserKeyPair,
+  storeUserKeyPair,
+} from "../utils/keyStorage";
 import supabase from "../utils/supabaseClient";
 import { downloadEncryptedFile } from "../utils/fileSharing";
+import { getStoredKey } from "../utils/cryptoUtils";
+import { downloadEncryptedRsaKeyFromDrive } from "../utils/gdriveKeyStorage";
+import { decryptRsaPrivateKeyWithAesKey } from "../utils/rsaKeyManager";
 
 interface SharedFile {
   id: string;
@@ -86,9 +95,8 @@ const SharedWithMePage: FC = () => {
 
       setIsCheckingKeys(true);
       try {
-        // Check if user has keys stored in IndexedDB
-        const hasStoredKeys = await userHasStoredKeys(userEmail);
-        setHasKeys(hasStoredKeys);
+        const hasStoredKeysInDb = await userHasStoredKeys(userEmail);
+        setHasKeys(hasStoredKeysInDb);
       } catch (error) {
         console.error("Error checking for keys:", error);
         setHasKeys(false);
@@ -121,11 +129,6 @@ const SharedWithMePage: FC = () => {
           const mappedFiles: SharedFile[] = data.map((dbRow: any) => {
             let finalEncryptedFileKey = "";
             const rawKey = dbRow.encrypted_file_key;
-            console.log(
-              `[RECIPIENT-DEBUG] Raw 'encrypted_file_key' from Supabase for ID ${dbRow.id}:`,
-              rawKey,
-              `(type: ${typeof rawKey})`
-            );
             if (typeof rawKey === "string" && rawKey.startsWith("\\x")) {
               const hex = rawKey.substring(2);
               const tempBytes = new Uint8Array(hex.length / 2);
@@ -133,28 +136,15 @@ const SharedWithMePage: FC = () => {
                 tempBytes[i / 2] = parseInt(hex.substring(i, i + 2), 16);
               }
               finalEncryptedFileKey = arrayBufferToBase64(tempBytes.buffer);
-              console.log(
-                `[RECIPIENT-DEBUG] Converted hex BYTEA to base64: "${finalEncryptedFileKey}"`
-              );
             } else if (typeof rawKey === "string") {
               finalEncryptedFileKey = rawKey;
-              console.log(
-                `[RECIPIENT-DEBUG] Assuming rawKey string is already base64: "${finalEncryptedFileKey}"`
-              );
             } else if (
               rawKey &&
               typeof rawKey === "object" &&
               rawKey.buffer instanceof ArrayBuffer
             ) {
               finalEncryptedFileKey = arrayBufferToBase64(rawKey);
-              console.log(
-                `[RECIPIENT-DEBUG] Converted direct ArrayBuffer to base64: "${finalEncryptedFileKey}"`
-              );
             } else {
-              console.warn(
-                "[RECIPIENT-DEBUG] Unexpected format for encrypted_file_key from DB:",
-                rawKey
-              );
             }
             return {
               id: dbRow.id,
@@ -203,11 +193,6 @@ const SharedWithMePage: FC = () => {
         const mappedFiles: SharedFile[] = data.map((dbRow: any) => {
           let finalEncryptedFileKey = "";
           const rawKey = dbRow.encrypted_file_key;
-          console.log(
-            `[RECIPIENT-DEBUG] (Refresh) Raw 'encrypted_file_key' from Supabase for ID ${dbRow.id}:`,
-            rawKey,
-            `(type: ${typeof rawKey})`
-          );
           if (typeof rawKey === "string" && rawKey.startsWith("\\x")) {
             const hex = rawKey.substring(2);
             const tempBytes = new Uint8Array(hex.length / 2);
@@ -215,28 +200,15 @@ const SharedWithMePage: FC = () => {
               tempBytes[i / 2] = parseInt(hex.substring(i, i + 2), 16);
             }
             finalEncryptedFileKey = arrayBufferToBase64(tempBytes.buffer);
-            console.log(
-              `[RECIPIENT-DEBUG] (Refresh) Converted hex BYTEA to base64: "${finalEncryptedFileKey}"`
-            );
           } else if (typeof rawKey === "string") {
             finalEncryptedFileKey = rawKey;
-            console.log(
-              `[RECIPIENT-DEBUG] (Refresh) Assuming rawKey string is already base64: "${finalEncryptedFileKey}"`
-            );
           } else if (
             rawKey &&
             typeof rawKey === "object" &&
             rawKey.buffer instanceof ArrayBuffer
           ) {
             finalEncryptedFileKey = arrayBufferToBase64(rawKey);
-            console.log(
-              `[RECIPIENT-DEBUG] (Refresh) Converted direct ArrayBuffer to base64: "${finalEncryptedFileKey}"`
-            );
           } else {
-            console.warn(
-              "[RECIPIENT-DEBUG] (Refresh) Unexpected format for encrypted_file_key from DB:",
-              rawKey
-            );
           }
           return {
             id: dbRow.id,
@@ -271,108 +243,162 @@ const SharedWithMePage: FC = () => {
       return;
     }
 
-    if (!hasKeys) {
-      toast.error("You need to generate your keys first", {
-        description:
-          "Go to the Share Files page to generate your encryption keys.",
-      });
-      return;
-    }
-
     setIsDownloading(file.id);
     const downloadToastId = toast.loading(
       `Downloading ${file.originalFileName}...`
     );
 
     let encryptedFileBlob: Blob | undefined;
+    let currentHasKeys = hasKeys;
 
     try {
-      // Debug the encryptedFileKey
-      console.log("Raw encryptedFileKey:", file.encryptedFileKey);
-      // Check if it's in BYTEA format (Postgres outputs as \x...)
-      if (file.encryptedFileKey.startsWith("\\x")) {
-        // Convert Postgres bytea hex format to base64
-        const hex = file.encryptedFileKey.substring(2);
+      if (!currentHasKeys) {
+        toast.dismiss(downloadToastId);
+        const recoveryToastId = toast.loading(
+          "Sharing keys not found locally. Checking primary key for backup recovery..."
+        );
+        const primaryAesKey = await getStoredKey();
+
+        if (!primaryAesKey) {
+          toast.error("Primary encryption key missing.", {
+            id: recoveryToastId,
+            description:
+              "Redirecting to Key Management to set up or restore your primary key.",
+            duration: 5000,
+          });
+          navigate("/key-management");
+          setIsDownloading(null);
+          return;
+        }
+
+        toast.loading(
+          "Attempting to recover sharing keys from Google Drive backup...",
+          { id: recoveryToastId }
+        );
+        const backupBlob = await downloadEncryptedRsaKeyFromDrive();
+
+        if (backupBlob) {
+          try {
+            const privateKeyJwk = await decryptRsaPrivateKeyWithAesKey(
+              backupBlob,
+              primaryAesKey
+            );
+            const publicKeyJwk: JsonWebKey = {
+              kty: privateKeyJwk.kty,
+              n: privateKeyJwk.n,
+              e: privateKeyJwk.e,
+              alg: privateKeyJwk.alg
+                ? privateKeyJwk.alg.replace("PS", "RS")
+                : "RSA-OAEP-256",
+              key_ops: ["encrypt"],
+              ext: true,
+            };
+            if (!publicKeyJwk.n || !publicKeyJwk.e || !publicKeyJwk.kty) {
+              throw new Error(
+                "Failed to reconstruct public key from private key backup."
+              );
+            }
+            if (!privateKeyJwk.key_ops) {
+              privateKeyJwk.key_ops = ["decrypt"];
+            }
+            const recoveredKeyPair: UserKeyPair = {
+              publicKeyJwk,
+              privateKeyJwk,
+            };
+
+            await storeUserKeyPair(userEmail, recoveredKeyPair);
+            const hashedEmailForSupabase = await hashEmail(userEmail);
+            await storeUserPublicKey(
+              hashedEmailForSupabase,
+              recoveredKeyPair.publicKeyJwk
+            );
+
+            setHasKeys(true);
+            currentHasKeys = true;
+            toast.success("Sharing keys recovered from backup and loaded.", {
+              id: recoveryToastId,
+            });
+            toast.loading(`Downloading ${file.originalFileName}...`, {
+              id: downloadToastId,
+            });
+          } catch (decryptionError) {
+            toast.error("Failed to decrypt sharing key backup.", {
+              id: recoveryToastId,
+              description:
+                decryptionError instanceof Error
+                  ? decryptionError.message
+                  : "Primary key might be incorrect or backup corrupted.",
+            });
+            setIsDownloading(null);
+            return;
+          }
+        } else {
+          toast.error("No sharing key backup found on Google Drive.", {
+            id: recoveryToastId,
+            description:
+              "Please generate sharing keys on the Share Files page if this is your first time or a new device.",
+          });
+          setIsDownloading(null);
+          return;
+        }
+      }
+
+      const userKeyPair = await getUserKeyPair(userEmail);
+      if (!userKeyPair || !userKeyPair.privateKeyJwk) {
+        throw new Error(
+          "Private key JWK not found even after checks/recovery. Please ensure keys are generated and retrieved correctly."
+        );
+      }
+
+      let finalEncryptedFileKey = file.encryptedFileKey;
+      if (finalEncryptedFileKey.startsWith("\\x")) {
+        const hex = finalEncryptedFileKey.substring(2);
         const bytes = new Uint8Array(hex.length / 2);
         for (let i = 0; i < hex.length; i += 2) {
           bytes[i / 2] = parseInt(hex.substring(i, i + 2), 16);
         }
-        file.encryptedFileKey = arrayBufferToBase64(bytes.buffer);
-        console.log("Converted encryptedFileKey:", file.encryptedFileKey);
+        finalEncryptedFileKey = arrayBufferToBase64(bytes.buffer);
       }
 
-      // Try a more direct approach with AWS SDK v3
-      const response = await downloadEncryptedFile(file.encrypted_file_blob_id);
-
-      // Try alternative approaches to get file content
-      if (response.transformToByteArray) {
-        // Use SDK's built-in method if available
-        const bytes = await response.transformToByteArray();
-        encryptedFileBlob = new Blob([bytes], {
-          type: "application/octet-stream",
-        });
-      } else {
-        // Fall back to checking for file_content in database
-        const { data, error } = await supabase
-          .from("shared_files")
-          .select("file_content, share_id")
-          .eq("id", file.id)
-          .single();
-
-        if (error || !data?.file_content) {
-          throw new Error("Failed to retrieve file content");
-        }
-
-        // Safer base64 handling
-        try {
-          let base64Content = data.file_content;
-
-          // If it contains the data URL prefix, extract just the base64 part
-          if (base64Content.includes("base64,")) {
-            base64Content = base64Content.split("base64,")[1];
-          }
-
-          // Create blob directly from base64
-          const response = await fetch(
-            `data:application/octet-stream;base64,${base64Content}`
-          );
-          encryptedFileBlob = await response.blob();
-        } catch (e) {
-          console.error("Base64 decode error:", e);
-          throw new Error("Failed to decode file content");
-        }
+      const s3Object = await downloadEncryptedFile(file.encrypted_file_blob_id);
+      if (!s3Object || !s3Object.transformToByteArray) {
+        throw new Error(
+          "Failed to retrieve file from storage or S3 object is invalid."
+        );
       }
+      const fileBytes = await s3Object.transformToByteArray();
+      encryptedFileBlob = new Blob([fileBytes], {
+        type: file.mimeType || "application/octet-stream",
+      });
 
-      // Decrypt the file
       toast.loading("Decrypting file...", { id: downloadToastId });
-      const decryptedFile = await decryptSharedFile(
+      const decryptedData = await decryptSharedFile(
         encryptedFileBlob,
-        file.encryptedFileKey,
+        finalEncryptedFileKey,
         userEmail,
         file.originalFileName,
         file.mimeType
       );
 
-      // Create a download link
-      const downloadUrl = URL.createObjectURL(decryptedFile.decryptedFile);
+      const downloadUrl = URL.createObjectURL(decryptedData.decryptedFile);
       const downloadLink = document.createElement("a");
       downloadLink.href = downloadUrl;
-      downloadLink.download = decryptedFile.fileName;
+      downloadLink.download = decryptedData.fileName;
       document.body.appendChild(downloadLink);
       downloadLink.click();
       document.body.removeChild(downloadLink);
+      URL.revokeObjectURL(downloadUrl);
 
-      toast.success(`Successfully downloaded ${decryptedFile.fileName}`, {
+      toast.success(`Successfully downloaded ${decryptedData.fileName}`, {
         id: downloadToastId,
       });
     } catch (error) {
       console.error("Error downloading or decrypting file:", error);
-      toast.error("Failed to decrypt file", {
+      toast.error("Download or Decryption Failed", {
         description: error instanceof Error ? error.message : "Unknown error",
         id: downloadToastId,
       });
 
-      // Attempt to download the raw encrypted file for debugging
       if (
         encryptedFileBlob &&
         (error.name === "OperationError" ||
@@ -387,13 +413,13 @@ const SharedWithMePage: FC = () => {
           const rawDownloadUrl = URL.createObjectURL(encryptedFileBlob);
           const rawDownloadLink = document.createElement("a");
           rawDownloadLink.href = rawDownloadUrl;
-          rawDownloadLink.download = `ENCRYPTED_${file.originalFileName}.bin`; // Add a prefix
+          rawDownloadLink.download = `ENCRYPTED_${file.originalFileName}.bin`;
           document.body.appendChild(rawDownloadLink);
           rawDownloadLink.click();
           document.body.removeChild(rawDownloadLink);
           URL.revokeObjectURL(rawDownloadUrl);
           toast.success(
-            `Raw encrypted file ENCRYPTED_${file.originalFileName}.bin downloaded for inspection.`,
+            `Raw encrypted file ENCRYPTED_${file.originalFileName}.bin downloaded.`,
             { id: downloadToastId }
           );
         } catch (rawDownloadError) {
@@ -454,20 +480,35 @@ const SharedWithMePage: FC = () => {
           ) : !hasKeys ? (
             <div className="p-4 bg-amber-50 dark:bg-amber-950 rounded-md border border-amber-200 dark:border-amber-800 mb-4">
               <h3 className="text-sm font-medium text-amber-800 dark:text-amber-300 mb-2">
-                Key Setup Required
+                Sharing Key Setup Incomplete or Not Found Locally
               </h3>
-              <p className="text-xs text-amber-700 dark:text-amber-400 mb-4">
-                Before you can decrypt shared files, you need to generate your
-                encryption keys. This is a one-time setup for your account (
-                {userEmail}).
+              <p className="text-xs text-amber-700 dark:text-amber-400 mb-2">
+                To download and decrypt shared files, your sharing keys are
+                required. If you've used ZeroDrive on another device, ensure
+                your primary key is set up here (via Key Management) to attempt
+                recovery of your sharing keys from Google Drive backup.
               </p>
-              <Button
-                size="sm"
-                onClick={() => navigate("/share")}
-                className="w-full"
-              >
-                Go to Key Setup
-              </Button>
+              <p className="text-xs text-amber-700 dark:text-amber-400 mb-4">
+                If this is your first time or a new setup for this email (
+                {userEmail}), you might need to generate sharing keys first.
+              </p>
+              <div className="flex flex-col sm:flex-row gap-2">
+                <Button
+                  size="sm"
+                  onClick={() => navigate("/key-management")}
+                  className="flex-1"
+                >
+                  Go to Key Management (for primary key)
+                </Button>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => navigate("/share")}
+                  className="flex-1"
+                >
+                  Go to Share Files (to generate sharing keys)
+                </Button>
+              </div>
             </div>
           ) : isLoading ? (
             <div className="flex justify-center items-center py-8">
@@ -500,7 +541,9 @@ const SharedWithMePage: FC = () => {
                     </TableCell>
                     <TableCell>{file.createdAt}</TableCell>
                     <TableCell>
-                      {(file.fileSize / 1024).toFixed(1)} KB
+                      {file.fileSize
+                        ? (file.fileSize / 1024).toFixed(1) + " KB"
+                        : "N/A"}
                     </TableCell>
                     <TableCell>
                       <Button
@@ -511,7 +554,7 @@ const SharedWithMePage: FC = () => {
                         className="flex items-center gap-1"
                       >
                         {isDownloading === file.id ? (
-                          "Downloading..."
+                          "Processing..."
                         ) : (
                           <>
                             <Download className="h-4 w-4" />
@@ -533,10 +576,10 @@ const SharedWithMePage: FC = () => {
               About Secure File Downloads
             </h3>
             <p className="text-xs text-muted-foreground">
-              Files are downloaded directly from Google Drive and decrypted
-              securely in your browser using your private key. Your keys are
-              stored locally and associated with your email address, providing
-              an additional layer of security.
+              Files are downloaded and decrypted securely in your browser using
+              your private sharing key. If not found locally, the app will
+              attempt to recover it from your Google Drive backup, provided your
+              primary encryption key is set up.
             </p>
           </div>
         </CardContent>
