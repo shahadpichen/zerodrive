@@ -21,10 +21,7 @@ global NONCE_LENGTH: u32 = 77;
  * @param jwt_pubkey_redc_params_limbs: RSA reduction parameters limbs
  * @param jwt_signature_limbs: RSA signature limbs
  * @param domain: Domain name (`hd` key) as a byte array of ascii characters padded to MAX_DOMAIN_LENGTH
- * @param ephemeral_pubkey: Public key of the ephemeral keypair that is used to sign messages
- * @param ephemeral_pubkey_salt: Salt of the ephemeral keypair that is used to sign messages
- * @param ephemeral_pubkey_expiry: Expiry of the ephemeral keypair that is used to sign messages
- * @param nonce: JWT `nonce` as a byte array of ascii characters - 32 bytes
+ * @param expected_nonce_field: The expected nonce value as a Field, to be matched against the JWT's nonce claim.
  **/
 fn main(
     partial_data: BoundedVec<u8, MAX_PARTIAL_DATA_LENGTH>,
@@ -35,9 +32,7 @@ fn main(
     jwt_pubkey_redc_params_limbs: [u128; 18],
     jwt_signature_limbs: [u128; 18],
     domain: pub BoundedVec<u8, MAX_DOMAIN_LENGTH>,
-    ephemeral_pubkey: pub Field,
-    ephemeral_pubkey_salt: Field,
-    ephemeral_pubkey_expiry: pub u32,
+    expected_nonce_field: pub Field
 ) {
     // Init JWT struct and verify signature
     let jwt = JWT::init_with_partial_hash(
@@ -56,12 +51,7 @@ fn main(
     let nonce_field: Field = decimal_string_to_field(nonce.storage());
 
     // Verify nonce is the hash(ephemeral_pubkey, ephemeral_pubkey_salt, ephemeral_pubkey_expiry)
-    let ephemeral_pubkey_hash = Poseidon2::hash(
-        [ephemeral_pubkey, ephemeral_pubkey_salt, ephemeral_pubkey_expiry as Field],
-        3,
-    );
-
-    assert(nonce_field == ephemeral_pubkey_hash, "invalid nonce");
+    assert(nonce_field == expected_nonce_field, "invalid nonce: expected value mismatch");
 
     // Assert email_verified claim
     jwt.assert_claim_bool("email_verified".as_bytes(), true);

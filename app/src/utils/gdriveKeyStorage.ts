@@ -98,7 +98,7 @@ export async function uploadEncryptedRsaKeyToDrive(
       `RSA key backup '${fileName}' uploaded/updated to Google Drive root successfully. File ID: ${result.id}`
     );
     return result.id;
-  } catch (error) {
+  } catch (error: any) {
     console.error(
       `Error uploading RSA key backup '${fileName}' to Google Drive root:`,
       error
@@ -159,7 +159,7 @@ export async function downloadEncryptedRsaKeyFromDrive(): Promise<Blob | null> {
       );
     }
     return await fetchResponse.blob();
-  } catch (error) {
+  } catch (error: any) {
     console.error(
       `Error downloading RSA key backup '${fileName}' from Google Drive root:`,
       error

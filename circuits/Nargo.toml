@@ -4,4 +4,4 @@ type = "bin"
 authors = ["shahad"]
 
 [dependencies]
-jwt = { tag = "v0.4.4", git = "https://github.com/saleel/noir-jwt" }
+jwt = { tag = "v0.4.4", git = "https://github.com/zkemail/noir-jwt" }

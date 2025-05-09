@@ -92,7 +92,7 @@ export async function decryptRsaPrivateKeyWithAesKey(
     // 7. Convert the decrypted ArrayBuffer back to a string, then parse as JSON
     const privateKeyString = new TextDecoder().decode(decryptedBuffer);
     return JSON.parse(privateKeyString) as JsonWebKey;
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error decrypting RSA private key with AES key:", error);
     if (error.name === "OperationError") {
       throw new Error(

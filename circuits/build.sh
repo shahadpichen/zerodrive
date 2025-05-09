@@ -8,18 +8,18 @@ if ! nargo compile; then
 fi
 
 echo "Gate count:"
-bb gates -b target/stealthnote_jwt.json | jq  '.functions[0].circuit_size'
+bb gates -b target/zerodrive_zk.json | jq  '.functions[0].circuit_size'
 
 # Create version-specific directory
-mkdir -p "../app/assets/jwt"
+mkdir -p "../app/src/assets/jwt"
 
-echo "Copying circuit.json to app/assets/jwt..."
-cp target/stealthnote_jwt.json "../app/assets/jwt/circuit.json"
+echo "Copying circuit.json to app/src/assets/jwt..."
+cp target/zerodrive_zk.json "../app/src/assets/jwt/circuit.json"
 
 echo "Generating vkey..."
-bb write_vk -b ./target/stealthnote_jwt.json -o ./target
+bb write_vk -b ./target/zerodrive_zk.json -o ./target
 
-echo "Generating vkey.json to app/assets/jwt..."
-node -e "const fs = require('fs'); fs.writeFileSync('../app/assets/jwt/circuit-vkey.json', JSON.stringify(Array.from(Uint8Array.from(fs.readFileSync('./target/vk')))));"
+echo "Generating vkey.json to app/src/assets/jwt..."
+node -e "const fs = require('fs'); fs.writeFileSync('../app/src/assets/jwt/circuit-vkey.json', JSON.stringify(Array.from(Uint8Array.from(fs.readFileSync('./target/vk')))));"
 
 echo "Done"
