@@ -9,6 +9,7 @@ import {
   S3Client,
   PutObjectCommand,
   GetObjectCommand,
+  DeleteObjectCommand,
 } from "@aws-sdk/client-s3";
 
 /**
@@ -768,4 +769,24 @@ export async function downloadEncryptedFile(filePath) {
 
   const response = await client.send(command);
   return response.Body;
+}
+
+// Delete file from Supabase Storage (S3)
+export async function deleteFileFromSupabaseStorage(
+  filePath: string
+): Promise<void> {
+  const client = await getS3Client();
+  const command = new DeleteObjectCommand({
+    Bucket: "secure-files", // Make sure this matches your bucket name
+    Key: filePath,
+  });
+
+  try {
+    await client.send(command);
+    console.log(`Successfully deleted ${filePath} from Supabase Storage.`);
+  } catch (error) {
+    console.error(`Failed to delete ${filePath} from Supabase Storage:`, error);
+    // Optionally re-throw or handle as per application needs, e.g., toast notification
+    throw new Error(`Failed to delete from storage: ${error.message}`);
+  }
 }
