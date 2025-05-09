@@ -19,6 +19,7 @@ import {
   arrayBufferToBase64,
   UserKeyPair,
   storeUserPublicKey,
+  deleteFileFromSupabaseStorage,
 } from "../utils/fileSharing";
 import {
   Table,
@@ -38,6 +39,7 @@ import { downloadEncryptedFile } from "../utils/fileSharing";
 import { getStoredKey } from "../utils/cryptoUtils";
 import { downloadEncryptedRsaKeyFromDrive } from "../utils/gdriveKeyStorage";
 import { decryptRsaPrivateKeyWithAesKey } from "../utils/rsaKeyManager";
+import { uploadAndSyncFile } from "../utils/fileOperations";
 
 interface SharedFile {
   id: string;
@@ -392,6 +394,101 @@ const SharedWithMePage: FC = () => {
       toast.success(`Successfully downloaded ${decryptedData.fileName}`, {
         id: downloadToastId,
       });
+
+      // ---- Add to user's own vault ----
+      const saveToVaultToastId = toast.loading(
+        `Attempting to save ${decryptedData.fileName} to your ZeroDrive vault...`
+      );
+      let savedToVaultSuccessfully = false;
+      try {
+        const primaryAesKeyForVault = await getStoredKey();
+        if (!primaryAesKeyForVault) {
+          toast.warning(
+            "Primary key not found. Cannot save copy to your vault.",
+            {
+              id: saveToVaultToastId,
+              description: "Please set up your main key in Key Management.",
+              duration: 7000,
+            }
+          );
+        } else {
+          const decryptedFileObject = new File(
+            [decryptedData.decryptedFile],
+            decryptedData.fileName,
+            { type: file.mimeType || "application/octet-stream" }
+          );
+
+          // Assuming userEmail is the email of the current user (recipient)
+          const uploadResult = await uploadAndSyncFile(
+            decryptedFileObject,
+            userEmail
+          );
+
+          if (uploadResult) {
+            toast.success(
+              `${decryptedData.fileName} also saved to your ZeroDrive vault.`,
+              { id: saveToVaultToastId }
+            );
+            savedToVaultSuccessfully = true;
+          } else {
+            toast.error(
+              `Failed to save copy of ${decryptedData.fileName} to your vault.`,
+              { id: saveToVaultToastId }
+            );
+          }
+        }
+      } catch (vaultError) {
+        console.error("Error saving to vault:", vaultError);
+        toast.error(`Error saving ${decryptedData.fileName} to your vault.`, {
+          id: saveToVaultToastId,
+          description:
+            vaultError instanceof Error ? vaultError.message : "Unknown error.",
+        });
+      }
+      // ---- End Add to user's own vault ----
+
+      // If download and save to vault were successful, delete the original share
+      if (savedToVaultSuccessfully) {
+        const deleteShareToastId = toast.loading(
+          `Removing original share for ${file.originalFileName}...`
+        );
+        try {
+          // Delete from Supabase Storage (S3)
+          await deleteFileFromSupabaseStorage(file.encrypted_file_blob_id);
+
+          // Delete from Supabase shared_files table
+          const { error: dbDeleteError } = await supabase
+            .from("shared_files")
+            .delete()
+            .eq("id", file.id);
+
+          if (dbDeleteError) {
+            throw new Error(
+              `Failed to delete share record from database: ${dbDeleteError.message}`
+            );
+          }
+
+          toast.success(
+            `Original share for ${file.originalFileName} removed successfully.`,
+            {
+              id: deleteShareToastId,
+            }
+          );
+          handleRefresh(); // Refresh the list of shared files
+        } catch (deleteError) {
+          console.error("Error removing original share:", deleteError);
+          toast.error(
+            `Failed to remove original share for ${file.originalFileName}.`,
+            {
+              id: deleteShareToastId,
+              description:
+                deleteError instanceof Error
+                  ? deleteError.message
+                  : "Please check console or try manually if needed.",
+            }
+          );
+        }
+      }
     } catch (error) {
       console.error("Error downloading or decrypting file:", error);
       toast.error("Download or Decryption Failed", {
@@ -579,7 +676,9 @@ const SharedWithMePage: FC = () => {
               Files are downloaded and decrypted securely in your browser using
               your private sharing key. If not found locally, the app will
               attempt to recover it from your Google Drive backup, provided your
-              primary encryption key is set up.
+              primary encryption key is set up. Successfully downloaded files
+              are also automatically saved to your personal ZeroDrive vault if
+              your primary key is configured.
             </p>
           </div>
         </CardContent>
