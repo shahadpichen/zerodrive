@@ -1,7 +1,0 @@
-[package]
-name = "zerodrive_zk"
-type = "bin"
-authors = ["shahad"]
-
-[dependencies]
-jwt = { tag = "v0.4.4", git = "https://github.com/saleel/noir-jwt" }

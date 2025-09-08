@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { gapi } from "gapi-script";
 import { Button } from "../ui/button";
-import { FaGoogle } from "react-icons/fa";
+import googleLogo from "../../assets/google.png";
 
 interface GoogleAuthProps {
   onAuthChange: (authenticated: boolean) => void;
@@ -70,6 +70,7 @@ export const GoogleAuth: React.FC<GoogleAuthProps> = ({
       disabled={!isInitialized}
     >
       {/* <FaGoogle /> */}
+      <img src={googleLogo} alt="Google Logo" className="w-4 h-4 mr-2" />
       Sign in with Google
     </Button>
   );

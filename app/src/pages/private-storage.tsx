@@ -6,7 +6,10 @@ import { Button } from "../components/ui/button";
 import { toast } from "sonner";
 
 import { getStoredKey } from "../utils/cryptoUtils";
-import { getAllFilesForUser } from "../utils/dexieDB";
+import {
+  getAllFilesForUser,
+  fetchAndStoreFileMetadata,
+} from "../utils/dexieDB";
 import {
   uploadAndSyncFile,
   deleteAllAndSyncFiles,
@@ -21,8 +24,21 @@ import {
 } from "../components/ui/dropdown-menu";
 import { Progress } from "../components/ui/progress";
 import { Zap } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
+import { RefreshCw } from "lucide-react";
+
+// Imports for sharing key functionality
+import {
+  generateUserKeyPair,
+  storeUserPublicKey,
+  hashEmail,
+} from "../utils/fileSharing";
+import { userHasStoredKeys, storeUserKeyPair } from "../utils/keyStorage";
+import { encryptRsaPrivateKeyWithAesKey } from "../utils/rsaKeyManager";
+import { uploadEncryptedRsaKeyToDrive } from "../utils/gdriveKeyStorage";
+
 function PrivateStorage() {
+  const navigate = useNavigate();
   const [_isAuthenticated, setIsAuthenticated] = useState(true);
   const [showKeyModal, setShowKeyModal] = useState(false);
   const [userName, setUserName] = useState("");
@@ -40,6 +56,12 @@ function PrivateStorage() {
   } | null>(null);
   const [isLoadingStorage, setIsLoadingStorage] = useState<boolean>(true);
   const [hasEncryptionKey, setHasEncryptionKey] = useState<boolean>(true);
+  const [isRefreshingFiles, setIsRefreshingFiles] = useState<boolean>(false);
+
+  // State for sharing key feature
+  const [hasSharingKeys, setHasSharingKeys] = useState<boolean>(false);
+  const [isProcessingSharingKeys, setIsProcessingSharingKeys] =
+    useState<boolean>(false);
 
   const formatBytes = (bytes: number, decimals = 2) => {
     if (bytes === 0) return "0 Bytes";
@@ -121,12 +143,17 @@ function PrivateStorage() {
             setUserEmail(email);
             setUserImage(profile.getImageUrl());
             if (email) {
+              await fetchAndStoreFileMetadata();
               const files = await getAllFilesForUser(email);
               setUserHasFiles(files.length > 0);
               await loadStorageInfo();
+              // Check for sharing keys
+              const keysExist = await userHasStoredKeys(email);
+              setHasSharingKeys(keysExist);
             } else {
               setUserHasFiles(false);
               setStorageInfo(null);
+              setHasSharingKeys(false);
             }
           } else {
             window.location.href = "/";
@@ -160,6 +187,8 @@ function PrivateStorage() {
           setUserHasFiles(false);
         })
         .finally(() => setIsLoadingUserFiles(false));
+      // Also re-check sharing keys if userEmail changes (though less likely here)
+      userHasStoredKeys(userEmail).then(setHasSharingKeys);
     }
   }, [userEmail, refreshFileListKey]);
 
@@ -173,6 +202,32 @@ function PrivateStorage() {
       }
     } catch (error) {
       console.error("Error during logout:", error);
+    }
+  };
+
+  const handleRefreshFiles = async () => {
+    if (!userEmail) {
+      toast.error("User information not available to refresh files.");
+      return;
+    }
+    setIsRefreshingFiles(true);
+    const refreshToastId = toast.loading("Refreshing file list...");
+    try {
+      await fetchAndStoreFileMetadata();
+      const files = await getAllFilesForUser(userEmail);
+      setUserHasFiles(files.length > 0);
+      setRefreshFileListKey((prev) => prev + 1);
+      toast.success("File list refreshed successfully.", {
+        id: refreshToastId,
+      });
+    } catch (error: any) {
+      console.error("Error refreshing files:", error);
+      toast.error("Failed to refresh file list.", {
+        description: error.message || "Could not sync with Google Drive.",
+        id: refreshToastId,
+      });
+    } finally {
+      setIsRefreshingFiles(false);
     }
   };
 
@@ -234,6 +289,86 @@ function PrivateStorage() {
     setShowDeleteConfirm(true);
   };
 
+  const handleEnableFileSharing = async () => {
+    if (!userEmail) {
+      toast.error("User email not available. Cannot enable sharing.");
+      return;
+    }
+
+    setIsProcessingSharingKeys(true);
+    const genToastId = toast.loading("Checking for primary encryption key...");
+
+    try {
+      const primaryAesKey = await getStoredKey();
+
+      if (!primaryAesKey) {
+        toast.info("Redirecting to Key Management page...", {
+          id: genToastId,
+          description:
+            "You need to set up your main encryption key first for backups.",
+        });
+        setIsProcessingSharingKeys(false);
+        navigate("/key-management");
+        return;
+      }
+
+      toast.loading("Generating your sharing keys...", { id: genToastId });
+
+      const keyPair = await generateUserKeyPair();
+      const hashedEmail = await hashEmail(userEmail);
+      await storeUserPublicKey(hashedEmail, keyPair.publicKeyJwk);
+      await storeUserKeyPair(userEmail, keyPair);
+
+      toast.success(
+        "Sharing keys generated and public key registered locally.",
+        { id: genToastId }
+      );
+
+      if (keyPair.privateKeyJwk) {
+        toast.loading("Backing up sharing private key to Google Drive...", {
+          id: genToastId,
+        });
+        try {
+          const encryptedPrivateKeyBlob = await encryptRsaPrivateKeyWithAesKey(
+            keyPair.privateKeyJwk,
+            primaryAesKey
+          );
+          const uploadFileId = await uploadEncryptedRsaKeyToDrive(
+            encryptedPrivateKeyBlob
+          );
+          if (uploadFileId) {
+            toast.success(`Sharing private key backed up to Google Drive.`);
+          } else {
+            toast.error(
+              "Failed to back up sharing private key to Google Drive.",
+              { id: genToastId }
+            );
+          }
+        } catch (backupError) {
+          console.error(
+            "Failed to encrypt or backup sharing private key:",
+            backupError
+          );
+          toast.error(
+            "Keys generated locally, but failed to prepare/backup sharing private key.",
+            { id: genToastId }
+          );
+        }
+      }
+      setHasSharingKeys(true); // Update state on success
+    } catch (error) {
+      console.error("Error during sharing key generation process:", error);
+      let errorMessage =
+        error instanceof Error ? error.message : "Unknown error";
+      toast.error("Failed to generate sharing keys", {
+        description: errorMessage,
+        id: genToastId,
+      });
+    } finally {
+      setIsProcessingSharingKeys(false);
+    }
+  };
+
   const usagePercentage = storageInfo
     ? storageInfo.total > 0
       ? (storageInfo.used / storageInfo.total) * 100
@@ -288,9 +423,24 @@ function PrivateStorage() {
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 sm:gap-8">
           <div className="col-span-1">
-            <h2 className="text-base sm:text-lg mb-3 font-mono font-normal">
-              Your Files
-            </h2>
+            <div className="flex items-center mb-3">
+              <h2 className="text-base sm:text-lg font-mono font-normal">
+                Your Files
+              </h2>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={handleRefreshFiles}
+                disabled={isRefreshingFiles || isLoadingUserFiles}
+                className="ml-2 h-7 w-7"
+              >
+                <RefreshCw
+                  className={`h-4 w-4 ${
+                    isRefreshingFiles ? "animate-spin" : ""
+                  }`}
+                />
+              </Button>
+            </div>
             <FileList view="compact" refreshKey={refreshFileListKey} />
           </div>
 
@@ -306,6 +456,37 @@ function PrivateStorage() {
                 disabled={uploading}
               >
                 {uploading ? "Uploading..." : "Upload Files"}
+              </Button>
+
+              <Link to="/share">
+                <Button
+                  variant="ghost"
+                  className="justify-start md:justify-end px-1 h-auto py-1 text-sm"
+                >
+                  Share Files Page (Send)
+                </Button>
+              </Link>
+
+              <Link to="/shared-with-me">
+                <Button
+                  variant="ghost"
+                  className="justify-start md:justify-end px-1 h-auto py-1 text-sm"
+                >
+                  Shared with Me (Receive)
+                </Button>
+              </Link>
+
+              <Button
+                variant="ghost"
+                className="justify-start md:justify-end px-1 h-auto py-1 text-sm"
+                onClick={handleEnableFileSharing}
+                disabled={isProcessingSharingKeys || hasSharingKeys}
+              >
+                {isProcessingSharingKeys
+                  ? "Processing..."
+                  : hasSharingKeys
+                  ? "File Sharing Enabled"
+                  : "Enable File Sharing/Receiving"}
               </Button>
 
               <Link to="/key-management">
