@@ -97,7 +97,7 @@ function Header({ setIsAuthenticated }: HeaderProps) {
           total: parseInt(storageQuota.limit || "0"),
         });
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error loading user and storage info:", error);
       if (error.status === 401) {
         setIsAuthenticated(false);
