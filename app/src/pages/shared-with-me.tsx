@@ -34,7 +34,7 @@ import {
   getUserKeyPair,
   storeUserKeyPair,
 } from "../utils/keyStorage";
-import supabase from "../utils/supabaseClient";
+import apiClient from "../utils/apiClient";
 import { downloadEncryptedFile } from "../utils/fileSharing";
 import { getStoredKey } from "../utils/cryptoUtils";
 import { downloadEncryptedRsaKeyFromDrive } from "../utils/gdriveKeyStorage";
@@ -120,12 +120,8 @@ const SharedWithMePage: FC = () => {
       setIsLoading(true);
       try {
         const hashedEmail = await hashEmail(userEmail);
-        const { data, error } = await supabase
-          .from("shared_files")
-          .select("*")
-          .eq("recipient_email_hash", hashedEmail);
-
-        if (error) throw error;
+        const result = await apiClient.sharedFiles.getForUser(hashedEmail);
+        const data = result.files;
 
         if (data) {
           const mappedFiles: SharedFile[] = data.map((dbRow: any) => {
@@ -184,12 +180,8 @@ const SharedWithMePage: FC = () => {
 
     try {
       const hashedEmail = await hashEmail(userEmail);
-      const { data, error } = await supabase
-        .from("shared_files")
-        .select("*")
-        .eq("recipient_email_hash", hashedEmail);
-
-      if (error) throw error;
+      const result = await apiClient.sharedFiles.getForUser(hashedEmail);
+      const data = result.files;
 
       if (data) {
         const mappedFiles: SharedFile[] = data.map((dbRow: any) => {
@@ -456,17 +448,8 @@ const SharedWithMePage: FC = () => {
           // Delete from Supabase Storage (S3)
           await deleteFileFromSupabaseStorage(file.encrypted_file_blob_id);
 
-          // Delete from Supabase shared_files table
-          const { error: dbDeleteError } = await supabase
-            .from("shared_files")
-            .delete()
-            .eq("id", file.id);
-
-          if (dbDeleteError) {
-            throw new Error(
-              `Failed to delete share record from database: ${dbDeleteError.message}`
-            );
-          }
+          // Delete from shared_files table via API
+          await apiClient.sharedFiles.delete(file.id);
 
           toast.success(
             `Original share for ${file.originalFileName} removed successfully.`,

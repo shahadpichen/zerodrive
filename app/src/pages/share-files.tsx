@@ -364,7 +364,7 @@ const ShareFilesPage: React.FC = () => {
         senderEmail
       );
       const shareId = crypto.randomUUID();
-      await storeFileShare(shareId, "zk-share-file", preparation);
+      await storeFileShare(shareId, "encrypted-share", preparation);
       toast.success(
         `File "${file.name}" has been prepared for sharing with ${recipientEmail}`,
         { id: sharingToastId }
