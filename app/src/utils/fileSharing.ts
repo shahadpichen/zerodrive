@@ -3,7 +3,7 @@
  * Implements secure file sharing functionality using asymmetric cryptography and Supabase.
  */
 
-import supabase from "./supabaseClient";
+import apiClient from "./apiClient";
 import { getUserKeyPair } from "./keyStorage";
 import {
   S3Client,
@@ -20,6 +20,8 @@ export interface FilePreparationResult {
   encryptedFileBlob: Blob;
   /** SHA-256 hash of the recipient's email address. */
   recipientEmailHash: string;
+  /** SHA-256 hash of the sender's email address. */
+  senderEmailHash: string;
   /** The file's symmetric encryption key, itself encrypted for the recipient. */
   encryptedFileKeyForRecipient: ArrayBuffer;
   /** A cryptographic proof of the sender's identity. */
@@ -141,21 +143,15 @@ export async function storeUserPublicKey(
     console.log("Target table: user_public_keys");
     console.log("Hashed email:", hashedEmail);
 
-    const { error, data } = await supabase.from("user_public_keys").upsert(
-      {
-        hashed_email_identifier: hashedEmail,
-        public_key_jwk: publicKeyJwk,
-      },
-      {
-        onConflict: "hashed_email_identifier",
-      }
-    );
-
-    if (error) {
-      console.error("Supabase error details:", error);
-      throw new Error(
-        `Failed to store public key: ${error.message} (Code: ${error.code})`
+    try {
+      const data = await apiClient.publicKeys.upsert(
+        hashedEmail,
+        JSON.stringify(publicKeyJwk)
       );
+      console.log("Public key stored successfully:", data);
+    } catch (error) {
+      console.error("API client error:", error);
+      throw new Error(`Failed to store public key: ${error}`);
     }
 
     console.log("Public key stored successfully");
@@ -363,26 +359,18 @@ export async function prepareFileForSharing(
     // const recipientPublicKey = await fetchUserPublicKey(recipientHashedEmail);
 
     // Fetch the recipient's public key JWK directly for logging and use
-    const { data: publicKeyData, error: publicKeyFetchError } = await supabase
-      .from("user_public_keys")
-      .select("public_key_jwk")
-      .eq("hashed_email_identifier", recipientHashedEmail)
-      .single();
-
-    if (
-      publicKeyFetchError ||
-      !publicKeyData ||
-      !publicKeyData.public_key_jwk
-    ) {
+    const publicKeyResult = await apiClient.publicKeys.get(recipientHashedEmail);
+    
+    if (!publicKeyResult || !publicKeyResult.public_key) {
       console.error(
-        `[SENDER-DEBUG] Failed to fetch public key JWK for ${recipientEmail} (hashed: ${recipientHashedEmail}):`,
-        publicKeyFetchError
+        `[SENDER-DEBUG] Failed to fetch public key for ${recipientEmail} (hashed: ${recipientHashedEmail})`
       );
       throw new Error(
         `Recipient ${recipientEmail} has not registered their public key yet, or an error occurred fetching it.`
       );
     }
-    const recipientPublicJWKForEncryption = publicKeyData.public_key_jwk;
+    
+    const recipientPublicJWKForEncryption = JSON.parse(publicKeyResult.public_key);
     console.log(
       `[SENDER-DEBUG] Public Key JWK of recipient (${recipientEmail}) being used for encryption:`,
       JSON.stringify(recipientPublicJWKForEncryption)
@@ -520,19 +508,20 @@ export async function storeFileShare(
       `[SENDER-DEBUG] Storing encryptedFileKey for share_id ${shareId}. Original base64: "${fileData.encryptedFileKey}", Hex for DB: "${encryptedFileKeyHex}" (length: ${encryptedFileKeyHex.length})`
     );
 
-    const { data, error } = await supabase.from("shared_files").insert({
-      share_id: shareId,
-      encrypted_file_blob_id: filePath, // Reference to storage location
-      recipient_email_hash: fileData.recipientHashedEmail,
-      encrypted_file_key: encryptedFileKeyHex, // Store the hex string
-      sender_proof: fileData.senderProof,
-      file_name: fileData.originalFileName,
-      file_mime_type: fileData.mimeType,
-      file_size: fileData.fileSize,
-    });
-
-    if (error) {
-      console.error("Error inserting into shared_files:", error);
+    try {
+      const data = await apiClient.sharedFiles.create({
+        file_id: filePath, // Reference to storage location (Google Drive file ID)
+        owner_user_id: fileData.senderEmailHash,
+        recipient_user_id: fileData.recipientEmailHash,
+        encrypted_file_key: encryptedFileKeyHex, // Store the hex string
+        file_name: fileData.fileName,
+        file_size: fileData.fileSize || 0,
+        mime_type: fileData.fileMimeType,
+        access_type: 'view'
+      });
+      console.log(`[SENDER-DEBUG] Successfully stored file share:`, data);
+    } catch (error) {
+      console.error("Error creating shared file:", error);
       throw error;
     }
     console.log(`[SENDER-DEBUG] Successfully stored share_id ${shareId}`);
@@ -725,11 +714,7 @@ export async function decryptSharedFile(
 
 // Get the user's session token
 export async function getS3Client() {
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
-
-  // For testing - skip session check and use anon key directly
+  // No longer need session from Supabase auth
   return new S3Client({
     forcePathStyle: true,
     region: process.env.REACT_APP_AWS_REGION || "",
@@ -737,8 +722,7 @@ export async function getS3Client() {
     credentials: {
       accessKeyId: process.env.REACT_APP_AWS_ACCESS_KEY_ID || "",
       secretAccessKey: process.env.REACT_APP_AWS_SECRET_ACCESS_KEY || "",
-      // Use an empty session token to bypass authentication for now
-      sessionToken: session?.access_token || "",
+      // No session token needed for direct S3 access
     },
   });
 }
