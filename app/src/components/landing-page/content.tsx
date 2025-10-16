@@ -10,9 +10,15 @@ export const content = [
       "As an <u>open source</u> solution, our tool puts you in the driver's seat. You can review, customize, and even host the tool on your own servers to ensure it meets your specific needs. With us, you're not just a user—you have complete control over your <u>data security</u>.",
   },
   {
+    heading: "Anonymous File Sharing",
+    description:
+      "ZeroDrive uses a <u>12-word recovery phrase</u> to generate your encryption keys, keeping your identity and files fully under your control. You can securely share encrypted files with other users via email using <u>public-key cryptography</u>, so only the intended recipient can decrypt them. If a recipient isn’t on ZeroDrive yet, they’ll receive an <u>email invitation</u> to join and access the file. All your keys can also be backed up to Google Drive (encrypted), letting you recover access from any device.",
+  },
+  {
     description:
       "Privacy through E2E encryption; Reliability of Google; Freedom of open-source.",
   },
+
   // {
   //   description: "We hope you enjoy ZeroDrive! <br/> Regards, <br/> Shahad",
   // },
