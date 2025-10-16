@@ -375,7 +375,7 @@ export const FileList: React.FC<FileListProps> = ({
             Loading...
           </p>
         ) : filteredFiles.length > 0 ? (
-          <div className="flex flex-col gap-2">
+          <div className="flex flex-wrap gap-2">
             {filteredFiles.map((file) => (
               <Button
                 key={file.id}
