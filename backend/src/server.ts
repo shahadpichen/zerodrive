@@ -11,11 +11,13 @@ import express, { Application, Request, Response, NextFunction } from 'express';
 import helmet from 'helmet';
 import compression from 'compression';
 import rateLimit from 'express-rate-limit';
+import cron from 'node-cron';
 import { testConnection } from './config/database';
 import corsHandler from './middleware/cors';
 import { errorHandler, notFoundHandler, responseHelpers } from './middleware/errorHandler';
 import router from './routes';
 import logger from './utils/logger';
+import { cleanupExpiredShares } from './jobs/cleanupExpiredShares';
 
 // Initialize Express app
 const app: Application = express();
@@ -143,6 +145,15 @@ const startServer = async (): Promise<void> => {
       logger.error('Failed to connect to database. Exiting...');
       process.exit(1);
     }
+
+    // Schedule cleanup job for expired shared files
+    // Runs daily at 2:00 AM
+    cron.schedule('0 2 * * *', async () => {
+      logger.info('Running scheduled cleanup job for expired shared files...');
+      await cleanupExpiredShares();
+    });
+
+    logger.info('Scheduled cleanup job initialized (runs daily at 2:00 AM)');
 
     // Start HTTP server
     app.listen(PORT, HOST, () => {
