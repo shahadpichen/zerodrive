@@ -21,6 +21,7 @@ import {
   storeUserPublicKey,
   hashEmail,
   UserKeyPair,
+  fetchUserPublicKey,
 } from "../utils/fileSharing";
 import {
   storeUserKeyPair,
@@ -166,9 +167,32 @@ const ShareFilesPage: React.FC = () => {
           toast.dismiss(recoveryToastId); // Dismiss previous toast if any
           const hasLocalKeys = await userHasStoredKeys(senderEmail);
           if (hasLocalKeys) {
+            // Auto-repair: Check if public key exists in PostgreSQL
+            const hashedEmail = await hashEmail(senderEmail);
+            try {
+              const serverKey = await fetchUserPublicKey(hashedEmail);
+
+              if (!serverKey) {
+                // Public key missing from server - auto-upload from IndexedDB
+                console.log("Public key missing from server, syncing from local storage...");
+                const localKeyPair = await getUserKeyPair(senderEmail);
+                if (localKeyPair?.publicKeyJwk) {
+                  await storeUserPublicKey(hashedEmail, localKeyPair.publicKeyJwk);
+                  toast.success("Sharing keys loaded from local storage and synced to server.");
+                } else {
+                  toast.success("Sharing keys loaded from local storage.");
+                }
+              } else {
+                toast.success("Sharing keys loaded from local storage.");
+              }
+            } catch (syncError) {
+              console.error("Error syncing public key to server:", syncError);
+              // Still mark as loaded since keys exist locally
+              toast.success("Sharing keys loaded from local storage.");
+            }
+
             setHasGeneratedKeys(true);
             keysSuccessfullyLoaded = true;
-            toast.success("Sharing keys loaded from local storage.");
           } else if (!encryptedKeyBlob) {
             // Only show this if no Drive backup was attempted or found
             toast.info("No sharing keys found locally. Please generate them.");

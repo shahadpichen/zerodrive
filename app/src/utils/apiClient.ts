@@ -357,6 +357,11 @@ const apiClient = {
   publicKeys: publicKeysApi,
   sharedFiles: sharedFilesApi,
   health: healthApi,
+  // Expose HTTP methods for custom endpoints (like pre-signed URLs)
+  get: httpClient.get.bind(httpClient),
+  post: httpClient.post.bind(httpClient),
+  put: httpClient.put.bind(httpClient),
+  delete: httpClient.delete.bind(httpClient),
 };
 
 export default apiClient;

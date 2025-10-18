@@ -5,12 +5,6 @@
 
 import apiClient from "./apiClient";
 import { getUserKeyPair } from "./keyStorage";
-import {
-  S3Client,
-  PutObjectCommand,
-  GetObjectCommand,
-  DeleteObjectCommand,
-} from "@aws-sdk/client-s3";
 
 /**
  * Represents the result of preparing a file for sharing (Step 1).
@@ -168,39 +162,23 @@ export async function storeUserPublicKey(
 }
 
 /**
- * Fetches a user's public key from Supabase using their hashed email.
+ * Fetches a user's public key from the backend using their hashed email.
  * @param hashedEmail The SHA-256 hash of the user's email.
- * @returns A Promise that resolves to the user's public key as a CryptoKey, or null if not found.
+ * @returns A Promise that resolves to the user's public key as a JsonWebKey, or null if not found.
  */
 export async function fetchUserPublicKey(
   hashedEmail: string
-): Promise<CryptoKey | null> {
-  const { data, error } = await supabase
-    .from("user_public_keys")
-    .select("public_key_jwk")
-    .eq("hashed_email_identifier", hashedEmail)
-    .single();
-
-  if (error || !data) {
-    console.warn(`Public key not found for hashed email: ${hashedEmail}`);
-    return null;
-  }
-
+): Promise<JsonWebKey | null> {
   try {
-    // Import the JWK as a CryptoKey
-    return await crypto.subtle.importKey(
-      "jwk",
-      data.public_key_jwk,
-      {
-        name: "RSA-OAEP",
-        hash: "SHA-256",
-      },
-      true, // extractable
-      ["encrypt"] // key usage
-    );
-  } catch (importError: any) {
-    console.error("Error importing public key:", importError);
-    throw new Error(`Failed to import public key: ${importError.message}`);
+    const result = await apiClient.publicKeys.get(hashedEmail);
+    if (!result || !result.public_key) {
+      console.warn(`Public key not found for hashed email: ${hashedEmail}`);
+      return null;
+    }
+    return JSON.parse(result.public_key);
+  } catch (error) {
+    console.warn(`Public key not found for hashed email: ${hashedEmail}`, error);
+    return null;
   }
 }
 
@@ -491,11 +469,15 @@ export async function storeFileShare(
   fileData: any
 ): Promise<void> {
   try {
-    // 1. Upload file to Supabase Storage using S3 client
-    const filePath = `shared-files/${shareId}`;
+    // 1. Upload encrypted file to MinIO using pre-signed URL
+    // Backend generates secure temporary upload URL
+    const fileKey = await uploadEncryptedFile(
+      fileData.fileName,
+      fileData.encryptedFileBlob,
+      fileData.fileMimeType
+    );
 
-    // Use the S3 client instead of supabase.storage
-    await uploadEncryptedFile(filePath, fileData.encryptedFileBlob);
+    console.log(`[SENDER-DEBUG] File uploaded to MinIO with key: ${fileKey}`);
 
     // 2. Store metadata in database, with reference to file in storage
     const encryptedFileKeyArrayBuffer = base64ToArrayBuffer(
@@ -509,15 +491,19 @@ export async function storeFileShare(
     );
 
     try {
+      // Calculate expiration date (7 days from now)
+      const expirationDate = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+
       const data = await apiClient.sharedFiles.create({
-        file_id: filePath, // Reference to storage location (Google Drive file ID)
-        owner_user_id: fileData.senderEmailHash,
-        recipient_user_id: fileData.recipientEmailHash,
+        file_id: fileKey, // Reference to MinIO storage location
+        owner_user_id: fileData.senderHashedEmail,
+        recipient_user_id: fileData.recipientHashedEmail,
         encrypted_file_key: encryptedFileKeyHex, // Store the hex string
-        file_name: fileData.fileName,
+        file_name: fileData.originalFileName, // Store original filename, not encrypted blob name
         file_size: fileData.fileSize || 0,
-        mime_type: fileData.fileMimeType,
-        access_type: 'view'
+        mime_type: fileData.mimeType,
+        access_type: 'view',
+        expires_at: expirationDate // Auto-delete after 7 days if not claimed
       });
       console.log(`[SENDER-DEBUG] Successfully stored file share:`, data);
     } catch (error) {
@@ -712,66 +698,75 @@ export async function decryptSharedFile(
   }
 }
 
-// Get the user's session token
-export async function getS3Client() {
-  // No longer need session from Supabase auth
-  return new S3Client({
-    forcePathStyle: true,
-    region: process.env.REACT_APP_AWS_REGION || "",
-    endpoint: process.env.REACT_APP_AWS_ENDPOINT_URL || "",
-    credentials: {
-      accessKeyId: process.env.REACT_APP_AWS_ACCESS_KEY_ID || "",
-      secretAccessKey: process.env.REACT_APP_AWS_SECRET_ACCESS_KEY || "",
-      // No session token needed for direct S3 access
+/**
+ * Upload encrypted file using pre-signed URL from backend
+ * @param fileName The name of the file
+ * @param fileBlob The encrypted file blob to upload
+ * @param mimeType Optional MIME type
+ * @returns The file key for retrieving the file later
+ */
+export async function uploadEncryptedFile(
+  fileName: string,
+  fileBlob: Blob,
+  mimeType?: string
+): Promise<string> {
+  // Step 1: Request pre-signed upload URL from backend
+  const response = await apiClient.post('/presigned-url/upload', {
+    fileName,
+    fileSize: fileBlob.size,
+    mimeType: mimeType || 'application/octet-stream',
+  });
+
+  const { uploadUrl, fileKey } = response.data;
+
+  // Step 2: Upload encrypted file directly to MinIO using pre-signed URL
+  const uploadResponse = await fetch(uploadUrl, {
+    method: 'PUT',
+    body: fileBlob,
+    headers: {
+      'Content-Type': mimeType || 'application/octet-stream',
     },
   });
-}
 
-// Upload file
-export async function uploadEncryptedFile(filePath: string, fileBlob: Blob) {
-  // Convert Blob to ArrayBuffer
-  const arrayBuffer = await fileBlob.arrayBuffer();
-  const uint8Array = new Uint8Array(arrayBuffer); // Convert to Uint8Array
-
-  const client = await getS3Client();
-  const command = new PutObjectCommand({
-    Bucket: "secure-files",
-    Key: filePath,
-    Body: uint8Array, // Use Uint8Array
-    ContentType: "application/octet-stream",
-  });
-
-  return client.send(command);
-}
-
-// Download file
-export async function downloadEncryptedFile(filePath: string) {
-  const client = await getS3Client();
-  const command = new GetObjectCommand({
-    Bucket: "secure-files",
-    Key: filePath,
-  });
-
-  const response = await client.send(command);
-  return response.Body;
-}
-
-// Delete file from Supabase Storage (S3)
-export async function deleteFileFromSupabaseStorage(
-  filePath: string
-): Promise<void> {
-  const client = await getS3Client();
-  const command = new DeleteObjectCommand({
-    Bucket: "secure-files", // Make sure this matches your bucket name
-    Key: filePath,
-  });
-
-  try {
-    await client.send(command);
-    console.log(`Successfully deleted ${filePath} from Supabase Storage.`);
-  } catch (error: any) {
-    console.error(`Failed to delete ${filePath} from Supabase Storage:`, error);
-    // Optionally re-throw or handle as per application needs, e.g., toast notification
-    throw new Error(`Failed to delete from storage: ${error.message}`);
+  if (!uploadResponse.ok) {
+    throw new Error(`Failed to upload file: ${uploadResponse.statusText}`);
   }
+
+  console.log(`File uploaded successfully: ${fileKey}`);
+  return fileKey;
+}
+
+/**
+ * Download encrypted file using pre-signed URL from backend
+ * @param fileKey The file key returned from upload
+ * @returns The encrypted file blob
+ */
+export async function downloadEncryptedFile(fileKey: string): Promise<Blob> {
+  // Step 1: Request pre-signed download URL from backend
+  const response = await apiClient.post('/presigned-url/download', {
+    fileKey,
+  });
+
+  const { downloadUrl } = response.data;
+
+  // Step 2: Download encrypted file from MinIO using pre-signed URL
+  const downloadResponse = await fetch(downloadUrl);
+
+  if (!downloadResponse.ok) {
+    throw new Error(`Failed to download file: ${downloadResponse.statusText}`);
+  }
+
+  const blob = await downloadResponse.blob();
+  console.log(`File downloaded successfully: ${fileKey}`);
+  return blob;
+}
+
+/**
+ * Delete file from storage (future implementation)
+ * Note: For now, files are automatically cleaned up after 7 days
+ */
+export async function deleteFileFromStorage(fileKey: string): Promise<void> {
+  // TODO: Implement delete endpoint in backend if needed
+  // For now, rely on 7-day auto-deletion
+  console.log(`File deletion not yet implemented. File will auto-delete after 7 days: ${fileKey}`);
 }
