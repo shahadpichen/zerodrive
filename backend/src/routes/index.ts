@@ -5,12 +5,14 @@
 import { Router } from 'express';
 import publicKeysRouter from './publicKeys';
 import sharedFilesRouter from './sharedFiles';
+import presignedUrlsRouter from './presignedUrls';
 
 const router = Router();
 
 // Mount route modules
 router.use('/public-keys', publicKeysRouter);
 router.use('/shared-files', sharedFilesRouter);
+router.use('/presigned-url', presignedUrlsRouter);
 
 // Health check endpoint
 router.get('/health', (req, res) => {
@@ -35,7 +37,9 @@ router.get('/', (req, res) => {
       'GET /api/shared-files': 'Get shared files',
       'GET /api/shared-files/:id': 'Get specific shared file',
       'PUT /api/shared-files/:id': 'Update shared file',
-      'DELETE /api/shared-files/:id': 'Revoke file sharing'
+      'DELETE /api/shared-files/:id': 'Revoke file sharing',
+      'POST /api/presigned-url/upload': 'Generate pre-signed upload URL',
+      'POST /api/presigned-url/download': 'Generate pre-signed download URL'
     }
   }, 'ZeroDrive Backend API');
 });

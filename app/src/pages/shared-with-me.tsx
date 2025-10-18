@@ -19,7 +19,7 @@ import {
   arrayBufferToBase64,
   UserKeyPair,
   storeUserPublicKey,
-  deleteFileFromSupabaseStorage,
+  deleteFileFromStorage,
 } from "../utils/fileSharing";
 import {
   Table,
@@ -43,9 +43,8 @@ import { uploadAndSyncFile } from "../utils/fileOperations";
 
 interface SharedFile {
   id: string;
-  fileId?: string;
+  fileId: string;
   driveFileId?: string;
-  encrypted_file_blob_id: string;
   originalFileName: string;
   sender: string;
   createdAt: string;
@@ -148,7 +147,6 @@ const SharedWithMePage: FC = () => {
               id: dbRow.id,
               fileId: dbRow.file_id,
               driveFileId: dbRow.drive_file_id,
-              encrypted_file_blob_id: dbRow.encrypted_file_blob_id,
               originalFileName: dbRow.file_name,
               sender: dbRow.sender_hashed_email,
               createdAt: new Date(dbRow.created_at).toLocaleString(),
@@ -354,16 +352,11 @@ const SharedWithMePage: FC = () => {
         finalEncryptedFileKey = arrayBufferToBase64(bytes.buffer);
       }
 
-      const s3Object = await downloadEncryptedFile(file.encrypted_file_blob_id);
-      if (!s3Object || !s3Object.transformToByteArray) {
-        throw new Error(
-          "Failed to retrieve file from storage or S3 object is invalid."
-        );
+      // Download encrypted file from MinIO using pre-signed URL
+      encryptedFileBlob = await downloadEncryptedFile(file.fileId);
+      if (!encryptedFileBlob) {
+        throw new Error("Failed to retrieve file from storage.");
       }
-      const fileBytes = await s3Object.transformToByteArray();
-      encryptedFileBlob = new Blob([fileBytes], {
-        type: file.mimeType || "application/octet-stream",
-      });
 
       toast.loading("Decrypting file...", { id: downloadToastId });
       const decryptedData = await decryptSharedFile(
@@ -445,8 +438,8 @@ const SharedWithMePage: FC = () => {
           `Removing original share for ${file.originalFileName}...`
         );
         try {
-          // Delete from Supabase Storage (S3)
-          await deleteFileFromSupabaseStorage(file.encrypted_file_blob_id);
+          // Delete from MinIO storage (note: auto-deletion after 7 days)
+          await deleteFileFromStorage(file.encrypted_file_blob_id);
 
           // Delete from shared_files table via API
           await apiClient.sharedFiles.delete(file.id);
