@@ -3,6 +3,7 @@ import { gapi } from "gapi-script";
 import { toast } from "sonner";
 import { initializeGapi, refreshGapiToken } from "./gapiInit";
 import logger from "./logger";
+import { encryptMetadata, decryptMetadata } from "./metadataEncryption";
 
 export interface FileMeta {
   id: string;
@@ -61,12 +62,13 @@ const sendToGoogleDrive = async (filesToSync: FileMeta[]) => {
     }
     const token = authInstance.currentUser.get().getAuthResponse().access_token;
 
-    const fileContent = JSON.stringify({ files: filesToSync });
-    logger.log("[Sync] Content to sync:", fileContent);
+    // Encrypt metadata before uploading
+    logger.log("[Sync] Encrypting metadata...");
+    const encryptedBlob = await encryptMetadata({ files: filesToSync });
 
     const metadata = {
       name: "db-list.json",
-      mimeType: "application/json",
+      mimeType: "application/octet-stream", // Changed to binary since it's encrypted
     };
 
     logger.log("[Sync] Searching for existing db-list.json...");
@@ -96,7 +98,7 @@ const sendToGoogleDrive = async (filesToSync: FileMeta[]) => {
       logger.log("[Sync] No existing db-list.json found. Will create new.");
     }
 
-    const blobContent = new Blob([fileContent], { type: "application/json" });
+    // Use encrypted blob instead of plaintext
     const form = new FormData();
 
     let uploadUrl =
@@ -119,7 +121,7 @@ const sendToGoogleDrive = async (filesToSync: FileMeta[]) => {
       );
     }
 
-    form.append("file", blobContent);
+    form.append("file", encryptedBlob);
 
     logger.log(`[Sync] Sending ${method} request to ${uploadUrl}`);
     const uploadResponse = await fetch(uploadUrl, {
@@ -154,13 +156,13 @@ const sendToGoogleDrive = async (filesToSync: FileMeta[]) => {
       id: driveUpdateToastId,
     });
     logger.log("[Sync] Metadata sync successful. Result:", result);
-  } catch (error) {
+  } catch (error: any) {
     logger.error(
       "[Sync Error] Error synchronizing metadata with Google Drive:",
       error
     );
     toast.error("Failed to sync metadata with Google Drive", {
-      description: error.message,
+      description: error?.message || "Unknown error",
       id: driveUpdateToastId,
     });
     // IMPORTANT: Re-throw the error so the calling function knows it failed
@@ -184,22 +186,34 @@ const fetchAndStoreFileMetadata = async () => {
 
     if (existingFiles && existingFiles.length > 0) {
       const fileId = existingFiles[0].id;
-      const fileResponse = await gapi.client.request({
-        path: `https://www.googleapis.com/drive/v3/files/${fileId}`,
-        params: { alt: "media" },
-      });
 
-      // Ensure fileResponse.result is treated as JSON object
-      let fileContent = fileResponse.result;
-      // Sometimes GAPI might return a string that needs parsing
-      if (typeof fileContent === "string") {
-        try {
-          fileContent = JSON.parse(fileContent);
-        } catch (e) {
-          logger.error("Failed to parse db-list.json content", e);
-          toast.error("Failed to read metadata file from Google Drive.");
-          return; // Stop processing if content is invalid
+      // Download the encrypted blob
+      const authInstance = gapi.auth2.getAuthInstance();
+      const token = authInstance.currentUser.get().getAuthResponse().access_token;
+
+      const fetchResponse = await fetch(
+        `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`,
+        {
+          method: "GET",
+          headers: { Authorization: `Bearer ${token}` },
         }
+      );
+
+      if (!fetchResponse.ok) {
+        throw new Error("Failed to download metadata from Google Drive");
+      }
+
+      const encryptedBlob = await fetchResponse.blob();
+
+      // Decrypt the metadata
+      logger.log("[Sync] Decrypting metadata...");
+      let fileContent;
+      try {
+        fileContent = await decryptMetadata(encryptedBlob);
+      } catch (e) {
+        logger.error("Failed to decrypt db-list.json content", e);
+        toast.error("Failed to decrypt metadata file. Please ensure you have the correct encryption key.");
+        return; // Stop processing if decryption fails
       }
 
       // Clear existing records before adding new ones
@@ -252,8 +266,8 @@ const fetchAndStoreFileMetadata = async () => {
       // Or maybe leave local DB as is if offline use is desired?
       // Current behavior: local DB is not cleared if Drive file doesn't exist.
     }
-  } catch (error) {
-    if (error.status === 401) {
+  } catch (error: any) {
+    if (error?.status === 401) {
       try {
         await refreshGapiToken();
         // Retry the request after token refresh

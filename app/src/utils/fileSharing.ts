@@ -49,16 +49,28 @@ function bufferToHex(buffer: ArrayBuffer): string {
 }
 
 /**
- * Hashes an email address using SHA-256.
- * Emails are converted to lowercase and trimmed before hashing.
+ * Hashes an email address using server-side salted SHA-256.
+ * This uses the backend API to hash with a server-side salt,
+ * preventing rainbow table attacks.
  * @param email The email address to hash.
- * @returns A Promise that resolves to the SHA-256 hash as a hex string.
+ * @returns A Promise that resolves to the salted SHA-256 hash as a hex string.
  */
 export async function hashEmail(email: string): Promise<string> {
-  const encoder = new TextEncoder();
-  const data = encoder.encode(email.toLowerCase().trim());
-  const hashBuffer = await crypto.subtle.digest("SHA-256", data);
-  return bufferToHex(hashBuffer);
+  try {
+    // Use backend API for salted hash
+    const response = await apiClient.post('/crypto/hash-email', {
+      email: email.toLowerCase().trim()
+    });
+
+    if (response.data?.success && response.data?.data?.hashedEmail) {
+      return response.data.data.hashedEmail;
+    }
+
+    throw new Error('Failed to hash email: Invalid response from server');
+  } catch (error) {
+    logger.error('Error hashing email:', error);
+    throw new Error('Failed to hash email address');
+  }
 }
 
 /**
