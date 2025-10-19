@@ -1,4 +1,5 @@
 import { gapi } from "gapi-script";
+import logger from "./logger";
 
 const SCOPES = [
   "https://www.googleapis.com/auth/drive",
@@ -64,7 +65,7 @@ export const initializeGapi = async () => {
 
     return authInstance;
   } catch (error) {
-    console.error("Error initializing GAPI:", error);
+    logger.error("Error initializing GAPI:", error);
     throw error;
   }
 };
@@ -82,7 +83,7 @@ export const refreshGapiToken = async () => {
       });
     }
   } catch (error) {
-    console.error("Error refreshing token:", error);
+    logger.error("Error refreshing token:", error);
     throw error;
   }
 };

@@ -1,5 +1,6 @@
 import { gapi } from "gapi-script";
 import { toast } from "sonner";
+import logger from "./logger";
 
 // const FOLDER_NAME = "ZeroDrive_Key_Backup"; // No longer using a visible custom folder
 const RSA_KEY_FILE_NAME = "zerodrive_rsa_key_backup.json"; // Stored in appDataFolder
@@ -10,9 +11,9 @@ const RSA_KEY_FILE_NAME = "zerodrive_rsa_key_backup.json"; // Stored in appDataF
 async function ensureDriveApiLoaded() {
   // Cast to any to bypass TypeScript check if drive client is not initially defined
   if (!(gapi.client as any).drive) {
-    console.log("Loading Google Drive API client...");
+    logger.log("Loading Google Drive API client...");
     await gapi.client.load("drive", "v3");
-    console.log("Google Drive API client loaded.");
+    logger.log("Google Drive API client loaded.");
   }
 }
 
@@ -46,7 +47,7 @@ export async function uploadEncryptedRsaKeyToDrive(
     let fileIdToUpdate: string | null = null;
     if (listResponse.result.files && listResponse.result.files.length > 0) {
       fileIdToUpdate = listResponse.result.files[0].id!;
-      console.log(
+      logger.log(
         `Found existing RSA key backup file '${fileName}' in appDataFolder. Will update it.`
       );
     }
@@ -84,7 +85,7 @@ export async function uploadEncryptedRsaKeyToDrive(
     const result = await response.json();
 
     if (!response.ok) {
-      console.error(
+      logger.error(
         "Google Drive appDataFolder upload failed:",
         result.error?.message || response.statusText
       );
@@ -95,12 +96,12 @@ export async function uploadEncryptedRsaKeyToDrive(
       );
     }
 
-    console.log(
+    logger.log(
       `RSA key backup '${fileName}' uploaded/updated to Google Drive appDataFolder successfully. File ID: ${result.id}`
     );
     return result.id;
   } catch (error:any) {
-    console.error(
+    logger.error(
       `Error uploading RSA key backup '${fileName}' to Google Drive appDataFolder:`,
       error
     );
@@ -135,14 +136,14 @@ export async function downloadEncryptedRsaKeyFromDrive(): Promise<Blob | null> {
     });
 
     if (!listResponse.result.files || listResponse.result.files.length === 0) {
-      console.warn(
+      logger.warn(
         `RSA key backup file '${fileName}' not found in Google Drive appDataFolder.`
       );
       return null; // File not found
     }
 
     const fileId = listResponse.result.files[0].id!;
-    console.log(
+    logger.log(
       `Found RSA key backup file '${fileName}' in appDataFolder with ID: ${fileId}. Downloading...`
     );
 
@@ -161,7 +162,7 @@ export async function downloadEncryptedRsaKeyFromDrive(): Promise<Blob | null> {
     }
     return await fetchResponse.blob();
   } catch (error: any) {
-    console.error(
+    logger.error(
       `Error downloading RSA key backup '${fileName}' from Google Drive appDataFolder:`,
       error
     );

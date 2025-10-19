@@ -4,6 +4,7 @@
  */
 
 import apiClient from "./apiClient";
+import logger from "./logger";
 import { getUserKeyPair } from "./keyStorage";
 
 /**
@@ -133,8 +134,8 @@ export async function storeUserPublicKey(
   publicKeyJwk: JsonWebKey
 ): Promise<void> {
   try {
-    console.log("Attempting to store public key in Supabase...");
-    console.log("Target table: user_public_keys");
+    logger.log("Attempting to store public key");
+    logger.log("Target table: user_public_keys");
     // Email hashed for user identification
 
     try {
@@ -142,15 +143,15 @@ export async function storeUserPublicKey(
         hashedEmail,
         JSON.stringify(publicKeyJwk)
       );
-      console.log("Public key stored successfully:", data);
+      logger.log("Public key stored successfully:", data);
     } catch (error) {
-      console.error("API client error:", error);
+      logger.error("API client error:", error);
       throw new Error(`Failed to store public key: ${error}`);
     }
 
-    console.log("Public key stored successfully");
+    logger.log("Public key stored successfully");
   } catch (error) {
-    console.error("Error in storeUserPublicKey:", error);
+    logger.error("Error in storeUserPublicKey:", error);
 
     // Check if it's a Supabase error or a more general error
     if (error instanceof Error) {
@@ -172,12 +173,12 @@ export async function fetchUserPublicKey(
   try {
     const result = await apiClient.publicKeys.get(hashedEmail);
     if (!result || !result.public_key) {
-      console.warn(`Public key not found for hashed email: ${hashedEmail}`);
+      logger.warn(`Public key not found for hashed email: ${hashedEmail}`);
       return null;
     }
     return JSON.parse(result.public_key);
   } catch (error) {
-    console.warn(`Public key not found for hashed email: ${hashedEmail}`, error);
+    logger.warn(`Public key not found for hashed email: ${hashedEmail}`, error);
     return null;
   }
 }
@@ -283,7 +284,7 @@ export function base64ToArrayBuffer(base64: string): ArrayBuffer {
     }
     return bytes.buffer;
   } catch (error) {
-    console.error("Base64 decode error:", error);
+    logger.error("Base64 decode error:", error);
     throw new Error("Failed to decode base64 string");
   }
 }
@@ -340,16 +341,16 @@ export async function prepareFileForSharing(
     const publicKeyResult = await apiClient.publicKeys.get(recipientHashedEmail);
     
     if (!publicKeyResult || !publicKeyResult.public_key) {
-      console.error(
+      logger.error(
         `[SENDER-DEBUG] Failed to fetch public key for ${recipientEmail} (hashed: ${recipientHashedEmail})`
       );
       throw new Error(
         `Recipient ${recipientEmail} has not registered their public key yet, or an error occurred fetching it.`
       );
     }
-    
+
     const recipientPublicJWKForEncryption = JSON.parse(publicKeyResult.public_key);
-    console.log(
+    logger.log(
       `[SENDER-DEBUG] Public Key JWK of recipient (${recipientEmail}) being used for encryption:`,
       JSON.stringify(recipientPublicJWKForEncryption)
     );
@@ -446,7 +447,7 @@ export async function prepareFileForSharing(
       senderProof,
     };
   } catch (error) {
-    console.error("Error preparing file for sharing:", error);
+    logger.error("Error preparing file for sharing:", error);
     throw error;
   }
 }
@@ -477,7 +478,7 @@ export async function storeFileShare(
       fileData.fileMimeType
     );
 
-    console.log(`[SENDER-DEBUG] File uploaded to MinIO with key: ${fileKey}`);
+    logger.log(`[SENDER-DEBUG] File uploaded to MinIO with key: ${fileKey}`);
 
     // 2. Store metadata in database, with reference to file in storage
     const encryptedFileKeyArrayBuffer = base64ToArrayBuffer(
@@ -486,7 +487,7 @@ export async function storeFileShare(
     // Convert ArrayBuffer to a hex string for BYTEA storage
     const encryptedFileKeyHex = arrayBufferToHex(encryptedFileKeyArrayBuffer);
 
-    console.log(
+    logger.log(
       `[SENDER-DEBUG] Storing encryptedFileKey for share_id ${shareId}. Original base64: "${fileData.encryptedFileKey}", Hex for DB: "${encryptedFileKeyHex}" (length: ${encryptedFileKeyHex.length})`
     );
 
@@ -505,14 +506,14 @@ export async function storeFileShare(
         access_type: 'view',
         expires_at: expirationDate // Auto-delete after 7 days if not claimed
       });
-      console.log(`[SENDER-DEBUG] Successfully stored file share:`, data);
+      logger.log(`[SENDER-DEBUG] Successfully stored file share:`, data);
     } catch (error) {
-      console.error("Error creating shared file:", error);
+      logger.error("Error creating shared file:", error);
       throw error;
     }
-    console.log(`[SENDER-DEBUG] Successfully stored share_id ${shareId}`);
+    logger.log(`[SENDER-DEBUG] Successfully stored share_id ${shareId}`);
   } catch (error) {
-    console.error("Error in storeFileShare:", error);
+    logger.error("Error in storeFileShare:", error);
     throw error;
   }
 }
@@ -601,7 +602,7 @@ export async function decryptSharedFile(
       decryptParams = { name: "RSA-OAEP" };
     } else {
       // Fallback or throw error if alg is unexpected
-      console.warn("Unexpected JWK alg:", jwk.alg, "Defaulting to SHA-256.");
+      logger.warn("Unexpected JWK alg:", jwk.alg, "Defaulting to SHA-256.");
       importParams = { name: "RSA-OAEP", hash: { name: "SHA-256" } };
       decryptParams = { name: "RSA-OAEP" };
     }
@@ -618,7 +619,7 @@ export async function decryptSharedFile(
     if (!encryptedFileKeyArray || encryptedFileKeyArray.byteLength === 0) {
       throw new Error("Converted encryptedFileKeyArray is empty or invalid.");
     }
-    console.log(
+    logger.log(
       "Encrypted file key ArrayBuffer length:",
       encryptedFileKeyArray.byteLength
     );
@@ -628,7 +629,7 @@ export async function decryptSharedFile(
       privateKey,
       encryptedFileKeyArray
     );
-    console.log("File key decrypted successfully.");
+    logger.log("File key decrypted successfully.");
 
     // Import the file key (AES-GCM)
     const fileKey = await crypto.subtle.importKey(
@@ -641,7 +642,7 @@ export async function decryptSharedFile(
       false, // Not extractable
       ["decrypt"]
     );
-    console.log("AES-GCM symmetric key imported successfully.");
+    logger.log("AES-GCM symmetric key imported successfully.");
 
     // Read the encrypted file as ArrayBuffer
     const encryptedFileWithIV = await encryptedFileBlob.arrayBuffer();
@@ -649,7 +650,7 @@ export async function decryptSharedFile(
     // Extract the IV (first 12 bytes) and encrypted file data
     const iv = new Uint8Array(encryptedFileWithIV.slice(0, 12));
     const encryptedFile = new Uint8Array(encryptedFileWithIV.slice(12));
-    console.log(
+    logger.log(
       "IV length:",
       iv.byteLength,
       "Encrypted data length:",
@@ -665,7 +666,7 @@ export async function decryptSharedFile(
       fileKey,
       encryptedFile
     );
-    console.log("File content decrypted successfully.");
+    logger.log("File content decrypted successfully.");
 
     // Create a Blob from the decrypted file
     const decryptedBlob = new Blob([decryptedFile], {
@@ -677,7 +678,7 @@ export async function decryptSharedFile(
       fileName: originalFileName,
     };
   } catch (error: any) {
-    console.error(
+    logger.error(
       "Error decrypting shared file:",
       error.name,
       error.message,
@@ -727,7 +728,7 @@ export async function uploadEncryptedFile(
     throw new Error(`Failed to upload file: ${uploadResponse.statusText}`);
   }
 
-  console.log(`File uploaded successfully: ${fileKey}`);
+  logger.log(`File uploaded successfully: ${fileKey}`);
   return fileKey;
 }
 
@@ -752,7 +753,7 @@ export async function downloadEncryptedFile(fileKey: string): Promise<Blob> {
   }
 
   const blob = await downloadResponse.blob();
-  console.log(`File downloaded successfully: ${fileKey}`);
+  logger.log(`File downloaded successfully: ${fileKey}`);
   return blob;
 }
 
@@ -763,5 +764,5 @@ export async function downloadEncryptedFile(fileKey: string): Promise<Blob> {
 export async function deleteFileFromStorage(fileKey: string): Promise<void> {
   // TODO: Implement delete endpoint in backend if needed
   // For now, rely on 7-day auto-deletion
-  console.log(`File deletion not yet implemented. File will auto-delete after 7 days: ${fileKey}`);
+  logger.log(`File deletion not yet implemented. File will auto-delete after 7 days: ${fileKey}`);
 }
