@@ -135,7 +135,7 @@ export async function storeUserPublicKey(
   try {
     console.log("Attempting to store public key in Supabase...");
     console.log("Target table: user_public_keys");
-    console.log("Hashed email:", hashedEmail);
+    // Email hashed for user identification
 
     try {
       const data = await apiClient.publicKeys.upsert(
@@ -584,9 +584,7 @@ export async function decryptSharedFile(
       );
     }
 
-    console.log("Attempting decryption for user:", userEmail);
-    console.log("Encrypted File Key (base64):", encryptedFileKey);
-    console.log("Private Key JWK:", userKeyPair.privateKeyJwk);
+    // Decryption attempt - sensitive data not logged for security
 
     const jwk = userKeyPair.privateKeyJwk;
     let importParams;
@@ -597,12 +595,10 @@ export async function decryptSharedFile(
     if (jwk.alg === "RSA-OAEP-256") {
       importParams = { name: "RSA-OAEP", hash: { name: "SHA-256" } };
       decryptParams = { name: "RSA-OAEP" }; // Hash is part of the key after import
-      console.log("Using RSA-OAEP with SHA-256 based on JWK alg.");
     } else if (jwk.alg === "RSA-OAEP" || jwk.alg === "RSA-OAEP-1") {
       // Common for SHA-1
       importParams = { name: "RSA-OAEP", hash: { name: "SHA-1" } };
       decryptParams = { name: "RSA-OAEP" };
-      console.log("Using RSA-OAEP with SHA-1 based on JWK alg.");
     } else {
       // Fallback or throw error if alg is unexpected
       console.warn("Unexpected JWK alg:", jwk.alg, "Defaulting to SHA-256.");
@@ -617,7 +613,6 @@ export async function decryptSharedFile(
       false, // Not extractable
       ["decrypt"]
     );
-    console.log("Private key imported successfully.");
 
     const encryptedFileKeyArray = base64ToArrayBuffer(encryptedFileKey);
     if (!encryptedFileKeyArray || encryptedFileKeyArray.byteLength === 0) {

@@ -71,7 +71,6 @@ export const FileList: React.FC<FileListProps> = ({
                   .getBasicProfile();
                 if (profile) {
                   const email = profile.getEmail();
-                  console.log(`[FileList] User email obtained: ${email}`);
                   setUserEmail(email);
                 } else {
                   console.warn(

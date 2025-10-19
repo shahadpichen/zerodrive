@@ -1,15 +1,15 @@
 export const decryptFile = async (fileBlob: Blob): Promise<Blob> => {
   try {
-    const storedKey = localStorage.getItem("aes-gcm-key");
+    const storedKey = sessionStorage.getItem("aes-gcm-key");
     if (!storedKey) {
-      throw new Error("No encryption key found in local storage");
+      throw new Error("No encryption key found in session storage");
     }
 
     let keyJWK;
     try {
       keyJWK = JSON.parse(storedKey);
     } catch (parseError) {
-      throw new Error("Invalid encryption key format in local storage");
+      throw new Error("Invalid encryption key format in session storage");
     }
 
     if (!keyJWK || !keyJWK.k || !keyJWK.kty || keyJWK.kty !== "oct") {

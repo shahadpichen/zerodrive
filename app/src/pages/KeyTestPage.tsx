@@ -45,8 +45,7 @@ const KeyTestPage: React.FC = () => {
       );
       setPublicKeyJwk(pubJwk);
       setPrivateKeyJwk(privJwk);
-      console.log("Generated Public Key JWK:", pubJwk);
-      console.log("Generated Private Key JWK:", privJwk);
+      // Keys generated - not logged for security
       setErrorLog(
         "New key pair generated successfully. Alg: " + (pubJwk.alg || "N/A")
       );
