@@ -1,6 +1,7 @@
 import React from "react";
 import { gapi } from "gapi-script";
 import { clearStoredKey } from "../../utils/cryptoUtils";
+import { clearSession, getSessionUser, setSessionUser } from "../../utils/sessionManager";
 import { Avatar, AvatarImage, AvatarFallback } from "../ui/avatar";
 import { Progress } from "../ui/progress";
 import {
@@ -62,6 +63,31 @@ function Header({ setIsAuthenticated }: HeaderProps) {
       if (!profile) {
         console.error("No profile found");
         return;
+      }
+
+      // Account switch detection
+      const currentEmail = profile.getEmail();
+      const sessionEmail = getSessionUser();
+
+      if (sessionEmail && sessionEmail !== currentEmail) {
+        console.warn(`Account switch detected: ${sessionEmail} -> ${currentEmail}`);
+        console.log("Clearing previous session and reinitializing...");
+
+        // Clear old session
+        clearSession();
+
+        // Set new user
+        setSessionUser(currentEmail);
+        sessionStorage.setItem("isAuthenticated", "true");
+
+        // Reload to reinitialize with new account
+        window.location.reload();
+        return;
+      }
+
+      // Store current user if not set
+      if (!sessionEmail) {
+        setSessionUser(currentEmail);
       }
 
       setUser({
@@ -127,8 +153,11 @@ function Header({ setIsAuthenticated }: HeaderProps) {
       if (authInstance) {
         await authInstance.signOut();
         setIsAuthenticated(false);
-        clearStoredKey();
-        localStorage.removeItem("isAuthenticated");
+
+        // Clear all session data (AES key, user email, auth state, etc.)
+        clearSession();
+
+        console.log("Logout complete - all session data cleared");
         window.location.href = "/";
       }
     } catch (error) {

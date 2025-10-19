@@ -22,7 +22,7 @@ export const GoogleAuth: React.FC<GoogleAuthProps> = ({ onAuthChange }) => {
           const handleAuthChange = (signedIn: boolean) => {
             onAuthChange(signedIn);
             if (signedIn) {
-              localStorage.setItem("isAuthenticated", "true");
+              sessionStorage.setItem("isAuthenticated", "true");
               navigate("/storage");
             }
           };
@@ -44,7 +44,7 @@ export const GoogleAuth: React.FC<GoogleAuthProps> = ({ onAuthChange }) => {
           theme: "dark",
           onsuccess: () => {
             onAuthChange(true);
-            localStorage.setItem("isAuthenticated", "true");
+            sessionStorage.setItem("isAuthenticated", "true");
             navigate("/storage");
           },
           onfailure: () => {

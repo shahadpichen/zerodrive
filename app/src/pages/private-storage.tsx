@@ -138,14 +138,36 @@ function PrivateStorage() {
         if (authInstance && authInstance.isSignedIn.get()) {
           const profile = authInstance.currentUser.get().getBasicProfile();
           if (profile) {
-            setUserName(profile.getName());
             const email = profile.getEmail();
+
+            // Account switch detection
+            const { getSessionUser, setSessionUser, clearSession } =
+              await import("../utils/sessionManager");
+            const sessionEmail = getSessionUser();
+
+            if (sessionEmail && sessionEmail !== email) {
+              console.warn(
+                `Account switch detected: ${sessionEmail} -> ${email}`
+              );
+              clearSession();
+              setSessionUser(email);
+              sessionStorage.setItem("isAuthenticated", "true");
+              window.location.reload();
+              return;
+            }
+
+            if (!sessionEmail) {
+              setSessionUser(email);
+            }
+
+            setUserName(profile.getName());
             setUserEmail(email);
             setUserImage(profile.getImageUrl());
             if (email) {
               await fetchAndStoreFileMetadata();
               const files = await getAllFilesForUser(email);
               setUserHasFiles(files.length > 0);
+              setRefreshFileListKey((prev) => prev + 1); // Trigger FileList to reload
               await loadStorageInfo();
               // Check for sharing keys
               const keysExist = await userHasStoredKeys(email);
@@ -194,10 +216,12 @@ function PrivateStorage() {
 
   const handleLogout = async () => {
     try {
+      const { clearSession } = await import("../utils/sessionManager");
       const authInstance = gapi.auth2.getAuthInstance();
       if (authInstance) {
         await authInstance.signOut();
-        localStorage.removeItem("isAuthenticated");
+        clearSession();
+        console.log("Logout complete - all session data cleared");
         window.location.href = "/";
       }
     } catch (error) {
@@ -377,7 +401,7 @@ function PrivateStorage() {
 
   return (
     <div className="container mx-auto min-h-screen flex flex-col items-center bg-background text-foreground">
-      <header className="w-full px-4 sm:px-6 py-3 flex items-center justify-between border-b border-foreground/10">
+      <header className="flex h-[10vh] w-full border-b justify-between pt-5 items-center gap-4 px-10 lg:px-10">
         <span className="font-semibold text-base sm:text-lg">ZeroDrive</span>
         <div className="flex items-center gap-3 sm:gap-4">
           <input

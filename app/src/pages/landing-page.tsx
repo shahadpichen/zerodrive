@@ -21,7 +21,7 @@ function LandingPage() {
   }, [theme]);
 
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
-    return localStorage.getItem("isAuthenticated") === "true";
+    return sessionStorage.getItem("isAuthenticated") === "true";
   });
 
   const handleAuthChange = (authenticated: boolean) => {

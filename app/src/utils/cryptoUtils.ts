@@ -13,11 +13,11 @@ export const generateKey = async (): Promise<CryptoKey> => {
 
 export const storeKey = async (key: CryptoKey) => {
   const keyJWK = await crypto.subtle.exportKey("jwk", key);
-  localStorage.setItem("aes-gcm-key", JSON.stringify(keyJWK));
+  sessionStorage.setItem("aes-gcm-key", JSON.stringify(keyJWK));
 };
 
 export const getStoredKey = async (): Promise<CryptoKey | null> => {
-  const keyJWK = localStorage.getItem("aes-gcm-key");
+  const keyJWK = sessionStorage.getItem("aes-gcm-key");
   if (!keyJWK) return null;
   return crypto.subtle.importKey(
     "jwk",
@@ -29,7 +29,7 @@ export const getStoredKey = async (): Promise<CryptoKey | null> => {
 };
 
 export const clearStoredKey = () => {
-  localStorage.removeItem("aes-gcm-key");
+  sessionStorage.removeItem("aes-gcm-key");
 };
 
 export const generateMnemonic = (): string => {
