@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import {
   BrowserRouter as Router,
   Routes,
@@ -18,6 +18,7 @@ import ShareFilesPage from "./pages/share-files";
 import SharedWithMePage from "./pages/shared-with-me";
 import KeyTestPage from "./pages/KeyTestPage";
 import { toast } from "sonner";
+import { initializeSession } from "./utils/sessionManager";
 
 // Polyfill global Buffer for libraries that expect it (e.g., bip39)
 window.Buffer = Buffer as any;
@@ -45,11 +46,25 @@ const checkEnvironmentVariables = () => {
 };
 
 function App() {
-  const isAuthenticated = localStorage.getItem("isAuthenticated") === "true";
+  const [isAuthenticated] = useState<boolean>(
+    sessionStorage.getItem("isAuthenticated") === "true"
+  );
 
   useEffect(() => {
     checkEnvironmentVariables();
-  }, []);
+
+    // Initialize session on app startup
+    const setupSession = async () => {
+      if (isAuthenticated) {
+        const result = await initializeSession();
+        if (result.success) {
+          console.log("Session initialized:", result.message);
+        }
+      }
+    };
+
+    setupSession();
+  }, [isAuthenticated]);
 
   return (
     <Router>

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { gapi } from "gapi-script";
 import { Button } from "../ui/button";
 import googleLogo from "../../assets/google.png";
+import { setSessionUser } from "../../utils/sessionManager";
 
 interface GoogleAuthProps {
   onAuthChange: (authenticated: boolean) => void;
@@ -30,7 +31,12 @@ export const GoogleAuth: React.FC<GoogleAuthProps> = ({
 
         // Check if already signed in
         if (authInstance.isSignedIn.get()) {
-          localStorage.setItem("isAuthenticated", "true");
+          const profile = authInstance.currentUser.get().getBasicProfile();
+          const email = profile?.getEmail();
+          if (email) {
+            setSessionUser(email);
+          }
+          sessionStorage.setItem("isAuthenticated", "true");
           onAuthChange(true);
           window.location.href = "/storage";
         }
@@ -52,13 +58,18 @@ export const GoogleAuth: React.FC<GoogleAuthProps> = ({
       const user = await authInstance.signIn();
 
       if (user) {
-        localStorage.setItem("isAuthenticated", "true");
+        const profile = user.getBasicProfile();
+        const email = profile?.getEmail();
+        if (email) {
+          setSessionUser(email);
+        }
+        sessionStorage.setItem("isAuthenticated", "true");
         onAuthChange(true);
         window.location.href = "/storage";
       }
     } catch (error) {
       console.error("Error signing in:", error);
-      localStorage.removeItem("isAuthenticated");
+      sessionStorage.removeItem("isAuthenticated");
       onAuthChange(false);
     }
   };
