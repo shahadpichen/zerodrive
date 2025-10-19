@@ -34,12 +34,12 @@ export async function uploadEncryptedRsaKeyToDrive(
     }
     const token = authInstance.currentUser.get().getAuthResponse().access_token;
 
-    // Check if the file already exists in the root folder to update it
-    const query = `name='${fileName}' and 'root' in parents and trashed=false`;
+    // Check if the file already exists in appDataFolder (hidden from user)
+    const query = `name='${fileName}' and trashed=false`;
     const listResponse = await (gapi.client as any).drive.files.list({
       q: query,
       fields: "files(id)",
-      // spaces: "appDataFolder", // No longer searching in appDataFolder
+      spaces: "appDataFolder", // Store in hidden appDataFolder for security
       access_token: token,
     });
 
@@ -47,7 +47,7 @@ export async function uploadEncryptedRsaKeyToDrive(
     if (listResponse.result.files && listResponse.result.files.length > 0) {
       fileIdToUpdate = listResponse.result.files[0].id!;
       console.log(
-        `Found existing RSA key backup file '${fileName}' in Google Drive root. Will update it.`
+        `Found existing RSA key backup file '${fileName}' in appDataFolder. Will update it.`
       );
     }
 
@@ -55,9 +55,10 @@ export async function uploadEncryptedRsaKeyToDrive(
       name: fileName,
       mimeType: "application/json",
     };
-    // if (!fileIdToUpdate) { // Files created without explicit parents go to root by default
-    //   metadata.parents = ["appDataFolder"];
-    // }
+    if (!fileIdToUpdate) {
+      // New files must explicitly set appDataFolder as parent
+      metadata.parents = ["appDataFolder"];
+    }
 
     const form = new FormData();
     form.append(
@@ -84,23 +85,23 @@ export async function uploadEncryptedRsaKeyToDrive(
 
     if (!response.ok) {
       console.error(
-        "Google Drive root folder upload failed:",
+        "Google Drive appDataFolder upload failed:",
         result.error?.message || response.statusText
       );
       throw new Error(
-        `Google Drive root folder upload failed: ${
+        `Google Drive appDataFolder upload failed: ${
           result.error?.message || response.statusText
         }`
       );
     }
 
     console.log(
-      `RSA key backup '${fileName}' uploaded/updated to Google Drive root successfully. File ID: ${result.id}`
+      `RSA key backup '${fileName}' uploaded/updated to Google Drive appDataFolder successfully. File ID: ${result.id}`
     );
     return result.id;
   } catch (error:any) {
     console.error(
-      `Error uploading RSA key backup '${fileName}' to Google Drive root:`,
+      `Error uploading RSA key backup '${fileName}' to Google Drive appDataFolder:`,
       error
     );
     toast.error(`Failed to upload RSA key backup to Google Drive.`, {
@@ -111,7 +112,7 @@ export async function uploadEncryptedRsaKeyToDrive(
 }
 
 /**
- * Downloads the encrypted RSA private key from the user's Google Drive root folder.
+ * Downloads the encrypted RSA private key from the user's Google Drive appDataFolder (hidden).
  * @returns A Promise that resolves to a Blob containing the key data, or null if not found or on error.
  */
 export async function downloadEncryptedRsaKeyFromDrive(): Promise<Blob | null> {
@@ -124,25 +125,25 @@ export async function downloadEncryptedRsaKeyFromDrive(): Promise<Blob | null> {
     }
     const token = authInstance.currentUser.get().getAuthResponse().access_token;
 
-    // Find the file by name within the root folder
-    const query = `name='${fileName}' and 'root' in parents and trashed=false`;
+    // Find the file by name within appDataFolder (hidden from user)
+    const query = `name='${fileName}' and trashed=false`;
     const listResponse = await (gapi.client as any).drive.files.list({
       q: query,
       fields: "files(id, name)",
-      // spaces: "appDataFolder", // No longer searching in appDataFolder
+      spaces: "appDataFolder", // Search in hidden appDataFolder for security
       access_token: token,
     });
 
     if (!listResponse.result.files || listResponse.result.files.length === 0) {
       console.warn(
-        `RSA key backup file '${fileName}' not found in Google Drive root.`
+        `RSA key backup file '${fileName}' not found in Google Drive appDataFolder.`
       );
       return null; // File not found
     }
 
     const fileId = listResponse.result.files[0].id!;
     console.log(
-      `Found RSA key backup file '${fileName}' in Google Drive root with ID: ${fileId}. Downloading...`
+      `Found RSA key backup file '${fileName}' in appDataFolder with ID: ${fileId}. Downloading...`
     );
 
     const fetchResponse = await fetch(
@@ -155,13 +156,13 @@ export async function downloadEncryptedRsaKeyFromDrive(): Promise<Blob | null> {
 
     if (!fetchResponse.ok) {
       throw new Error(
-        `Failed to download key file from Google Drive root: ${fetchResponse.statusText}`
+        `Failed to download key file from Google Drive appDataFolder: ${fetchResponse.statusText}`
       );
     }
     return await fetchResponse.blob();
   } catch (error: any) {
     console.error(
-      `Error downloading RSA key backup '${fileName}' from Google Drive root:`,
+      `Error downloading RSA key backup '${fileName}' from Google Drive appDataFolder:`,
       error
     );
     toast.error(`Failed to download RSA key backup from Google Drive.`, {

@@ -12,8 +12,9 @@
 /build
 backend/dist/
 
-# backend environment
+# environment files
 backend/.env
+app/.env
 
 # misc
 .DS_Store

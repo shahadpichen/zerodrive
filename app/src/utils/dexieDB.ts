@@ -59,7 +59,6 @@ const sendToGoogleDrive = async (filesToSync: FileMeta[]) => {
       throw new Error("User not authenticated for Google Drive update.");
     }
     const token = authInstance.currentUser.get().getAuthResponse().access_token;
-    console.log("[Sync] Authentication token obtained.");
 
     const fileContent = JSON.stringify({ files: filesToSync });
     console.log("[Sync] Content to sync:", fileContent);
