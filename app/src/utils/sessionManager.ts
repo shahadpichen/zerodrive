@@ -9,6 +9,7 @@ import { getUserKeyPair, userHasStoredKeys } from "./keyStorage";
 import { downloadEncryptedRsaKeyFromDrive } from "./gdriveKeyStorage";
 import { decryptRsaPrivateKeyWithAesKey } from "./rsaKeyManager";
 import { hashEmail, storeUserPublicKey } from "./fileSharing";
+import logger from "./logger";
 
 interface SessionRecoveryResult {
   success: boolean;
@@ -29,7 +30,7 @@ export const getCurrentUserEmail = (): string | null => {
     }
     return null;
   } catch (error) {
-    console.error("Error getting current user email:", error);
+    logger.error("Error getting current user email:", error);
     return null;
   }
 };
@@ -76,12 +77,12 @@ export const clearSession = (): void => {
  */
 export const recoverAesKeyFromBackup = async (userEmail: string): Promise<boolean> => {
   try {
-    console.log("Attempting to recover AES key from Google Drive backup...");
+    logger.log("Attempting to recover AES key from Google Drive backup...");
 
     // Check if key already exists in sessionStorage
     const existingKey = await getStoredKey();
     if (existingKey) {
-      console.log("AES key already exists in sessionStorage");
+      logger.log("AES key already exists in sessionStorage");
       return true;
     }
 
@@ -89,16 +90,16 @@ export const recoverAesKeyFromBackup = async (userEmail: string): Promise<boolea
     const encryptedKeyBlob = await downloadEncryptedRsaKeyFromDrive();
 
     if (!encryptedKeyBlob) {
-      console.log("No backup found in Google Drive");
+      logger.log("No backup found in Google Drive");
       return false;
     }
 
-    console.log("Backup found in Google Drive, but cannot decrypt without primary AES key");
-    console.log("User will need to re-enter their recovery phrase or generate new keys");
+    logger.log("Backup found in Google Drive, but cannot decrypt without primary AES key");
+    logger.log("User will need to re-enter their recovery phrase or generate new keys");
     return false;
 
   } catch (error) {
-    console.error("Error during AES key recovery:", error);
+    logger.error("Error during AES key recovery:", error);
     return false;
   }
 };
@@ -122,7 +123,7 @@ export const initializeSession = async (): Promise<SessionRecoveryResult> => {
     // Check for account switching
     const sessionEmail = getSessionUser();
     if (sessionEmail && sessionEmail !== currentEmail) {
-      console.warn(`Account switch detected: ${sessionEmail} -> ${currentEmail}`);
+      logger.warn(`Account switch detected: ${sessionEmail} -> ${currentEmail}`);
       clearSession();
       sessionStorage.setItem("isAuthenticated", "true");
     }
@@ -136,7 +137,7 @@ export const initializeSession = async (): Promise<SessionRecoveryResult> => {
     // Check if RSA keys exist in IndexedDB
     const hasRsaKeys = await userHasStoredKeys(currentEmail);
 
-    console.log("Session status:", {
+    logger.log("Session status:", {
       email: currentEmail,
       hasAesKey,
       hasRsaKeys,
@@ -150,7 +151,7 @@ export const initializeSession = async (): Promise<SessionRecoveryResult> => {
     };
 
   } catch (error) {
-    console.error("Error initializing session:", error);
+    logger.error("Error initializing session:", error);
     return {
       success: false,
       message: error instanceof Error ? error.message : "Unknown error",
@@ -163,7 +164,7 @@ export const initializeSession = async (): Promise<SessionRecoveryResult> => {
  * Handle account switch - clear previous session and initialize new one
  */
 export const handleAccountSwitch = async (): Promise<void> => {
-  console.log("Handling account switch...");
+  logger.log("Handling account switch...");
   clearSession();
 
   // Re-authenticate
@@ -185,24 +186,24 @@ export const autoSyncPublicKey = async (userEmail: string): Promise<boolean> => 
     const serverKey = await fetchUserPublicKey(hashedEmail);
 
     if (!serverKey) {
-      console.log("Public key missing from server, attempting auto-sync...");
+      logger.log("Public key missing from server, attempting auto-sync...");
 
       // Get key from IndexedDB
       const localKeyPair = await getUserKeyPair(userEmail);
 
       if (localKeyPair?.publicKeyJwk) {
         await storeUserPublicKey(hashedEmail, localKeyPair.publicKeyJwk);
-        console.log("Public key synced to server successfully");
+        logger.log("Public key synced to server successfully");
         return true;
       } else {
-        console.warn("No local key pair found for auto-sync");
+        logger.warn("No local key pair found for auto-sync");
         return false;
       }
     }
 
     return true; // Key already exists on server
   } catch (error) {
-    console.error("Error during auto-sync:", error);
+    logger.error("Error during auto-sync:", error);
     return false;
   }
 };

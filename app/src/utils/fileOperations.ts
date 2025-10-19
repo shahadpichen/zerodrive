@@ -10,6 +10,7 @@ import {
 } from "./dexieDB";
 import { encryptFile } from "./encryptFile";
 import { getStoredKey } from "./cryptoUtils";
+import logger from "./logger";
 
 // --- Upload Operation ---
 
@@ -104,7 +105,7 @@ export const uploadAndSyncFile = async (
     });
     return newFileMeta;
   } catch (error: any) {
-    console.error(`[Upload Error - ${file.name}]:`, error);
+    logger.error(`[Upload Error - ${file.name}]:`, error);
     toast.error(`Failed to upload ${file.name}`, {
       description: error.message,
       id: uploadToastId,
@@ -152,7 +153,7 @@ export const deleteAndSyncFile = async (
 
     // 2a. Check response - 404 (Not Found) is OK, means it's already gone from Drive.
     if (!response.ok && response.status !== 404) {
-      console.warn(
+      logger.warn(
         `Google Drive delete failed (Status: ${response.status}): ${response.statusText}`
       );
       // Optionally throw error or just continue to ensure local DB is cleaned up
@@ -182,7 +183,7 @@ export const deleteAndSyncFile = async (
     });
     return true;
   } catch (error: any) {
-    console.error(`[Delete Error - ${fileName}]:`, error);
+    logger.error(`[Delete Error - ${fileName}]:`, error);
     toast.error(`Failed to process deletion for ${fileName}`, {
       description: error.message,
       id: deleteToastId,
@@ -235,13 +236,13 @@ export const deleteAllAndSyncFiles = async (
             }
           );
           if (!response.ok && response.status !== 404) {
-            console.warn(
+            logger.warn(
               `Failed to delete file ${fileId} from Drive: ${response.statusText}`
             );
             driveDeleteFailures++;
           }
         } catch (driveError) {
-          console.error(
+          logger.error(
             `Error deleting file ${fileId} from Drive:`,
             driveError
           );
@@ -273,7 +274,7 @@ export const deleteAllAndSyncFiles = async (
     );
     return true;
   } catch (error: any) {
-    console.error("[Delete All Error]:", error);
+    logger.error("[Delete All Error]:", error);
     toast.error("Failed to delete all files", {
       description: error.message,
       id: deleteToastId,

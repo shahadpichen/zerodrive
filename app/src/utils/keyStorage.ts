@@ -5,6 +5,7 @@
 
 import { openDB, IDBPDatabase } from "idb";
 import { UserKeyPair } from "./fileSharing";
+import logger from "./logger";
 
 const DB_NAME = "zerodrive-keys";
 const DB_VERSION = 1;
@@ -74,7 +75,7 @@ export async function userHasStoredKeys(email: string): Promise<boolean> {
     const keys = await db.get(KEY_STORE, email);
     return !!keys;
   } catch (error) {
-    console.error("Error checking for user keys:", error);
+    logger.error("Error checking for user keys:", error);
     return false;
   }
 }
@@ -100,7 +101,7 @@ export async function getUserKeyPair(
       privateKeyJwk: userData.privateKeyJwk,
     };
   } catch (error) {
-    console.error("Error retrieving user keys:", error);
+    logger.error("Error retrieving user keys:", error);
     return null;
   }
 }

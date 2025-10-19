@@ -1,3 +1,5 @@
+import logger from "./logger";
+
 export const decryptFile = async (fileBlob: Blob): Promise<Blob> => {
   try {
     const storedKey = sessionStorage.getItem("aes-gcm-key");
@@ -27,7 +29,7 @@ export const decryptFile = async (fileBlob: Blob): Promise<Blob> => {
         ["decrypt"]
       );
     } catch (keyImportError) {
-      console.error("Key import error:", keyImportError);
+      logger.error("Key import error:", keyImportError);
       throw new Error(
         "Could not import encryption key: " + keyImportError.message
       );
@@ -57,7 +59,7 @@ export const decryptFile = async (fileBlob: Blob): Promise<Blob> => {
 
       return new Blob([decryptedBuffer]);
     } catch (decryptError) {
-      console.error("Decryption operation error:", decryptError);
+      logger.error("Decryption operation error:", decryptError);
 
       // Check for specific error types
       if (decryptError.name === "OperationError") {
@@ -69,7 +71,7 @@ export const decryptFile = async (fileBlob: Blob): Promise<Blob> => {
       }
     }
   } catch (error) {
-    console.error("Decryption error:", error);
+    logger.error("Decryption error:", error);
     throw error; // Re-throw to be handled by the caller
   }
 };

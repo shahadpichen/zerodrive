@@ -14,6 +14,7 @@ import {
   markFileShareAsClaimed,
 } from "./fileSharing";
 import { uploadAndSyncFile } from "./fileOperations";
+import logger from "./logger";
 
 /**
  * Step 1: Set up a user's key pair and store the public key.
@@ -38,9 +39,9 @@ export async function setupUserKeys(userEmail: string): Promise<void> {
     const privateKeyString = JSON.stringify(keyPair.privateKeyJwk);
     localStorage.setItem("user_private_key", privateKeyString);
 
-    console.log("User keys set up successfully");
+    logger.log("User keys set up successfully");
   } catch (error) {
-    console.error("Error setting up user keys:", error);
+    logger.error("Error setting up user keys:", error);
     throw error;
   }
 }
@@ -81,10 +82,10 @@ export async function shareFileWithUser(
     // Step 2.4: Store the share information in Supabase
     await storeFileShare(shareId, uploadResult.id, preparation);
 
-    console.log(`File "${preparation.fileName}" shared with ${recipientEmail}`);
+    logger.log(`File "${preparation.fileName}" shared with ${recipientEmail}`);
     return shareId;
   } catch (error) {
-    console.error("Error sharing file:", error);
+    logger.error("Error sharing file:", error);
     throw error;
   }
 }
@@ -97,10 +98,10 @@ export async function findMySharedFiles(userEmail: string): Promise<any[]> {
   try {
     // Find all files shared with this user
     const sharedFiles = await findFilesSharedWithRecipient(userEmail);
-    console.log(`Found ${sharedFiles.length} files shared with ${userEmail}`);
+    logger.log(`Found ${sharedFiles.length} files shared with ${userEmail}`);
     return sharedFiles;
   } catch (error) {
-    console.error("Error finding shared files:", error);
+    logger.error("Error finding shared files:", error);
     throw error;
   }
 }
@@ -113,9 +114,9 @@ export async function claimSharedFile(shareId: string): Promise<void> {
   try {
     // Mark the file as claimed in Supabase
     await markFileShareAsClaimed(shareId);
-    console.log(`File with share ID ${shareId} marked as claimed`);
+    logger.log(`File with share ID ${shareId} marked as claimed`);
   } catch (error) {
-    console.error("Error claiming shared file:", error);
+    logger.error("Error claiming shared file:", error);
     throw error;
   }
 }
@@ -129,27 +130,27 @@ export async function completeFileShareWorkflow(
   recipientEmail: string
 ): Promise<void> {
   // For demonstration purposes only
-  console.log("Starting file sharing workflow...");
+  logger.log("Starting file sharing workflow...");
 
   // 1. Set up keys for both sender and recipient (normally done once per user)
-  console.log("Setting up keys for both users...");
+  logger.log("Setting up keys for both users...");
   await setupUserKeys(senderEmail);
   await setupUserKeys(recipientEmail);
 
   // 2. Share the file
-  console.log(`Sharing file from ${senderEmail} to ${recipientEmail}...`);
+  logger.log(`Sharing file from ${senderEmail} to ${recipientEmail}...`);
   const shareId = await shareFileWithUser(file, recipientEmail, senderEmail);
 
   // 3. Recipient finds shared files
-  console.log(`${recipientEmail} checking for shared files...`);
+  logger.log(`${recipientEmail} checking for shared files...`);
   const sharedFiles = await findMySharedFiles(recipientEmail);
 
   // 4. Recipient claims the file
   if (sharedFiles.length > 0) {
-    console.log(`${recipientEmail} claiming shared file...`);
+    logger.log(`${recipientEmail} claiming shared file...`);
     await claimSharedFile(shareId);
-    console.log("File sharing workflow completed successfully");
+    logger.log("File sharing workflow completed successfully");
   } else {
-    console.log("No shared files found to claim");
+    logger.log("No shared files found to claim");
   }
 }

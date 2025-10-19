@@ -2,6 +2,7 @@ import Dexie from "dexie";
 import { gapi } from "gapi-script";
 import { toast } from "sonner";
 import { initializeGapi, refreshGapiToken } from "./gapiInit";
+import logger from "./logger";
 
 export interface FileMeta {
   id: string;
@@ -34,12 +35,12 @@ const getFileByIdForUser = async (id: string, userEmail: string) => {
 };
 
 const deleteFileFromDB = async (fileId: string): Promise<number> => {
-  console.log(`[Dexie] Deleting file ${fileId} from local DB.`);
+  logger.log(`[Dexie] Deleting file ${fileId} from local DB.`);
   return await db.table("files").where("id").equals(fileId).delete();
 };
 
 const clearUserFilesFromDB = async (userEmail: string): Promise<number> => {
-  console.log(
+  logger.log(
     `[Dexie] Clearing all files for user ${userEmail} from local DB.`
   );
   return await db.table("files").where("userEmail").equals(userEmail).delete();
@@ -47,7 +48,7 @@ const clearUserFilesFromDB = async (userEmail: string): Promise<number> => {
 
 const sendToGoogleDrive = async (filesToSync: FileMeta[]) => {
   let driveUpdateToastId: string | number | undefined;
-  console.log(
+  logger.log(
     "[Sync] Starting metadata sync with Google Drive for:",
     filesToSync
   );
@@ -61,14 +62,14 @@ const sendToGoogleDrive = async (filesToSync: FileMeta[]) => {
     const token = authInstance.currentUser.get().getAuthResponse().access_token;
 
     const fileContent = JSON.stringify({ files: filesToSync });
-    console.log("[Sync] Content to sync:", fileContent);
+    logger.log("[Sync] Content to sync:", fileContent);
 
     const metadata = {
       name: "db-list.json",
       mimeType: "application/json",
     };
 
-    console.log("[Sync] Searching for existing db-list.json...");
+    logger.log("[Sync] Searching for existing db-list.json...");
     const findResponse = await fetch(
       "https://www.googleapis.com/drive/v3/files?q=name='db-list.json' and trashed=false&fields=files(id)",
       {
@@ -88,11 +89,11 @@ const sendToGoogleDrive = async (filesToSync: FileMeta[]) => {
 
     if (existingFiles.files && existingFiles.files.length > 0) {
       fileIdToUpdate = existingFiles.files[0].id;
-      console.log(
+      logger.log(
         `[Sync] Found existing db-list.json with ID: ${fileIdToUpdate}`
       );
     } else {
-      console.log("[Sync] No existing db-list.json found. Will create new.");
+      logger.log("[Sync] No existing db-list.json found. Will create new.");
     }
 
     const blobContent = new Blob([fileContent], { type: "application/json" });
@@ -103,7 +104,7 @@ const sendToGoogleDrive = async (filesToSync: FileMeta[]) => {
     let method = "POST";
 
     if (fileIdToUpdate) {
-      console.log("[Sync] Preparing PATCH request to update existing file.");
+      logger.log("[Sync] Preparing PATCH request to update existing file.");
       uploadUrl = `https://www.googleapis.com/upload/drive/v3/files/${fileIdToUpdate}?uploadType=multipart`;
       method = "PATCH";
       form.append(
@@ -111,7 +112,7 @@ const sendToGoogleDrive = async (filesToSync: FileMeta[]) => {
         new Blob([JSON.stringify({})], { type: "application/json" })
       );
     } else {
-      console.log("[Sync] Preparing POST request to create new file.");
+      logger.log("[Sync] Preparing POST request to create new file.");
       form.append(
         "metadata",
         new Blob([JSON.stringify(metadata)], { type: "application/json" })
@@ -120,16 +121,16 @@ const sendToGoogleDrive = async (filesToSync: FileMeta[]) => {
 
     form.append("file", blobContent);
 
-    console.log(`[Sync] Sending ${method} request to ${uploadUrl}`);
+    logger.log(`[Sync] Sending ${method} request to ${uploadUrl}`);
     const uploadResponse = await fetch(uploadUrl, {
       method: method,
       headers: { Authorization: `Bearer ${token}` },
       body: form,
     });
 
-    console.log(`[Sync] Response Status: ${uploadResponse.status}`);
+    logger.log(`[Sync] Response Status: ${uploadResponse.status}`);
     const responseBodyText = await uploadResponse.text(); // Read body once
-    console.log(`[Sync] Response Body: ${responseBodyText}`);
+    logger.log(`[Sync] Response Body: ${responseBodyText}`);
 
     if (!uploadResponse.ok) {
       throw new Error(
@@ -146,15 +147,15 @@ const sendToGoogleDrive = async (filesToSync: FileMeta[]) => {
     try {
       result = JSON.parse(responseBodyText);
     } catch (e) {
-      console.warn("[Sync] Response body was not valid JSON.");
+      logger.warn("[Sync] Response body was not valid JSON.");
     }
 
     toast.success("Metadata successfully synchronized.", {
       id: driveUpdateToastId,
     });
-    console.log("[Sync] Metadata sync successful. Result:", result);
+    logger.log("[Sync] Metadata sync successful. Result:", result);
   } catch (error) {
-    console.error(
+    logger.error(
       "[Sync Error] Error synchronizing metadata with Google Drive:",
       error
     );
@@ -195,7 +196,7 @@ const fetchAndStoreFileMetadata = async () => {
         try {
           fileContent = JSON.parse(fileContent);
         } catch (e) {
-          console.error("Failed to parse db-list.json content", e);
+          logger.error("Failed to parse db-list.json content", e);
           toast.error("Failed to read metadata file from Google Drive.");
           return; // Stop processing if content is invalid
         }
@@ -221,7 +222,7 @@ const fetchAndStoreFileMetadata = async () => {
               !file.userEmail ||
               !file.uploadedDate
             ) {
-              console.warn(
+              logger.warn(
                 "Skipping invalid file entry from db-list.json:",
                 file
               );
@@ -236,17 +237,17 @@ const fetchAndStoreFileMetadata = async () => {
                 uploadedDate: new Date(file.uploadedDate),
               });
             } catch (error) {
-              console.error("Error adding file to IndexedDB:", error, file);
+              logger.error("Error adding file to IndexedDB:", error, file);
             }
           })
         );
-        console.log("Files stored successfully in IndexedDB.");
+        logger.log("Files stored successfully in IndexedDB.");
       } else {
-        console.log("db-list.json file content is empty or invalid.");
+        logger.log("db-list.json file content is empty or invalid.");
         // Even if the file is empty, the local DB is cleared, which is correct.
       }
     } else {
-      console.log("No db-list.json file found in Google Drive.");
+      logger.log("No db-list.json file found in Google Drive.");
       // If no file exists on Drive, clear the local DB too?
       // Or maybe leave local DB as is if offline use is desired?
       // Current behavior: local DB is not cleared if Drive file doesn't exist.
@@ -258,11 +259,11 @@ const fetchAndStoreFileMetadata = async () => {
         // Retry the request after token refresh
         await fetchAndStoreFileMetadata(); // Recursive call after token refresh
       } catch (refreshError) {
-        console.error("Error after token refresh:", refreshError);
+        logger.error("Error after token refresh:", refreshError);
         window.location.href = "/";
       }
     } else {
-      console.error("Error fetching file metadata:", error);
+      logger.error("Error fetching file metadata:", error);
       throw error;
     }
   }
