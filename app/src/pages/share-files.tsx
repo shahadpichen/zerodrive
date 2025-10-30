@@ -23,6 +23,7 @@ import {
   UserKeyPair,
   fetchUserPublicKey,
 } from "../utils/fileSharing";
+import apiClient from "../utils/apiClient";
 import {
   storeUserKeyPair,
   userHasStoredKeys,
@@ -42,11 +43,16 @@ const ShareFilesPage: React.FC = () => {
   const navigate = useNavigate();
   const [file, setFile] = useState<File | null>(null);
   const [recipientEmail, setRecipientEmail] = useState<string>("");
+  const [customMessage, setCustomMessage] = useState<string>("");
   const [senderEmail, setSenderEmail] = useState<string>("");
   const [isSharing, setIsSharing] = useState<boolean>(false);
   const [hasGeneratedKeys, setHasGeneratedKeys] = useState<boolean>(false);
   const [isGeneratingKeys, setIsGeneratingKeys] = useState<boolean>(false);
   const [isCheckingKeys, setIsCheckingKeys] = useState<boolean>(true);
+  const [recipientKeyMissing, setRecipientKeyMissing] =
+    useState<boolean>(false);
+  const [isSendingInvitation, setIsSendingInvitation] =
+    useState<boolean>(false);
 
   useEffect(() => {
     const initializeAndCheckKeys = async () => {
@@ -174,11 +180,18 @@ const ShareFilesPage: React.FC = () => {
 
               if (!serverKey) {
                 // Public key missing from server - auto-upload from IndexedDB
-                console.log("Public key missing from server, syncing from local storage...");
+                console.log(
+                  "Public key missing from server, syncing from local storage..."
+                );
                 const localKeyPair = await getUserKeyPair(senderEmail);
                 if (localKeyPair?.publicKeyJwk) {
-                  await storeUserPublicKey(hashedEmail, localKeyPair.publicKeyJwk);
-                  toast.success("Sharing keys loaded from local storage and synced to server.");
+                  await storeUserPublicKey(
+                    hashedEmail,
+                    localKeyPair.publicKeyJwk
+                  );
+                  toast.success(
+                    "Sharing keys loaded from local storage and synced to server."
+                  );
                 } else {
                   toast.success("Sharing keys loaded from local storage.");
                 }
@@ -380,12 +393,14 @@ const ShareFilesPage: React.FC = () => {
     }
 
     setIsSharing(true);
+    setRecipientKeyMissing(false); // Reset state
     const sharingToastId = toast.loading(`Preparing to share ${file.name}...`);
     try {
       const preparation = await prepareFileForSharing(
         file,
         recipientEmail,
-        senderEmail
+        senderEmail,
+        customMessage || undefined
       );
       const shareId = crypto.randomUUID();
       await storeFileShare(shareId, "encrypted-share", preparation);
@@ -401,129 +416,287 @@ const ShareFilesPage: React.FC = () => {
       if (fileInput) fileInput.value = "";
     } catch (error) {
       console.error("Error sharing file:", error);
-      toast.error("Failed to share file", {
-        description: error instanceof Error ? error.message : "Unknown error",
-        id: sharingToastId,
-      });
+
+      // Check if error is due to missing recipient key
+      if (
+        error instanceof Error &&
+        (error.message.includes("has not registered their public key") ||
+          (error.message.includes("Recipient") &&
+            error.message.includes("not registered")))
+      ) {
+        setRecipientKeyMissing(true);
+        toast.error("Recipient has not set up file sharing", {
+          description: `${recipientEmail} hasn't registered their public key yet. You can send them an invitation below.`,
+          id: sharingToastId,
+          duration: 6000,
+        });
+      } else {
+        toast.error("Failed to share file", {
+          description: error instanceof Error ? error.message : "Unknown error",
+          id: sharingToastId,
+        });
+      }
     } finally {
       setIsSharing(false);
     }
   };
 
-  return (
-    <div className="flex justify-center items-center min-h-screen bg-background py-8">
-      <Card className="w-full max-w-md">
-        <CardHeader>
-          <div className="flex items-center justify-between mb-2">
-            <CardTitle>Share Files Securely</CardTitle>
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={() => navigate("/storage")}
-              aria-label="Back to Storage"
-            >
-              <ArrowLeft className="h-4 w-4" />
-            </Button>
-          </div>
-          <CardDescription>
-            Generate your unique sharing keys once, then share encrypted files.
-          </CardDescription>
-        </CardHeader>
+  const handleSendInvitation = async () => {
+    if (!recipientEmail) {
+      toast.error("Please enter recipient's email");
+      return;
+    }
 
-        <CardContent className="space-y-6">
-          {isCheckingKeys ? (
-            <div className="p-4 text-center">
-              <p className="text-sm text-muted-foreground">
-                Checking key status...
-              </p>
-            </div>
-          ) : !hasGeneratedKeys ? (
-            <div className="p-4 bg-amber-50 dark:bg-amber-950 rounded-md border border-amber-200 dark:border-amber-800 space-y-3">
-              <div>
-                <h3 className="text-sm font-medium text-amber-800 dark:text-amber-300">
-                  Setup Sharing Keys
-                </h3>
-                <p className="text-xs text-amber-700 dark:text-amber-400 mt-1">
-                  Generate your unique RSA key pair for securely sharing files.
-                  If you have set up your main ZeroDrive encryption key (via Key
-                  Management), your sharing private key will be automatically
-                  backed up to your Google Drive (hidden appData folder),
-                  encrypted with that main key.
+    setIsSendingInvitation(true);
+    const inviteToastId = toast.loading(
+      `Sending invitation to ${recipientEmail}...`
+    );
+
+    try {
+      const result = await apiClient.invitations.send({
+        recipient_email: recipientEmail,
+        sender_message: customMessage || undefined,
+      });
+
+      toast.success("Invitation sent successfully!", {
+        description: `${recipientEmail} has been invited to join ZeroDrive. ${result.remaining} invitations remaining this hour.`,
+        id: inviteToastId,
+      });
+
+      setRecipientKeyMissing(false); // Hide invitation card after sending
+    } catch (error) {
+      console.error("Error sending invitation:", error);
+      toast.error("Failed to send invitation", {
+        description: error instanceof Error ? error.message : "Unknown error",
+        id: inviteToastId,
+      });
+    } finally {
+      setIsSendingInvitation(false);
+    }
+  };
+
+  return (
+    <div className="min-h-[80vh] flex justify-center items-center bg-background py-8 px-4">
+      <div className="max-w-6xl mx-auto">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-6">
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={() => navigate("/storage")}
+            aria-label="Back to Storage"
+          >
+            <ArrowLeft className="h-4 w-4" />
+          </Button>
+        </div>
+
+        {/* Two-Column Grid */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Left Card: Main File Sharing */}
+          <Card>
+            <CardHeader>
+              <CardTitle>File Sharing</CardTitle>
+              <CardDescription>
+                Upload and share your encrypted files
+              </CardDescription>
+            </CardHeader>
+
+            <CardContent className="space-y-6">
+              {isCheckingKeys ? (
+                <div className="p-4 text-center">
+                  <p className="text-sm text-muted-foreground">
+                    Checking key status...
+                  </p>
+                </div>
+              ) : !hasGeneratedKeys ? (
+                <div className="p-4 bg-amber-50 dark:bg-amber-950 rounded-md border border-amber-200 dark:border-amber-800 space-y-3">
+                  <div>
+                    <h3 className="text-sm font-medium text-amber-800 dark:text-amber-300">
+                      Setup Sharing Keys
+                    </h3>
+                    <p className="text-xs text-amber-700 dark:text-amber-400 mt-1">
+                      Generate your unique RSA key pair for securely sharing
+                      files. If you have set up your main ZeroDrive encryption
+                      key (via Key Management), your sharing private key will be
+                      automatically backed up to your Google Drive (hidden
+                      appData folder), encrypted with that main key.
+                    </p>
+                  </div>
+                  <Button
+                    size="sm"
+                    onClick={handleGenerateKeys}
+                    disabled={isGeneratingKeys || !senderEmail}
+                    className="w-full"
+                  >
+                    {isGeneratingKeys
+                      ? "Processing..."
+                      : "Generate Sharing Keys & Backup to Drive"}
+                  </Button>
+                  <p className="text-xs text-muted-foreground pt-1">
+                    If your main key isn't set up, sharing keys will be
+                    generated for local use only, and backup will be skipped.
+                  </p>
+                </div>
+              ) : (
+                <div className="p-4 bg-green-50 dark:bg-green-950 rounded-md border border-green-200 dark:border-green-800">
+                  <h3 className="text-sm font-medium text-green-800 dark:text-green-300">
+                    Sharing Keys Active
+                  </h3>
+                  <p className="text-xs text-green-700 dark:text-green-400 mt-1">
+                    You can now select a file and recipient to share securely.
+                  </p>
+                </div>
+              )}
+
+              <Separator />
+
+              <div className="space-y-3">
+                <Label htmlFor="file-input">File to Share</Label>
+                <Input
+                  id="file-input"
+                  type="file"
+                  onChange={handleFileChange}
+                  disabled={isSharing || !hasGeneratedKeys}
+                />
+                {file && (
+                  <p className="text-xs text-muted-foreground">
+                    Selected: {file.name} ({(file.size / 1024).toFixed(1)} KB)
+                  </p>
+                )}
+              </div>
+
+              <div className="space-y-3">
+                <Label htmlFor="recipient-email">Recipient Email</Label>
+                <Input
+                  id="recipient-email"
+                  type="email"
+                  placeholder="recipient@example.com"
+                  value={recipientEmail}
+                  onChange={handleRecipientEmailChange}
+                  disabled={isSharing || !hasGeneratedKeys}
+                />
+                <p className="text-xs text-muted-foreground">
+                  The recipient must have also generated their sharing keys.
                 </p>
               </div>
+
               <Button
-                size="sm"
-                onClick={handleGenerateKeys}
-                disabled={isGeneratingKeys || !senderEmail}
-                className="w-full"
+                className="w-full mt-2"
+                onClick={handleShareFile}
+                disabled={
+                  !file ||
+                  !recipientEmail ||
+                  isSharing ||
+                  !senderEmail ||
+                  !hasGeneratedKeys
+                }
               >
-                {isGeneratingKeys
-                  ? "Processing..."
-                  : "Generate Sharing Keys & Backup to Drive"}
+                {isSharing ? "Preparing Share..." : "Share Encrypted File"}
               </Button>
-              <p className="text-xs text-muted-foreground pt-1">
-                If your main key isn't set up, sharing keys will be generated
-                for local use only, and backup will be skipped.
-              </p>
-            </div>
-          ) : (
-            <div className="p-4 bg-green-50 dark:bg-green-950 rounded-md border border-green-200 dark:border-green-800">
-              <h3 className="text-sm font-medium text-green-800 dark:text-green-300">
-                Sharing Keys Active
-              </h3>
-              <p className="text-xs text-green-700 dark:text-green-400 mt-1">
-                You can now select a file and recipient to share securely.
-              </p>
+            </CardContent>
+          </Card>
+
+          {/* Right Card: Custom Message */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Personalize Email</CardTitle>
+              <CardDescription>
+                Add a custom message to your notification email (optional)
+              </CardDescription>
+            </CardHeader>
+
+            <CardContent className="space-y-4">
+              <div>
+                <Label htmlFor="custom-message">Your Message</Label>
+                <textarea
+                  id="custom-message"
+                  className="flex min-h-[200px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 mt-2"
+                  placeholder="Hey! I'm sharing this file with you. Check it out when you get a chance!"
+                  value={customMessage}
+                  onChange={(e) =>
+                    setCustomMessage(e.target.value.slice(0, 500))
+                  }
+                  disabled={isSharing || !hasGeneratedKeys}
+                  maxLength={500}
+                />
+                <div className="flex items-center justify-between mt-2">
+                  <p className="text-xs text-muted-foreground">
+                    {customMessage.length}/500 characters
+                  </p>
+                  {customMessage && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setCustomMessage("")}
+                      className="h-auto py-1 px-2 text-xs"
+                    >
+                      Clear
+                    </Button>
+                  )}
+                </div>
+              </div>
+
+              <div className="p-4 bg-muted/50 rounded-lg border">
+                <p className="text-xs font-medium mb-2">📧 Email Preview</p>
+                <p className="text-xs text-muted-foreground italic">
+                  {customMessage ||
+                    "Someone has shared a file with you on ZeroDrive, a secure zero-knowledge file sharing platform."}
+                </p>
+              </div>
+
+              <div className="text-xs text-muted-foreground space-y-1">
+                <p>
+                  💡 <strong>Tip:</strong> Your identity remains private. The
+                  recipient will not see your name or email address.
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Invitation Alert - Shows when recipient key is missing */}
+          {recipientKeyMissing && (
+            <div className="col-span-1 lg:col-span-2">
+              <Card className="border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/50">
+                <CardHeader>
+                  <CardTitle className="text-amber-800 dark:text-amber-300">
+                    📨 Recipient Not Set Up
+                  </CardTitle>
+                  <CardDescription className="text-amber-700 dark:text-amber-400">
+                    {recipientEmail} hasn't registered their public key yet.
+                    Send them an invitation to join ZeroDrive!
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <p className="text-sm text-amber-700 dark:text-amber-400">
+                    Your invitation will include:
+                  </p>
+                  <ul className="text-sm text-amber-700 dark:text-amber-400 list-disc list-inside space-y-1 ml-2">
+                    <li>A link to sign up for ZeroDrive</li>
+                    <li>Instructions to enable file sharing</li>
+                    {customMessage && <li>Your personal message</li>}
+                  </ul>
+                  <div className="flex gap-3">
+                    <Button
+                      onClick={handleSendInvitation}
+                      disabled={isSendingInvitation || !recipientEmail}
+                      className="flex-1"
+                    >
+                      {isSendingInvitation ? "Sending..." : "Send Invitation"}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={() => setRecipientKeyMissing(false)}
+                      disabled={isSendingInvitation}
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
             </div>
           )}
-
-          <Separator />
-
-          <div className="space-y-3">
-            <Label htmlFor="file-input">File to Share</Label>
-            <Input
-              id="file-input"
-              type="file"
-              onChange={handleFileChange}
-              disabled={isSharing || !hasGeneratedKeys}
-            />
-            {file && (
-              <p className="text-xs text-muted-foreground">
-                Selected: {file.name} ({(file.size / 1024).toFixed(1)} KB)
-              </p>
-            )}
-          </div>
-
-          <div className="space-y-3">
-            <Label htmlFor="recipient-email">Recipient Email</Label>
-            <Input
-              id="recipient-email"
-              type="email"
-              placeholder="recipient@example.com"
-              value={recipientEmail}
-              onChange={handleRecipientEmailChange}
-              disabled={isSharing || !hasGeneratedKeys}
-            />
-            <p className="text-xs text-muted-foreground">
-              The recipient must have also generated their sharing keys.
-            </p>
-          </div>
-
-          <Button
-            className="w-full mt-2"
-            onClick={handleShareFile}
-            disabled={
-              !file ||
-              !recipientEmail ||
-              isSharing ||
-              !senderEmail ||
-              !hasGeneratedKeys
-            }
-          >
-            {isSharing ? "Preparing Share..." : "Share Encrypted File"}
-          </Button>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     </div>
   );
 };

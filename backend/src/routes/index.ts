@@ -8,6 +8,7 @@ import sharedFilesRouter from './sharedFiles';
 import presignedUrlsRouter from './presignedUrls';
 import cryptoRouter from './crypto';
 import webhooksRouter from './webhooks';
+import invitationsRouter from './invitations';
 
 const router = Router();
 
@@ -17,6 +18,7 @@ router.use('/shared-files', sharedFilesRouter);
 router.use('/presigned-url', presignedUrlsRouter);
 router.use('/crypto', cryptoRouter);
 router.use('/webhooks', webhooksRouter);
+router.use('/invitations', invitationsRouter);
 
 // Health check endpoint
 router.get('/health', (req, res) => {
@@ -46,7 +48,9 @@ router.get('/', (req, res) => {
       'POST /api/presigned-url/download': 'Generate pre-signed download URL',
       'POST /api/crypto/hash-email': 'Hash email with server-side salt',
       'POST /api/webhooks/mailgun': 'Mailgun webhook endpoint',
-      'GET /api/webhooks/mailgun/health': 'Webhook health check'
+      'GET /api/webhooks/mailgun/health': 'Webhook health check',
+      'POST /api/invitations/send': 'Send invitation email to unregistered user',
+      'GET /api/invitations/rate-limit/:email': 'Check rate limit status'
     }
   }, 'ZeroDrive Backend API');
 });

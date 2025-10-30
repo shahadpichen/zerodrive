@@ -7,7 +7,14 @@
 
 import formData from 'form-data';
 import Mailgun from 'mailgun.js';
-import { getPlainTextTemplate, getHtmlTemplate, getSubject } from './emailTemplates';
+import {
+  getPlainTextTemplate,
+  getHtmlTemplate,
+  getSubject,
+  getPlainTextInvitationTemplate,
+  getHtmlInvitationTemplate,
+  getInvitationSubject
+} from './emailTemplates';
 
 // Environment configuration
 const MAILGUN_API_KEY = process.env.MAILGUN_API_KEY || '';
@@ -43,9 +50,10 @@ function getMailgunClient() {
  * Send file share notification email
  *
  * @param recipientEmail - Email address of the recipient
+ * @param customMessage - Optional custom message from sender
  * @returns Promise that resolves when email is sent
  */
-export async function sendFileShareNotification(recipientEmail: string): Promise<void> {
+export async function sendFileShareNotification(recipientEmail: string, customMessage?: string): Promise<void> {
   try {
     const client = getMailgunClient();
 
@@ -53,6 +61,7 @@ export async function sendFileShareNotification(recipientEmail: string): Promise
     const emailData = {
       recipientEmail,
       appUrl: APP_URL,
+      customMessage,
     };
 
     // Get templates
@@ -122,6 +131,60 @@ export function verifyWebhookSignature(
   } catch (error: any) {
     console.error('[EmailService] Webhook signature verification failed:', error.message);
     return false;
+  }
+}
+
+/**
+ * Send invitation email to unregistered user
+ *
+ * @param recipientEmail - Email address of person to invite
+ * @param senderMessage - Optional personal message from inviter
+ * @returns Promise that resolves when email is sent
+ */
+export async function sendInvitationEmail(recipientEmail: string, senderMessage?: string): Promise<void> {
+  try {
+    const client = getMailgunClient();
+
+    // Prepare email data
+    const emailData = {
+      recipientEmail,
+      appUrl: APP_URL,
+      senderMessage,
+    };
+
+    // Get templates
+    const plainText = getPlainTextInvitationTemplate(emailData);
+    const html = getHtmlInvitationTemplate(emailData);
+    const subject = getInvitationSubject();
+
+    // Send email
+    const result = await client.messages.create(MAILGUN_DOMAIN, {
+      from: `${MAILGUN_FROM_NAME} <${MAILGUN_FROM_EMAIL}>`,
+      to: recipientEmail,
+      subject: subject,
+      text: plainText,
+      html: html,
+      'o:tracking': 'no', // Disable tracking for privacy
+      'o:tag': ['invitation'],
+      'o:dkim': 'yes', // Enable DKIM signature
+    });
+
+    if (NODE_ENV === 'development') {
+      console.log('[EmailService] Invitation sent successfully:', {
+        messageId: result.id,
+        recipient: recipientEmail,
+        status: result.message,
+      });
+    }
+  } catch (error: any) {
+    console.error('[EmailService] Failed to send invitation:', {
+      recipient: recipientEmail,
+      error: error.message,
+      details: error.details || error,
+    });
+
+    // Don't throw error - we don't want to fail the operation if email fails
+    // Log the error and continue
   }
 }
 

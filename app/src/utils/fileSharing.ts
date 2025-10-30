@@ -318,7 +318,8 @@ export function base64ToArrayBuffer(base64: string): ArrayBuffer {
 export async function prepareFileForSharing(
   file: File,
   recipientEmail: string,
-  senderEmail: string
+  senderEmail: string,
+  customMessage?: string
 ): Promise<{
   encryptedFileBlob: Blob;
   recipientHashedEmail: string;
@@ -450,6 +451,7 @@ export async function prepareFileForSharing(
       encryptedFileBlob,
       recipientHashedEmail,
       recipientEmail,
+      customMessage,
       senderHashedEmail,
       fileName,
       originalFileName: file.name,
@@ -513,6 +515,7 @@ export async function storeFileShare(
         owner_user_id: fileData.senderHashedEmail,
         recipient_user_id: fileData.recipientHashedEmail,
         recipient_email: fileData.recipientEmail, // For email notification
+        custom_message: fileData.customMessage, // Optional custom message from sender
         encrypted_file_key: encryptedFileKeyHex, // Store the hex string
         file_name: fileData.originalFileName, // Store original filename, not encrypted blob name
         file_size: fileData.fileSize || 0,

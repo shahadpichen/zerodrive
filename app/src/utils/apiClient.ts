@@ -333,6 +333,44 @@ export const sharedFilesApi = {
   },
 };
 
+// Invitations API
+export const invitationsApi = {
+  /**
+   * Send invitation email to unregistered user
+   */
+  async send(data: {
+    recipient_email: string;
+    sender_message?: string;
+  }): Promise<{
+    sent: boolean;
+    remaining: number;
+    resetTime: number;
+  }> {
+    const response = await httpClient.post<{
+      sent: boolean;
+      remaining: number;
+      resetTime: number;
+    }>('/invitations/send', data);
+    return response.data!;
+  },
+
+  /**
+   * Check rate limit status for an email
+   */
+  async checkRateLimit(email: string): Promise<{
+    remaining: number;
+    resetTime: number | null;
+    canSend: boolean;
+  }> {
+    const response = await httpClient.get<{
+      remaining: number;
+      resetTime: number | null;
+      canSend: boolean;
+    }>(`/invitations/rate-limit/${encodeURIComponent(email)}`);
+    return response.data!;
+  },
+};
+
 // Health Check API
 export const healthApi = {
   /**
@@ -356,6 +394,7 @@ export const healthApi = {
 const apiClient = {
   publicKeys: publicKeysApi,
   sharedFiles: sharedFilesApi,
+  invitations: invitationsApi,
   health: healthApi,
   // Expose HTTP methods for custom endpoints (like pre-signed URLs)
   get: httpClient.get.bind(httpClient),
