@@ -40,11 +40,11 @@ body {
   }
   .dark {
     --background: 0, 0%, 0%;
-    --foreground: 234 89% 90%;
+    --foreground: 30, 20%, 90%;
     --card: 0, 0%, 15%;
-    --card-foreground: 234 89% 90%;
+    --card-foreground: 30, 20%, 90%;
     --popover: 240 10% 3.9%;
-    --popover-foreground: 234 89% 90%;
+    --popover-foreground: 30, 20%, 90%;
     --primary: 0, 0%, 0%;
     --primary-foreground: 240 5.9% 10%;
     --secondary: 12 58% 82%;
@@ -52,7 +52,7 @@ body {
     --muted: 240 3.7% 15.9%;
     --muted-foreground: 240 5% 64.9%;
     --accent: 240 3.7% 15.9%;
-    --accent-foreground: 234 89% 90%;
+    --accent-foreground: 30, 20%, 90%;
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 0 0% 98%;
     --border: 240 3.7% 15.9%;

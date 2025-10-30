@@ -8,13 +8,14 @@ import { query, transaction } from '../config/database';
 import { asyncHandler } from '../middleware/errorHandler';
 import { ApiErrors } from '../middleware/errorHandler';
 import { Request, Response } from 'express';
-import { 
-  SharedFile, 
-  CreateSharedFileRequest, 
-  UpdateSharedFileRequest, 
+import {
+  SharedFile,
+  CreateSharedFileRequest,
+  UpdateSharedFileRequest,
   GetSharedFileRequest,
   GetSharedFilesQuery
 } from '../types';
+import { sendFileShareNotification } from '../services/emailService';
 
 const router = Router();
 
@@ -23,6 +24,7 @@ const createSharedFileSchema = Joi.object({
   file_id: Joi.string().required(),
   owner_user_id: Joi.string().required(),
   recipient_user_id: Joi.string().required(),
+  recipient_email: Joi.string().email().optional(), // For email notifications
   encrypted_file_key: Joi.string().required(),
   file_name: Joi.string().required(),
   file_size: Joi.number().integer().min(0).required(),
@@ -65,6 +67,7 @@ router.post('/', asyncHandler(async (
     file_id,
     owner_user_id,
     recipient_user_id,
+    recipient_email,
     encrypted_file_key,
     file_name,
     file_size,
@@ -108,6 +111,15 @@ router.post('/', asyncHandler(async (
         access_type
       ]
     );
+
+    // Send email notification (non-blocking)
+    // Don't wait for email to complete - respond immediately to user
+    if (recipient_email) {
+      sendFileShareNotification(recipient_email).catch(error => {
+        console.error('[SharedFiles] Failed to send email notification:', error.message);
+        // Don't throw - email failure should not fail the file sharing operation
+      });
+    }
 
     res.apiSuccess(result.rows[0], 'File shared successfully', 201);
   } catch (error) {

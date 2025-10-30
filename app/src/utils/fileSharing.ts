@@ -62,8 +62,8 @@ export async function hashEmail(email: string): Promise<string> {
       email: email.toLowerCase().trim()
     });
 
-    if (response.data?.success && response.data?.data?.hashedEmail) {
-      return response.data.data.hashedEmail;
+    if (response.success && response.data?.hashedEmail) {
+      return response.data.hashedEmail;
     }
 
     throw new Error('Failed to hash email: Invalid response from server');
@@ -449,6 +449,7 @@ export async function prepareFileForSharing(
     return {
       encryptedFileBlob,
       recipientHashedEmail,
+      recipientEmail,
       senderHashedEmail,
       fileName,
       originalFileName: file.name,
@@ -511,6 +512,7 @@ export async function storeFileShare(
         file_id: fileKey, // Reference to MinIO storage location
         owner_user_id: fileData.senderHashedEmail,
         recipient_user_id: fileData.recipientHashedEmail,
+        recipient_email: fileData.recipientEmail, // For email notification
         encrypted_file_key: encryptedFileKeyHex, // Store the hex string
         file_name: fileData.originalFileName, // Store original filename, not encrypted blob name
         file_size: fileData.fileSize || 0,
