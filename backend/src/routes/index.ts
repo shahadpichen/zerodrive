@@ -7,6 +7,7 @@ import publicKeysRouter from './publicKeys';
 import sharedFilesRouter from './sharedFiles';
 import presignedUrlsRouter from './presignedUrls';
 import cryptoRouter from './crypto';
+import webhooksRouter from './webhooks';
 
 const router = Router();
 
@@ -15,6 +16,7 @@ router.use('/public-keys', publicKeysRouter);
 router.use('/shared-files', sharedFilesRouter);
 router.use('/presigned-url', presignedUrlsRouter);
 router.use('/crypto', cryptoRouter);
+router.use('/webhooks', webhooksRouter);
 
 // Health check endpoint
 router.get('/health', (req, res) => {
@@ -42,7 +44,9 @@ router.get('/', (req, res) => {
       'DELETE /api/shared-files/:id': 'Revoke file sharing',
       'POST /api/presigned-url/upload': 'Generate pre-signed upload URL',
       'POST /api/presigned-url/download': 'Generate pre-signed download URL',
-      'POST /api/crypto/hash-email': 'Hash email with server-side salt'
+      'POST /api/crypto/hash-email': 'Hash email with server-side salt',
+      'POST /api/webhooks/mailgun': 'Mailgun webhook endpoint',
+      'GET /api/webhooks/mailgun/health': 'Webhook health check'
     }
   }, 'ZeroDrive Backend API');
 });
