@@ -25,6 +25,7 @@ const createSharedFileSchema = Joi.object({
   owner_user_id: Joi.string().required(),
   recipient_user_id: Joi.string().required(),
   recipient_email: Joi.string().email().optional(), // For email notifications
+  custom_message: Joi.string().max(500).optional(), // Optional custom message from sender
   encrypted_file_key: Joi.string().required(),
   file_name: Joi.string().required(),
   file_size: Joi.number().integer().min(0).required(),
@@ -68,6 +69,7 @@ router.post('/', asyncHandler(async (
     owner_user_id,
     recipient_user_id,
     recipient_email,
+    custom_message,
     encrypted_file_key,
     file_name,
     file_size,
@@ -115,7 +117,7 @@ router.post('/', asyncHandler(async (
     // Send email notification (non-blocking)
     // Don't wait for email to complete - respond immediately to user
     if (recipient_email) {
-      sendFileShareNotification(recipient_email).catch(error => {
+      sendFileShareNotification(recipient_email, custom_message).catch(error => {
         console.error('[SharedFiles] Failed to send email notification:', error.message);
         // Don't throw - email failure should not fail the file sharing operation
       });
