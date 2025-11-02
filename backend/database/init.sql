@@ -1,5 +1,7 @@
 -- ZeroDrive PostgreSQL Database Schema
 -- This script initializes the database with the required tables for the backend
+-- docker exec -i zerodrive-postgres psql -U zerodrive_app -d zerodrive < /Users/shahad/Projects/zerodrive/backend/database/init.sql
+-- docker exec zerodrive-postgres psql -U zerodrive_app -d zerodrive -c "SELECT * FROM <tablename>;"
 
 -- Enable UUID extension for generating UUIDs
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
@@ -66,11 +68,36 @@ CREATE TRIGGER update_shared_files_updated_at
 -- ('user1@example.com', 'sample-rsa-public-key-1'),
 -- ('user2@example.com', 'sample-rsa-public-key-2');
 
+-- Create analytics_daily_summary table
+-- Stores anonymous daily analytics (privacy-first: no user tracking)
+CREATE TABLE IF NOT EXISTS analytics_daily_summary (
+    date DATE PRIMARY KEY,
+    total_logins INTEGER DEFAULT 0,
+    total_new_users INTEGER DEFAULT 0,
+    total_limited_scope_logins INTEGER DEFAULT 0,
+    total_downloads INTEGER DEFAULT 0,
+    total_files_added_to_drive INTEGER DEFAULT 0,
+    total_shares INTEGER DEFAULT 0,
+    total_invitations INTEGER DEFAULT 0,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Create index for date-based queries
+CREATE INDEX IF NOT EXISTS idx_analytics_daily_summary_date ON analytics_daily_summary(date DESC);
+
+-- Create trigger for analytics_daily_summary
+DROP TRIGGER IF EXISTS update_analytics_daily_summary_updated_at ON analytics_daily_summary;
+CREATE TRIGGER update_analytics_daily_summary_updated_at
+    BEFORE UPDATE ON analytics_daily_summary
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+
 -- Create a view for active shared files (not expired)
 CREATE OR REPLACE VIEW active_shared_files AS
-SELECT 
+SELECT
     sf.*,
-    CASE 
+    CASE
         WHEN sf.expires_at IS NULL THEN true
         WHEN sf.expires_at > CURRENT_TIMESTAMP THEN true
         ELSE false

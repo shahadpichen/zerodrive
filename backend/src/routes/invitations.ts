@@ -10,6 +10,7 @@ import { asyncHandler } from '../middleware/errorHandler';
 import { ApiErrors } from '../middleware/errorHandler';
 import { Request, Response } from 'express';
 import { sendInvitationEmail } from '../services/emailService';
+import { trackEvent, AnalyticsEvent, AnalyticsCategory } from '../services/analytics';
 
 const router = Router();
 
@@ -92,6 +93,11 @@ router.post('/send', asyncHandler(async (
   try {
     // Send invitation email (non-blocking)
     await sendInvitationEmail(recipient_email, sender_message);
+
+    // Track invitation sent (anonymous)
+    trackEvent(AnalyticsEvent.INVITATION_SENT, AnalyticsCategory.SHARING, {
+      has_custom_message: !!sender_message
+    }).catch(() => {}); // Don't let analytics fail the request
 
     res.apiSuccess(
       {

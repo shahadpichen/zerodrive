@@ -58,10 +58,10 @@ export async function sendFileShareNotification(recipientEmail: string, customMe
     const client = getMailgunClient();
 
     // Prepare email data
-    const emailData = {
+    const emailData: { recipientEmail: string; appUrl: string; customMessage?: string } = {
       recipientEmail,
       appUrl: APP_URL,
-      customMessage,
+      ...(customMessage && { customMessage }),
     };
 
     // Get templates
@@ -146,10 +146,10 @@ export async function sendInvitationEmail(recipientEmail: string, senderMessage?
     const client = getMailgunClient();
 
     // Prepare email data
-    const emailData = {
+    const emailData: { recipientEmail: string; appUrl: string; senderMessage?: string } = {
       recipientEmail,
       appUrl: APP_URL,
-      senderMessage,
+      ...(senderMessage && { senderMessage }),
     };
 
     // Get templates

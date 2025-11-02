@@ -40,6 +40,7 @@ import { getStoredKey } from "../utils/cryptoUtils";
 import { downloadEncryptedRsaKeyFromDrive } from "../utils/gdriveKeyStorage";
 import { decryptRsaPrivateKeyWithAesKey } from "../utils/rsaKeyManager";
 import { uploadAndSyncFile } from "../utils/fileOperations";
+import { trackEvent, AnalyticsEvent, AnalyticsCategory } from "../utils/analyticsTracker";
 
 interface SharedFile {
   id: string;
@@ -235,6 +236,19 @@ const SharedWithMePage: FC = () => {
       return;
     }
 
+    // Check for primary key BEFORE allowing download
+    const primaryKey = await getStoredKey();
+    if (!primaryKey) {
+      toast.error("Primary encryption key required", {
+        description: "You must set up your encryption key before downloading shared files. Redirecting to Key Management...",
+        duration: 5000,
+      });
+      setTimeout(() => {
+        navigate("/key-management");
+      }, 2000);
+      return;
+    }
+
     setIsDownloading(file.id);
     const downloadToastId = toast.loading(
       `Downloading ${file.originalFileName}...`
@@ -379,6 +393,12 @@ const SharedWithMePage: FC = () => {
       toast.success(`Successfully downloaded ${decryptedData.fileName}`, {
         id: downloadToastId,
       });
+
+      // Track analytics for shared file access
+      await trackEvent(
+        AnalyticsEvent.SHARED_FILE_ACCESSED,
+        AnalyticsCategory.SHARING
+      );
 
       // ---- Add to user's own vault ----
       const saveToVaultToastId = toast.loading(
