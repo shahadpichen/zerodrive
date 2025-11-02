@@ -11,6 +11,7 @@ import {
 import { encryptFile } from "./encryptFile";
 import { getStoredKey } from "./cryptoUtils";
 import logger from "./logger";
+import { trackFileAddedToDrive } from "./analyticsTracker";
 
 // --- Upload Operation ---
 
@@ -103,6 +104,10 @@ export const uploadAndSyncFile = async (
     toast.success(`Successfully uploaded and synced ${file.name}`, {
       id: uploadToastId,
     });
+
+    // Track analytics
+    await trackFileAddedToDrive('upload');
+
     return newFileMeta;
   } catch (error: any) {
     logger.error(`[Upload Error - ${file.name}]:`, error);

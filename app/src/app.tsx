@@ -28,8 +28,6 @@ const checkEnvironmentVariables = () => {
   const requiredVars = {
     "Google Client ID": process.env.REACT_APP_PUBLIC_CLIENT_ID,
     "Google Scope": process.env.REACT_APP_PUBLIC_SCOPE,
-    "Supabase URL": process.env.REACT_APP_SUPABASE_URL,
-    "Supabase Anon Key": process.env.REACT_APP_SUPABASE_ANON_KEY,
   };
 
   const missing = Object.entries(requiredVars)
@@ -46,7 +44,7 @@ const checkEnvironmentVariables = () => {
 };
 
 function App() {
-  const [isAuthenticated] = useState<boolean>(
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(
     sessionStorage.getItem("isAuthenticated") === "true"
   );
 
@@ -75,7 +73,7 @@ function App() {
             isAuthenticated ? (
               <Navigate to="/storage" replace />
             ) : (
-              <LandingPage />
+              <LandingPage onAuthChange={setIsAuthenticated} />
             )
           }
         />

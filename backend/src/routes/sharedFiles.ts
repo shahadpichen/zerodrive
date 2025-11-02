@@ -16,6 +16,7 @@ import {
   GetSharedFilesQuery
 } from '../types';
 import { sendFileShareNotification } from '../services/emailService';
+import { trackEvent, AnalyticsEvent, AnalyticsCategory, getFileSizeBucket, getFileTypeCategory } from '../services/analytics';
 
 const router = Router();
 
@@ -122,6 +123,14 @@ router.post('/', asyncHandler(async (
         // Don't throw - email failure should not fail the file sharing operation
       });
     }
+
+    // Track file share event (anonymous)
+    trackEvent(AnalyticsEvent.FILE_SHARED, AnalyticsCategory.SHARING, {
+      file_size_bucket: getFileSizeBucket(file_size),
+      file_type: getFileTypeCategory(mime_type),
+      has_expiration: !!expires_at,
+      has_custom_message: !!custom_message
+    }).catch(() => {}); // Don't let analytics fail the request
 
     res.apiSuccess(result.rows[0], 'File shared successfully', 201);
   } catch (error) {

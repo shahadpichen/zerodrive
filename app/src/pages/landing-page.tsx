@@ -8,7 +8,11 @@ import PageContentLight from "../assets/page-content-light.png";
 import PageContentDark from "../assets/page-content-dark.png";
 import { useTheme } from "../components/theme-provider";
 
-function LandingPage() {
+interface LandingPageProps {
+  onAuthChange?: (authenticated: boolean) => void;
+}
+
+function LandingPage({ onAuthChange }: LandingPageProps) {
   const { theme } = useTheme();
   const [isDark, setIsDark] = useState(false);
 
@@ -26,6 +30,10 @@ function LandingPage() {
 
   const handleAuthChange = (authenticated: boolean) => {
     setIsAuthenticated(authenticated);
+    // Also update parent App.tsx state if callback provided
+    if (onAuthChange) {
+      onAuthChange(authenticated);
+    }
   };
 
   if (isAuthenticated) {

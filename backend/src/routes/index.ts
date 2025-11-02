@@ -9,6 +9,7 @@ import presignedUrlsRouter from './presignedUrls';
 import cryptoRouter from './crypto';
 import webhooksRouter from './webhooks';
 import invitationsRouter from './invitations';
+import analyticsRouter from './analytics';
 
 const router = Router();
 
@@ -19,6 +20,7 @@ router.use('/presigned-url', presignedUrlsRouter);
 router.use('/crypto', cryptoRouter);
 router.use('/webhooks', webhooksRouter);
 router.use('/invitations', invitationsRouter);
+router.use('/analytics', analyticsRouter);
 
 // Health check endpoint
 router.get('/health', (req, res) => {
@@ -50,7 +52,9 @@ router.get('/', (req, res) => {
       'POST /api/webhooks/mailgun': 'Mailgun webhook endpoint',
       'GET /api/webhooks/mailgun/health': 'Webhook health check',
       'POST /api/invitations/send': 'Send invitation email to unregistered user',
-      'GET /api/invitations/rate-limit/:email': 'Check rate limit status'
+      'GET /api/invitations/rate-limit/:email': 'Check rate limit status',
+      'GET /api/analytics/summary': 'Get anonymous analytics summary',
+      'GET /api/analytics/daily': 'Get daily analytics stats'
     }
   }, 'ZeroDrive Backend API');
 });
