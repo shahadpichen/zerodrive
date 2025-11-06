@@ -151,6 +151,10 @@ export function isGoogleTokenExpired(): boolean {
 
   try {
     const expiryTime = new Date(expiryStr).getTime();
+    // Check if date is valid (NaN means invalid date)
+    if (isNaN(expiryTime)) {
+      return true;
+    }
     return Date.now() >= expiryTime;
   } catch (error) {
     console.error('Failed to parse Google token expiry:', error);
