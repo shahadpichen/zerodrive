@@ -120,74 +120,82 @@ function PrivateStorage() {
       setIsLoadingUserFiles(true);
       setIsLoadingStorage(true);
       try {
-        await new Promise<void>((resolve, reject) => {
-          gapi.load("client:auth2", {
-            callback: resolve,
-            onerror: reject,
-            timeout: 5000,
-            ontimeout: reject,
+        // Get user info from JWT first
+        const { getUserEmail } = await import("../utils/authService");
+        const email = getUserEmail();
+
+        if (!email) {
+          console.error("No user email found in JWT");
+          toast.error("Authentication error", {
+            description: "No user information found. Please sign in again.",
           });
-        });
-
-        await gapi.client.init({
-          clientId: process.env.REACT_APP_PUBLIC_CLIENT_ID,
-          scope: process.env.REACT_APP_PUBLIC_SCOPE,
-        });
-
-        const authInstance = gapi.auth2.getAuthInstance();
-        if (authInstance && authInstance.isSignedIn.get()) {
-          const profile = authInstance.currentUser.get().getBasicProfile();
-          if (profile) {
-            const email = profile.getEmail();
-
-            // Account switch detection
-            const { getSessionUser, setSessionUser, clearSession } =
-              await import("../utils/sessionManager");
-            const sessionEmail = getSessionUser();
-
-            if (sessionEmail && sessionEmail !== email) {
-              console.warn(
-                `Account switch detected: ${sessionEmail} -> ${email}`
-              );
-              clearSession();
-              setSessionUser(email);
-              sessionStorage.setItem("isAuthenticated", "true");
-              window.location.reload();
-              return;
-            }
-
-            if (!sessionEmail) {
-              setSessionUser(email);
-            }
-
-            setUserName(profile.getName());
-            setUserEmail(email);
-            setUserImage(profile.getImageUrl());
-            if (email) {
-              await fetchAndStoreFileMetadata();
-              const files = await getAllFilesForUser(email);
-              setUserHasFiles(files.length > 0);
-              setRefreshFileListKey((prev) => prev + 1); // Trigger FileList to reload
-              await loadStorageInfo();
-              // Check for sharing keys
-              const keysExist = await userHasStoredKeys(email);
-              setHasSharingKeys(keysExist);
-            } else {
-              setUserHasFiles(false);
-              setStorageInfo(null);
-              setHasSharingKeys(false);
-            }
-          } else {
-            window.location.href = "/";
-          }
-        } else {
+          // Clear auth and redirect
+          const { logout } = await import("../utils/authService");
+          await logout();
           window.location.href = "/";
+          return;
         }
+
+        // Account switch detection
+        const { getSessionUser, setSessionUser, clearSession } =
+          await import("../utils/sessionManager");
+        const sessionEmail = getSessionUser();
+
+        if (sessionEmail && sessionEmail !== email) {
+          console.warn(
+            `Account switch detected: ${sessionEmail} -> ${email}`
+          );
+          clearSession();
+          setSessionUser(email);
+          sessionStorage.setItem("isAuthenticated", "true");
+          window.location.reload();
+          return;
+        }
+
+        if (!sessionEmail) {
+          setSessionUser(email);
+        }
+
+        // Set user info (no name/image from JWT, just email)
+        setUserEmail(email);
+        setUserName(email.split('@')[0]); // Use email prefix as name for now
+
+        // Initialize Google API with backend tokens
+        const { initializeGapi } = await import("../utils/gapiInit");
+
+        try {
+          await initializeGapi();
+        } catch (gapiError) {
+          console.error("Failed to initialize Google API:", gapiError);
+          toast.error("Google Drive connection failed", {
+            description: "Could not connect to Google Drive. Some features may not work. Try signing out and back in.",
+            duration: 10000,
+          });
+          // Don't redirect - let user stay on page with error state
+          setIsLoadingUserFiles(false);
+          setIsLoadingStorage(false);
+          return;
+        }
+
+        // Load user files and storage
+        await fetchAndStoreFileMetadata();
+        const files = await getAllFilesForUser(email);
+        setUserHasFiles(files.length > 0);
+        setRefreshFileListKey((prev) => prev + 1);
+        await loadStorageInfo();
+
+        // Check for sharing keys
+        const keysExist = await userHasStoredKeys(email);
+        setHasSharingKeys(keysExist);
       } catch (error) {
         console.error("Error loading user info or storage:", error);
-        window.location.href = "/";
+        toast.error("Failed to load storage", {
+          description: "An error occurred while loading your storage. Please try refreshing the page.",
+        });
+        // Don't automatically redirect - stay on page with error
       } finally {
         setIsLoadingUserFiles(false);
+        setIsLoadingStorage(false);
       }
     };
 
@@ -217,13 +225,14 @@ function PrivateStorage() {
   const handleLogout = async () => {
     try {
       const { clearSession } = await import("../utils/sessionManager");
-      const authInstance = gapi.auth2.getAuthInstance();
-      if (authInstance) {
-        await authInstance.signOut();
-        clearSession();
-        console.log("Logout complete - all session data cleared");
-        window.location.href = "/";
-      }
+      const { logout } = await import("../utils/authService");
+
+      // Call auth service logout (clears JWT and Google tokens)
+      await logout();
+      clearSession();
+
+      console.log("Logout complete - all session data cleared");
+      window.location.href = "/";
     } catch (error) {
       console.error("Error during logout:", error);
     }

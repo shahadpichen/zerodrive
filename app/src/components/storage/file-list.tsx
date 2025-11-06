@@ -212,18 +212,16 @@ export const FileList: React.FC<FileListProps> = ({
         return;
       }
 
-      const authInstance = gapi.auth2.getAuthInstance();
-      if (!authInstance || !authInstance.isSignedIn.get()) {
+      // Check authentication via backend token
+      const { getGoogleAccessToken } = await import("../../utils/gapiInit");
+      const token = await getGoogleAccessToken();
+      if (!token) {
         toast.error("Authentication error", {
           description: "Please sign in again",
         });
         setDownloadingFileId(null);
         return;
       }
-
-      const token = authInstance.currentUser
-        .get()
-        .getAuthResponse().access_token;
 
       toast.loading(`Downloading: ${fileName}...`);
       const response = await fetch(
@@ -309,12 +307,11 @@ export const FileList: React.FC<FileListProps> = ({
     try {
       deleteToastId = toast.loading(`Deleting ${fileName}...`);
 
-      const authInstance = gapi.auth2.getAuthInstance();
-      if (!authInstance || !authInstance.isSignedIn.get())
+      const { getGoogleAccessToken } = await import("../../utils/gapiInit");
+      const token = await getGoogleAccessToken();
+      if (!token) {
         throw new Error("Authentication error");
-      const token = authInstance.currentUser
-        .get()
-        .getAuthResponse().access_token;
+      }
       const response = await fetch(
         `https://www.googleapis.com/drive/v3/files/${fileId}`,
         {

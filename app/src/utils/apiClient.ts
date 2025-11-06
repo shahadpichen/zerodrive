@@ -3,6 +3,8 @@
  * Replaces Supabase client with self-hosted backend
  */
 
+import { getToken, logout as authLogout } from './authService';
+
 // API Configuration
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001/api';
 const DEFAULT_TIMEOUT = 30000; // 30 seconds
@@ -99,13 +101,21 @@ class HttpClient {
     const timeoutId = setTimeout(() => controller.abort(), this.timeout);
 
     try {
+      // Get JWT token and add to headers
+      const token = getToken();
+      const headers: HeadersInit = {
+        'Content-Type': 'application/json',
+        ...options.headers,
+      };
+
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
       const response = await fetch(url, {
         ...options,
         signal: controller.signal,
-        headers: {
-          'Content-Type': 'application/json',
-          ...options.headers,
-        },
+        headers,
       });
 
       clearTimeout(timeoutId);
@@ -130,6 +140,18 @@ class HttpClient {
 
       // Handle HTTP errors
       if (!response.ok) {
+        // Handle 401 Unauthorized - logout and redirect to login
+        if (response.status === 401) {
+          console.warn('Unauthorized request, logging out...');
+          await authLogout();
+          window.location.href = '/';
+          throw new ApiError(
+            'Session expired, please log in again',
+            'UNAUTHORIZED',
+            401
+          );
+        }
+
         throw new ApiError(
           responseData.error?.message || `HTTP ${response.status}`,
           responseData.error?.code || 'HTTP_ERROR',

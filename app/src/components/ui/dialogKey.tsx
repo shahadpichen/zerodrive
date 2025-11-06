@@ -15,23 +15,24 @@ const Dialog: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const initClient = () => {
       gapi.client
         .init({
-          clientId: process.env.REACT_APP_PUBLIC_CLIENT_ID,
-          scope: process.env.REACT_APP_PUBLIC_SCOPE,
+          discoveryDocs: [
+            "https://www.googleapis.com/discovery/v1/apis/drive/v3/rest",
+          ],
         })
-        .then(() => {
-          const authInstance = gapi.auth2.getAuthInstance();
-          setIsAuthenticated(authInstance.isSignedIn.get());
-          authInstance.isSignedIn.listen(setIsAuthenticated);
+        .then(async () => {
+          const { isAuthenticated: checkAuth } = await import("../../utils/authService");
+          const authenticated = checkAuth();
+          setIsAuthenticated(authenticated);
 
           // After initialization, check if dialog should open
           const storedKey = localStorage.getItem("aes-gcm-key");
-          if (!storedKey && authInstance.isSignedIn.get()) {
+          if (!storedKey && authenticated) {
             setOpen(true);
           }
         });
     };
 
-    gapi.load("client:auth2", initClient);
+    gapi.load("client", initClient);
   }, []);
 
   const handleOpenChange = (isOpen: boolean) => {
