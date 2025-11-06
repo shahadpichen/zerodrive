@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect } from "react";
 import {
   BrowserRouter as Router,
   Routes,
@@ -12,13 +12,12 @@ import ProtectedRoute from "./components/protected-route";
 import Privacy from "./pages/privacy";
 import Terms from "./pages/terms";
 import HowItWorks from "./pages/how-it-works";
-import GoogleOAuthCallback from "./pages/google-oauth-callback";
+import OAuthCallback from "./pages/oauth-callback";
 import { KeyManagementPage } from "./pages/key-management-page";
 import ShareFilesPage from "./pages/share-files";
 import SharedWithMePage from "./pages/shared-with-me";
 import KeyTestPage from "./pages/KeyTestPage";
-import { toast } from "sonner";
-import { initializeSession } from "./utils/sessionManager";
+import { isAuthenticated as checkAuth } from "./utils/authService";
 
 // Polyfill global Buffer for libraries that expect it (e.g., bip39)
 window.Buffer = Buffer as any;
@@ -26,8 +25,7 @@ window.Buffer = Buffer as any;
 // Check environment variables on app startup
 const checkEnvironmentVariables = () => {
   const requiredVars = {
-    "Google Client ID": process.env.REACT_APP_PUBLIC_CLIENT_ID,
-    "Google Scope": process.env.REACT_APP_PUBLIC_SCOPE,
+    "API URL": process.env.REACT_APP_API_URL,
   };
 
   const missing = Object.entries(requiredVars)
@@ -35,52 +33,35 @@ const checkEnvironmentVariables = () => {
     .map(([name]) => name);
 
   if (missing.length > 0) {
-    console.error("Missing required environment variables:", missing);
-    toast.error("Missing environment variables", {
-      description: `Please check: ${missing.join(", ")}`,
-      duration: 10000,
-    });
+    console.warn("Missing optional environment variables:", missing);
+    console.log("Using default values for missing variables");
   }
 };
 
-function App() {
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(
-    sessionStorage.getItem("isAuthenticated") === "true"
+// Root route component - checks auth when it renders
+const RootRoute: React.FC = () => {
+  const isAuthenticated = checkAuth();
+  return isAuthenticated ? (
+    <Navigate to="/storage" replace />
+  ) : (
+    <LandingPage />
   );
+};
 
+function App() {
   useEffect(() => {
     checkEnvironmentVariables();
-
-    // Initialize session on app startup
-    const setupSession = async () => {
-      if (isAuthenticated) {
-        const result = await initializeSession();
-        if (result.success) {
-          console.log("Session initialized:", result.message);
-        }
-      }
-    };
-
-    setupSession();
-  }, [isAuthenticated]);
+  }, []);
 
   return (
     <Router>
       <Routes>
-        <Route
-          path="/"
-          element={
-            isAuthenticated ? (
-              <Navigate to="/storage" replace />
-            ) : (
-              <LandingPage onAuthChange={setIsAuthenticated} />
-            )
-          }
-        />
+        <Route path="/" element={<RootRoute />} />
+        <Route path="/oauth/callback" element={<OAuthCallback />} />
         <Route
           path="/storage"
           element={
-            <ProtectedRoute isAuthenticated={isAuthenticated} redirectPath="/">
+            <ProtectedRoute>
               <PrivateStorage />
             </ProtectedRoute>
           }
@@ -88,7 +69,7 @@ function App() {
         <Route
           path="/key-management"
           element={
-            <ProtectedRoute isAuthenticated={isAuthenticated} redirectPath="/">
+            <ProtectedRoute>
               <KeyManagementPage />
             </ProtectedRoute>
           }
@@ -96,7 +77,7 @@ function App() {
         <Route
           path="/share"
           element={
-            <ProtectedRoute isAuthenticated={isAuthenticated} redirectPath="/">
+            <ProtectedRoute>
               <ShareFilesPage />
             </ProtectedRoute>
           }
@@ -104,7 +85,7 @@ function App() {
         <Route
           path="/shared-with-me"
           element={
-            <ProtectedRoute isAuthenticated={isAuthenticated} redirectPath="/">
+            <ProtectedRoute>
               <SharedWithMePage />
             </ProtectedRoute>
           }
@@ -112,7 +93,7 @@ function App() {
         <Route
           path="/key-test"
           element={
-            <ProtectedRoute isAuthenticated={isAuthenticated} redirectPath="/">
+            <ProtectedRoute>
               <KeyTestPage />
             </ProtectedRoute>
           }
@@ -120,10 +101,6 @@ function App() {
         <Route path="/privacy" element={<Privacy />} />
         <Route path="/terms" element={<Terms />} />
         <Route path="/how-it-works" element={<HowItWorks />} />
-        <Route
-          path="/api/auth/callback/google"
-          element={<GoogleOAuthCallback />}
-        />
       </Routes>
     </Router>
   );

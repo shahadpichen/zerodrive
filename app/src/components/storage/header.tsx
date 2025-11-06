@@ -37,36 +37,23 @@ function Header({ setIsAuthenticated }: HeaderProps) {
 
   const loadUserAndStorageInfo = async () => {
     try {
-      // Wait for GAPI to initialize
-      await new Promise((resolve) => {
-        gapi.load("client:auth2", resolve);
-      });
+      // Initialize GAPI with backend tokens
+      const { initializeGapi } = await import("../../utils/gapiInit");
+      const { getUserEmail } = await import("../../utils/authService");
 
-      // Initialize GAPI
-      await gapi.client.init({
-        clientId: process.env.REACT_APP_PUBLIC_CLIENT_ID,
-        scope: process.env.REACT_APP_PUBLIC_SCOPE,
-      });
+      await initializeGapi();
 
-      const authInstance = gapi.auth2.getAuthInstance();
+      // Get user email from JWT
+      const currentEmail = getUserEmail();
 
-      if (!authInstance || !authInstance.isSignedIn.get()) {
+      if (!currentEmail) {
         console.log("User not signed in");
         setIsAuthenticated(false);
         window.location.href = "/";
         return;
       }
 
-      const currentUser = authInstance.currentUser.get();
-      const profile = currentUser.getBasicProfile();
-
-      if (!profile) {
-        console.error("No profile found");
-        return;
-      }
-
       // Account switch detection
-      const currentEmail = profile.getEmail();
       const sessionEmail = getSessionUser();
 
       if (sessionEmail && sessionEmail !== currentEmail) {
@@ -149,12 +136,12 @@ function Header({ setIsAuthenticated }: HeaderProps) {
 
   const handleLogout = async () => {
     try {
-      const authInstance = gapi.auth2.getAuthInstance();
-      if (authInstance) {
-        await authInstance.signOut();
-        setIsAuthenticated(false);
+      const { logout } = await import("../../utils/authService");
 
-        // Clear all session data (AES key, user email, auth state, etc.)
+      await logout();
+      setIsAuthenticated(false);
+
+      // Clear all session data (AES key, user email, auth state, etc.)
         clearSession();
 
         console.log("Logout complete - all session data cleared");

@@ -1,17 +1,19 @@
 import React from "react";
 import { Navigate } from "react-router-dom";
+import { isAuthenticated as checkAuth } from "../utils/authService";
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
-  isAuthenticated: boolean;
-  redirectPath: string;
+  redirectPath?: string;
 }
 
 const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
   children,
-  isAuthenticated,
-  redirectPath,
+  redirectPath = "/",
 }) => {
+  // Check authentication fresh every time this route renders
+  const isAuthenticated = checkAuth();
+
   if (!isAuthenticated) {
     return <Navigate to={redirectPath} replace />;
   }

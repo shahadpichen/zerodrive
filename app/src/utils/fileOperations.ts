@@ -36,11 +36,11 @@ export const uploadAndSyncFile = async (
     }
 
     // 2. Check auth and get token
-    const authInstance = gapi.auth2?.getAuthInstance();
-    if (!authInstance || !authInstance.isSignedIn.get()) {
+    const { getGoogleAccessToken } = await import("./gapiInit");
+    const token = await getGoogleAccessToken();
+    if (!token) {
       throw new Error("User not authenticated.");
     }
-    const token = authInstance.currentUser.get().getAuthResponse().access_token;
 
     // 3. Encrypt
     toast.loading(`Encrypting ${file.name}...`, { id: uploadToastId });
@@ -138,11 +138,11 @@ export const deleteAndSyncFile = async (
 
   try {
     // 1. Check auth and get token
-    const authInstance = gapi.auth2?.getAuthInstance();
-    if (!authInstance || !authInstance.isSignedIn.get()) {
+    const { getGoogleAccessToken } = await import("./gapiInit");
+    const token = await getGoogleAccessToken();
+    if (!token) {
       throw new Error("User not authenticated.");
     }
-    const token = authInstance.currentUser.get().getAuthResponse().access_token;
 
     // 2. Attempt to delete from Google Drive
     toast.loading(`Deleting ${fileName} from Google Drive...`, {
@@ -222,11 +222,11 @@ export const deleteAllAndSyncFiles = async (
     });
 
     // 2. Check auth and get token (needed for Drive delete loop)
-    const authInstance = gapi.auth2?.getAuthInstance();
-    if (!authInstance || !authInstance.isSignedIn.get()) {
+    const { getGoogleAccessToken } = await import("./gapiInit");
+    const token = await getGoogleAccessToken();
+    if (!token) {
       throw new Error("User not authenticated.");
     }
-    const token = authInstance.currentUser.get().getAuthResponse().access_token;
 
     // 3. Delete each file from Google Drive (best effort, ignore 404s)
     let driveDeleteFailures = 0;

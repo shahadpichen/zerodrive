@@ -56,11 +56,11 @@ const sendToGoogleDrive = async (filesToSync: FileMeta[]) => {
   try {
     driveUpdateToastId = toast.loading("Syncing metadata with Google Drive...");
 
-    const authInstance = gapi.auth2.getAuthInstance();
-    if (!authInstance || !authInstance.isSignedIn.get()) {
+    const { getGoogleAccessToken } = await import("./gapiInit");
+    const token = await getGoogleAccessToken();
+    if (!token) {
       throw new Error("User not authenticated for Google Drive update.");
     }
-    const token = authInstance.currentUser.get().getAuthResponse().access_token;
 
     // Encrypt metadata before uploading
     logger.log("[Sync] Encrypting metadata...");
@@ -188,8 +188,11 @@ const fetchAndStoreFileMetadata = async () => {
       const fileId = existingFiles[0].id;
 
       // Download the encrypted blob
-      const authInstance = gapi.auth2.getAuthInstance();
-      const token = authInstance.currentUser.get().getAuthResponse().access_token;
+      const { getGoogleAccessToken } = await import("./gapiInit");
+      const token = await getGoogleAccessToken();
+      if (!token) {
+        throw new Error("Failed to get access token");
+      }
 
       const fetchResponse = await fetch(
         `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`,

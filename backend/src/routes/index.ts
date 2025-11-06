@@ -3,6 +3,7 @@
  */
 
 import { Router } from 'express';
+import authRouter from './auth';
 import publicKeysRouter from './publicKeys';
 import sharedFilesRouter from './sharedFiles';
 import presignedUrlsRouter from './presignedUrls';
@@ -10,19 +11,11 @@ import cryptoRouter from './crypto';
 import webhooksRouter from './webhooks';
 import invitationsRouter from './invitations';
 import analyticsRouter from './analytics';
+import { requireAuth } from '../middleware/auth';
 
 const router = Router();
 
-// Mount route modules
-router.use('/public-keys', publicKeysRouter);
-router.use('/shared-files', sharedFilesRouter);
-router.use('/presigned-url', presignedUrlsRouter);
-router.use('/crypto', cryptoRouter);
-router.use('/webhooks', webhooksRouter);
-router.use('/invitations', invitationsRouter);
-router.use('/analytics', analyticsRouter);
-
-// Health check endpoint
+// Health check endpoint (public)
 router.get('/health', (req, res) => {
   res.apiSuccess({
     status: 'healthy',
@@ -31,7 +24,7 @@ router.get('/health', (req, res) => {
   }, 'API is healthy');
 });
 
-// API info endpoint
+// API info endpoint (public)
 router.get('/', (req, res) => {
   res.apiSuccess({
     name: 'ZeroDrive Backend API',
@@ -39,6 +32,10 @@ router.get('/', (req, res) => {
     description: 'End-to-end encrypted file storage backend',
     endpoints: {
       'GET /api/health': 'Health check',
+      'GET /api/auth/google': 'Initiate Google OAuth',
+      'GET /api/auth/google/callback': 'OAuth callback',
+      'GET /api/auth/me': 'Get current user',
+      'POST /api/auth/logout': 'Logout',
       'POST /api/public-keys': 'Store user public key',
       'GET /api/public-keys/:user_id': 'Get user public key',
       'POST /api/shared-files': 'Share a file',
@@ -58,5 +55,22 @@ router.get('/', (req, res) => {
     }
   }, 'ZeroDrive Backend API');
 });
+
+// Mount auth routes (public, no auth required)
+router.use('/auth', authRouter);
+
+// Mount webhook routes (public, external services)
+router.use('/webhooks', webhooksRouter);
+
+// Apply authentication middleware to all routes below this point
+router.use(requireAuth);
+
+// Mount protected route modules
+router.use('/public-keys', publicKeysRouter);
+router.use('/shared-files', sharedFilesRouter);
+router.use('/presigned-url', presignedUrlsRouter);
+router.use('/crypto', cryptoRouter);
+router.use('/invitations', invitationsRouter);
+router.use('/analytics', analyticsRouter);
 
 export default router;
