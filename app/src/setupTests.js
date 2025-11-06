@@ -78,12 +78,33 @@ Object.defineProperty(global, 'crypto', {
 });
 
 // Polyfill File.prototype.arrayBuffer for Jest
+// Uses a simpler approach that works in both local and CI environments
 if (typeof File !== 'undefined' && !File.prototype.arrayBuffer) {
-  File.prototype.arrayBuffer = function() {
-    return new Promise((resolve) => {
+  File.prototype.arrayBuffer = async function() {
+    // Read file as text first, then convert to buffer
+    return new Promise((resolve, reject) => {
       const reader = new FileReader();
-      reader.onload = () => {
-        resolve(reader.result);
+      reader.onloadend = () => {
+        if (reader.error) {
+          reject(reader.error);
+        } else {
+          // FileReader.readAsArrayBuffer should give us an ArrayBuffer
+          // But in some jest environments it might not, so we ensure it
+          const result = reader.result;
+
+          if (result instanceof ArrayBuffer) {
+            resolve(result);
+          } else if (typeof result === 'string') {
+            // Convert string to ArrayBuffer
+            const encoder = new TextEncoder();
+            resolve(encoder.encode(result).buffer);
+          } else if (result && result.buffer) {
+            // If it's a typed array, get its buffer
+            resolve(result.buffer);
+          } else {
+            reject(new Error('Unable to convert file to ArrayBuffer'));
+          }
+        }
       };
       reader.readAsArrayBuffer(this);
     });
@@ -92,11 +113,28 @@ if (typeof File !== 'undefined' && !File.prototype.arrayBuffer) {
 
 // Polyfill Blob.prototype.arrayBuffer for Jest
 if (typeof Blob !== 'undefined' && !Blob.prototype.arrayBuffer) {
-  Blob.prototype.arrayBuffer = function() {
-    return new Promise((resolve) => {
+  Blob.prototype.arrayBuffer = async function() {
+    return new Promise((resolve, reject) => {
       const reader = new FileReader();
-      reader.onload = () => {
-        resolve(reader.result);
+      reader.onloadend = () => {
+        if (reader.error) {
+          reject(reader.error);
+        } else {
+          const result = reader.result;
+
+          if (result instanceof ArrayBuffer) {
+            resolve(result);
+          } else if (typeof result === 'string') {
+            // Convert string to ArrayBuffer
+            const encoder = new TextEncoder();
+            resolve(encoder.encode(result).buffer);
+          } else if (result && result.buffer) {
+            // If it's a typed array, get its buffer
+            resolve(result.buffer);
+          } else {
+            reject(new Error('Unable to convert blob to ArrayBuffer'));
+          }
+        }
       };
       reader.readAsArrayBuffer(this);
     });
