@@ -5,6 +5,7 @@ import {
   deriveKeyFromMnemonic,
   storeKey,
 } from "../utils/cryptoUtils";
+import { testEncryptionKey } from "../utils/keyTest";
 import { Button } from "../components/ui/button";
 import {
   Card,
@@ -20,6 +21,9 @@ import { Label } from "../components/ui/label";
 import { toast } from "sonner";
 import { Textarea } from "../components/ui/textarea";
 import { ArrowLeft } from "lucide-react";
+import { BackupVerification } from "../components/key-management/BackupVerification";
+import { Checkbox } from "../components/ui/checkbox";
+import { DeviceManagement } from "../components/key-management/DeviceManagement";
 
 export const KeyManagementPage: React.FC = () => {
   const navigate = useNavigate();
@@ -30,6 +34,10 @@ export const KeyManagementPage: React.FC = () => {
   const [inputMnemonic, setInputMnemonic] = useState<string>("");
   const [showFileUpload, setShowFileUpload] = useState(false);
   const [viewMode, setViewMode] = useState<"recover" | "generate">("recover");
+  const [isTesting, setIsTesting] = useState(false);
+  const [hasDownloaded, setHasDownloaded] = useState(false);
+  const [hasWrittenDown, setHasWrittenDown] = useState(false);
+  const [isVerified, setIsVerified] = useState(false);
 
   const handleGenerateNewMnemonicAndKey = async () => {
     setError("");
@@ -65,9 +73,10 @@ export const KeyManagementPage: React.FC = () => {
       toast.success("Key Loaded Successfully!", {
         description: "Your encryption key has been loaded from the mnemonic.",
       });
+      // Navigate to storage instead of reloading
       setTimeout(() => {
-        window.location.reload();
-      }, 2000);
+        navigate("/storage");
+      }, 1500);
     } catch (err) {
       console.error("Error loading key from mnemonic:", err);
       setError(
@@ -109,9 +118,10 @@ export const KeyManagementPage: React.FC = () => {
           toast.success("Encryption key added from file!", {
             description: "Your encryption key has been added to storage.",
           });
+          // Navigate to storage instead of reloading
           setTimeout(() => {
-            window.location.reload();
-          }, 2000);
+            navigate("/storage");
+          }, 1500);
         } catch (error) {
           console.error("Error processing key file:", error);
           setError(
@@ -130,6 +140,9 @@ export const KeyManagementPage: React.FC = () => {
     setError("");
     setInputMnemonic("");
     setGeneratedMnemonic(null);
+    setHasDownloaded(false);
+    setHasWrittenDown(false);
+    setIsVerified(false);
     setViewMode("generate");
   };
 
@@ -137,6 +150,9 @@ export const KeyManagementPage: React.FC = () => {
     setError("");
     setInputMnemonic("");
     setGeneratedMnemonic(null);
+    setHasDownloaded(false);
+    setHasWrittenDown(false);
+    setIsVerified(false);
     setViewMode("recover");
   };
 
@@ -152,7 +168,44 @@ export const KeyManagementPage: React.FC = () => {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
+    setHasDownloaded(true);
     toast.info("Mnemonic downloaded as zerodrive-mnemonic.txt");
+  };
+
+  const handleVerificationComplete = () => {
+    setIsVerified(true);
+    toast.success("Backup verified!", {
+      description: "You can now safely use your encryption key.",
+      duration: 3000,
+    });
+    setTimeout(() => {
+      navigate("/storage");
+    }, 2000);
+  };
+
+  const handleTestKey = async () => {
+    setIsTesting(true);
+    try {
+      const result = await testEncryptionKey();
+
+      if (result.success) {
+        toast.success(result.message, {
+          description: "Your key is working correctly and ready to use.",
+          duration: 5000,
+        });
+      } else {
+        toast.error(result.message, {
+          description: "Please regenerate your key or check your backup.",
+          duration: 7000,
+        });
+      }
+    } catch (error) {
+      toast.error("Test failed", {
+        description: "An unexpected error occurred while testing your key.",
+      });
+    } finally {
+      setIsTesting(false);
+    }
   };
 
   return (
@@ -247,30 +300,91 @@ export const KeyManagementPage: React.FC = () => {
                 : "Generate New Secure Mnemonic & Key"}
             </Button>
             {generatedMnemonic && (
-              <div className="mt-3 p-3 border rounded-md bg-muted space-y-3">
-                <div>
-                  <p className="text-sm text-destructive font-semibold mb-1">
-                    IMPORTANT: Save this mnemonic phrase in a safe place. Do not
-                    share it.
-                  </p>
-                  <Textarea
-                    readOnly
-                    value={generatedMnemonic}
-                    rows={3}
-                    className="font-mono text-sm select-all"
-                  />
-                  <p className="text-xs text-muted-foreground mt-1">
-                    This phrase is the ONLY way to recover your encryption key.
-                  </p>
+              <>
+                <div className="mt-3 p-3 border rounded-md bg-muted space-y-3">
+                  <div>
+                    <p className="text-sm text-destructive font-semibold mb-1">
+                      IMPORTANT: Save this mnemonic phrase in a safe place. Do not
+                      share it.
+                    </p>
+                    <Textarea
+                      readOnly
+                      value={generatedMnemonic}
+                      rows={3}
+                      className="font-mono text-sm select-all"
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      This phrase is the ONLY way to recover your encryption key.
+                    </p>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      onClick={handleDownloadMnemonic}
+                      variant="secondary"
+                      size="sm"
+                    >
+                      Download Mnemonic (.txt)
+                    </Button>
+                    <Button
+                      onClick={handleTestKey}
+                      variant="outline"
+                      size="sm"
+                      disabled={isTesting}
+                    >
+                      {isTesting ? "Testing..." : "Test Your Key"}
+                    </Button>
+                  </div>
                 </div>
-                <Button
-                  onClick={handleDownloadMnemonic}
-                  variant="secondary"
-                  size="sm"
-                >
-                  Download Mnemonic (.txt)
-                </Button>
-              </div>
+
+                <div className="mt-4 p-4 border-2 border-orange-500/50 rounded-md bg-orange-50 dark:bg-orange-950/20 space-y-3">
+                  <p className="text-sm font-semibold text-orange-900 dark:text-orange-100">
+                    Please confirm you have saved your mnemonic:
+                  </p>
+                  <div className="space-y-2">
+                    <div className="flex items-start space-x-2">
+                      <Checkbox
+                        id="downloaded"
+                        checked={hasDownloaded}
+                        onCheckedChange={(checked) => setHasDownloaded(checked === true)}
+                      />
+                      <label
+                        htmlFor="downloaded"
+                        className="text-sm leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
+                      >
+                        I have downloaded the mnemonic file or written it down in a secure location
+                      </label>
+                    </div>
+                    <div className="flex items-start space-x-2">
+                      <Checkbox
+                        id="written"
+                        checked={hasWrittenDown}
+                        onCheckedChange={(checked) => setHasWrittenDown(checked === true)}
+                      />
+                      <label
+                        htmlFor="written"
+                        className="text-sm leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
+                      >
+                        I understand that losing this phrase means permanent loss of access to my encrypted files
+                      </label>
+                    </div>
+                  </div>
+                </div>
+
+                {hasDownloaded && hasWrittenDown && !isVerified && (
+                  <BackupVerification
+                    mnemonic={generatedMnemonic}
+                    onVerified={handleVerificationComplete}
+                  />
+                )}
+
+                {isVerified && (
+                  <div className="mt-4 p-4 border-2 border-green-500 rounded-md bg-green-50 dark:bg-green-950/20">
+                    <p className="text-sm font-semibold text-green-900 dark:text-green-100 text-center">
+                      ✅ Your backup has been verified! Redirecting to storage...
+                    </p>
+                  </div>
+                )}
+              </>
             )}
             <Button
               variant="link"
@@ -290,6 +404,10 @@ export const KeyManagementPage: React.FC = () => {
           </CardContent>
         )}
       </Card>
+
+      <div className="sm:max-w-lg w-full">
+        <DeviceManagement />
+      </div>
     </div>
   );
 };
