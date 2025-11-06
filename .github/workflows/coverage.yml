@@ -1,0 +1,102 @@
+name: Code Coverage
+
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  coverage:
+    name: Generate Coverage Report
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18.x
+
+      - name: Install backend dependencies
+        working-directory: ./backend
+        run: npm ci
+
+      - name: Install frontend dependencies
+        working-directory: ./app
+        run: npm ci
+
+      - name: Run backend tests with coverage
+        working-directory: ./backend
+        run: npm test -- --coverage --watchAll=false --coverageReporters=text --coverageReporters=lcov
+
+      - name: Run frontend tests with coverage
+        working-directory: ./app
+        run: CI=true npm test -- --coverage --watchAll=false --coverageReporters=text --coverageReporters=lcov
+        env:
+          REACT_APP_API_URL: http://localhost:3001
+
+      - name: Generate coverage summary
+        id: coverage-summary
+        run: |
+          echo "## 📊 Test Coverage Report" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Backend Coverage" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          cat backend/coverage/coverage-summary.txt 2>/dev/null || echo "No backend coverage data" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Frontend Coverage" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          cat app/coverage/coverage-summary.txt 2>/dev/null || echo "No frontend coverage data" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+      - name: Comment coverage on PR
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+
+            let backendCoverage = 'No coverage data available';
+            let frontendCoverage = 'No coverage data available';
+
+            try {
+              backendCoverage = fs.readFileSync('backend/coverage/coverage-summary.txt', 'utf8');
+            } catch (e) {
+              console.log('Backend coverage file not found');
+            }
+
+            try {
+              frontendCoverage = fs.readFileSync('app/coverage/coverage-summary.txt', 'utf8');
+            } catch (e) {
+              console.log('Frontend coverage file not found');
+            }
+
+            const body = `## 📊 Test Coverage Report
+
+            ### Backend Coverage
+            \`\`\`
+            ${backendCoverage}
+            \`\`\`
+
+            ### Frontend Coverage
+            \`\`\`
+            ${frontendCoverage}
+            \`\`\`
+
+            ---
+            *Coverage thresholds: Backend 70%, Frontend varies by project configuration*`;
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: body
+            });
+
+      - name: Check coverage thresholds
+        working-directory: ./backend
+        run: |
+          echo "Checking backend coverage thresholds..."
+          npm test -- --coverage --watchAll=false
