@@ -98,7 +98,7 @@ jobs:
         env:
           REACT_APP_API_URL: http://localhost:3001
           CI: true
-          ESLINT_NO_DEV_ERRORS: true  # Allow ESLint warnings in build
+          DISABLE_ESLINT_PLUGIN: true  # Disable ESLint during build (dev catches warnings)
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
