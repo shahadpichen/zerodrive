@@ -222,4 +222,118 @@ describe('CryptoUtils', () => {
       expect(jwk1.k).toBe(jwk2.k);
     });
   });
+
+  describe('Edge Cases', () => {
+    it('should handle empty string mnemonic', async () => {
+      (bip39.validateMnemonic as jest.Mock).mockReturnValue(false);
+
+      await expect(deriveKeyFromMnemonic('')).rejects.toThrow(
+        'Invalid mnemonic phrase'
+      );
+    });
+
+    it('should handle mnemonic with only spaces', async () => {
+      (bip39.validateMnemonic as jest.Mock).mockReturnValue(false);
+
+      await expect(deriveKeyFromMnemonic('   ')).rejects.toThrow(
+        'Invalid mnemonic phrase'
+      );
+    });
+
+    it('should handle mnemonic with extra whitespace', async () => {
+      const mockSeed = new Uint8Array(64).fill(1);
+      (bip39.validateMnemonic as jest.Mock).mockReturnValue(true);
+      (bip39.mnemonicToSeedSync as jest.Mock).mockReturnValue(mockSeed);
+
+      const mnemonicWithSpaces = '  word1  word2  word3  ';
+      await expect(
+        deriveKeyFromMnemonic(mnemonicWithSpaces)
+      ).resolves.toBeTruthy();
+    });
+
+    it('should handle corrupted sessionStorage data', async () => {
+      sessionStorage.setItem('aes-gcm-key', 'not-valid-json');
+
+      await expect(getStoredKey()).rejects.toThrow();
+    });
+
+    it('should handle partial key data in storage', async () => {
+      sessionStorage.setItem('aes-gcm-key', JSON.stringify({ kty: 'oct' }));
+
+      await expect(getStoredKey()).rejects.toThrow();
+    });
+
+    it('should handle very long mnemonic', async () => {
+      const longMnemonic = 'word '.repeat(100);
+      (bip39.validateMnemonic as jest.Mock).mockReturnValue(false);
+
+      await expect(deriveKeyFromMnemonic(longMnemonic)).rejects.toThrow(
+        'Invalid mnemonic phrase'
+      );
+    });
+
+    it('should handle special characters in mnemonic', async () => {
+      const specialCharMnemonic = 'word1 @#$% word2 word3';
+      (bip39.validateMnemonic as jest.Mock).mockReturnValue(false);
+
+      await expect(deriveKeyFromMnemonic(specialCharMnemonic)).rejects.toThrow(
+        'Invalid mnemonic phrase'
+      );
+    });
+
+    it('should handle numbers in mnemonic', async () => {
+      const numberMnemonic = '123 456 789';
+      (bip39.validateMnemonic as jest.Mock).mockReturnValue(false);
+
+      await expect(deriveKeyFromMnemonic(numberMnemonic)).rejects.toThrow(
+        'Invalid mnemonic phrase'
+      );
+    });
+
+    it('should handle clearStoredKey when key does not exist', () => {
+      expect(() => clearStoredKey()).not.toThrow();
+      expect(sessionStorage.getItem('aes-gcm-key')).toBeNull();
+    });
+
+    it('should handle multiple rapid store/retrieve cycles', async () => {
+      for (let i = 0; i < 10; i++) {
+        const key = await generateKey();
+        await storeKey(key);
+        const retrieved = await getStoredKey();
+        expect(retrieved).toBeTruthy();
+        clearStoredKey();
+      }
+    });
+  });
+
+  describe('Concurrency', () => {
+    it('should handle concurrent key generation', async () => {
+      const keys = await Promise.all([
+        generateKey(),
+        generateKey(),
+        generateKey(),
+      ]);
+
+      // All keys should be different
+      const jwks = await Promise.all(
+        keys.map((k) => crypto.subtle.exportKey('jwk', k))
+      );
+
+      expect(jwks[0].k).not.toBe(jwks[1].k);
+      expect(jwks[1].k).not.toBe(jwks[2].k);
+      expect(jwks[0].k).not.toBe(jwks[2].k);
+    });
+
+    it('should handle concurrent mnemonic generation', () => {
+      (bip39.generateMnemonic as jest.Mock).mockImplementation((bits) => {
+        return `mnemonic-${Date.now()}-${Math.random()}`;
+      });
+
+      const mnemonics = Array.from({ length: 5 }, () => generateMnemonic());
+
+      // All should be different
+      const uniqueMnemonics = new Set(mnemonics);
+      expect(uniqueMnemonics.size).toBe(5);
+    });
+  });
 });

@@ -14,7 +14,7 @@ export async function testEncryptionKey(): Promise<{
     if (!key) {
       return {
         success: false,
-        message: "No encryption key found in storage"
+        message: "❌ No encryption key found in storage"
       };
     }
 

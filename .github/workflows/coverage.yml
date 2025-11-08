@@ -35,7 +35,7 @@ jobs:
         working-directory: ./app
         run: CI=true npm test -- --coverage --watchAll=false --coverageReporters=text --coverageReporters=lcov
         env:
-          REACT_APP_API_URL: http://localhost:3001
+          REACT_APP_API_URL: http://localhost:3001/api
 
       - name: Generate coverage summary
         id: coverage-summary

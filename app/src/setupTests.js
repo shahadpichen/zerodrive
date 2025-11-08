@@ -72,10 +72,15 @@ beforeEach(() => {
 
 // Mock Web Crypto API using Node.js crypto
 const { webcrypto } = require('crypto');
+const { TextEncoder, TextDecoder } = require('util');
 
 Object.defineProperty(global, 'crypto', {
   value: webcrypto,
 });
+
+// Add TextEncoder and TextDecoder to global scope
+global.TextEncoder = TextEncoder;
+global.TextDecoder = TextDecoder;
 
 // Polyfill File.prototype.arrayBuffer for Jest
 // Uses a simpler approach that works in both local and CI environments
