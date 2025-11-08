@@ -1,7 +1,13 @@
-import { useEffect, useState } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
-import { getStoredKey } from '../../utils/cryptoUtils';
-import { CheckCircle2, XCircle, Info } from 'lucide-react';
+import { useEffect, useState } from "react";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "../ui/card";
+import { getStoredKey } from "../../utils/cryptoUtils";
+import { CheckCircle2, XCircle, Info } from "lucide-react";
 
 export function DeviceManagement() {
   const [hasKey, setHasKey] = useState(false);
@@ -25,9 +31,11 @@ export function DeviceManagement() {
 
   if (isChecking) {
     return (
-      <Card className="mt-6">
-        <CardHeader>
-          <CardTitle className="text-lg">Using ZeroDrive on Other Devices</CardTitle>
+      <Card className="sm:max-w-lg w-full h-fit">
+        <CardHeader className="flex flex-col space-y-1.5 p-6">
+          <CardTitle className="font-semibold leading-none tracking-tight mb-2">
+            Using ZeroDrive on Other Devices
+          </CardTitle>
           <CardDescription>Checking your key status...</CardDescription>
         </CardHeader>
       </Card>
@@ -35,11 +43,14 @@ export function DeviceManagement() {
   }
 
   return (
-    <Card className="mt-6">
-      <CardHeader>
-        <CardTitle className="text-lg">Using ZeroDrive on Other Devices</CardTitle>
-        <CardDescription>
-          Your key is saved on this device. Here's how to access your files from other devices.
+    <Card className="sm:max-w-lg w-full h-fit">
+      <CardHeader className="flex flex-col space-y-1.5 p-6">
+        <CardTitle className="font-semibold leading-none tracking-tight mb-2">
+          Using ZeroDrive on Other Devices
+        </CardTitle>
+        <CardDescription className="text-sm text-muted-foreground">
+          Your key is saved on this device. Here's how to access your files from
+          other devices.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -54,12 +65,15 @@ export function DeviceManagement() {
                 <XCircle className="h-4 w-4 text-red-600 dark:text-red-400" />
               )}
               <span className="text-sm">
-                {hasKey ? 'Saved securely on this device ✓' : 'No key found on this device'}
+                {hasKey
+                  ? "Saved securely on this device ✓"
+                  : "No key found on this device"}
               </span>
             </div>
             {hasKey && (
               <p className="text-xs text-muted-foreground ml-6">
-                Your key is saved safely in your browser and never leaves this device.
+                Your key is saved safely in your browser and never leaves this
+                device.
               </p>
             )}
           </div>
@@ -75,8 +89,14 @@ export function DeviceManagement() {
                   How to use your files on another device:
                 </p>
                 <ol className="list-decimal list-inside space-y-1.5 text-xs text-blue-800 dark:text-blue-200">
-                  <li>On this computer/phone: Save your backup phrase (the 12 words shown above) somewhere safe</li>
-                  <li>On your other device: Open ZeroDrive and click "I already have a backup phrase"</li>
+                  <li>
+                    On this computer/phone: Save your backup phrase (the 12
+                    words shown above) somewhere safe
+                  </li>
+                  <li>
+                    On your other device: Open ZeroDrive and click "I already
+                    have a backup phrase"
+                  </li>
                   <li>Type in the same 12 words you saved earlier</li>
                   <li>That's it! Your files will appear on that device too</li>
                 </ol>
@@ -84,14 +104,6 @@ export function DeviceManagement() {
             </div>
           </div>
         )}
-
-        {/* Storage Information */}
-        <div className="pt-2 border-t">
-          <p className="text-xs text-muted-foreground">
-            <strong>Important:</strong> Your key stays on this device and is never sent anywhere.
-            To use ZeroDrive on another device, you'll need to enter your backup phrase there.
-          </p>
-        </div>
       </CardContent>
     </Card>
   );
