@@ -23,15 +23,17 @@ import { Button } from "../ui/button";
 interface FileListProps {
   view?: "compact" | "recent" | "full";
   refreshKey?: number;
+  userEmail?: string;
 }
 
 export const FileList: React.FC<FileListProps> = ({
   view = "full",
   refreshKey,
+  userEmail: userEmailProp,
 }) => {
   const [allUserFiles, setAllUserFiles] = useState<FileMeta[]>([]);
   const [filteredFiles, setFilteredFiles] = useState<FileMeta[]>([]);
-  const [userEmail, setUserEmail] = useState<string | null>(null);
+  const userEmail = userEmailProp || null;
   const [isLoadingFiles, setIsLoadingFiles] = useState<boolean>(true);
   const [filter, setFilter] = useState<MimeTypeCategory | "All Files">(
     "All Files"
@@ -51,50 +53,6 @@ export const FileList: React.FC<FileListProps> = ({
   const [hasEncryptionKey, setHasEncryptionKey] = useState<boolean>(false);
   const [isOn, setIsOn] = useState(true);
   const [refreshFileListKey, setRefreshFileListKey] = useState(0);
-
-  useEffect(() => {
-    const initAndGetUser = () => {
-      console.log("[FileList] Attempting to initialize GAPI client...");
-      try {
-        gapi.load("client:auth2", () => {
-          gapi.client
-            .init({
-              clientId: process.env.REACT_APP_PUBLIC_CLIENT_ID,
-              scope: process.env.REACT_APP_PUBLIC_SCOPE,
-            })
-            .then(() => {
-              console.log("[FileList] GAPI client initialized.");
-              const authInstance = gapi.auth2?.getAuthInstance();
-              if (authInstance && authInstance.isSignedIn.get()) {
-                const profile = authInstance.currentUser
-                  .get()
-                  .getBasicProfile();
-                if (profile) {
-                  const email = profile.getEmail();
-                  setUserEmail(email);
-                } else {
-                  console.warn(
-                    "[FileList] GAPI signed in but profile is null."
-                  );
-                }
-              } else {
-                console.warn(
-                  "[FileList] GAPI not signed in or auth instance unavailable."
-                );
-              }
-            })
-            .catch((initError) => {
-              console.error("[FileList] GAPI client init error:", initError);
-            });
-        });
-      } catch (loadError) {
-        console.error("[FileList] GAPI load error:", loadError);
-      }
-    };
-    if (!userEmail) {
-      initAndGetUser();
-    }
-  }, [userEmail]);
 
   useEffect(() => {
     const checkKey = async () => {

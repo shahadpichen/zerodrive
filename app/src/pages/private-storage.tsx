@@ -181,7 +181,6 @@ function PrivateStorage() {
         await fetchAndStoreFileMetadata();
         const files = await getAllFilesForUser(email);
         setUserHasFiles(files.length > 0);
-        setRefreshFileListKey((prev) => prev + 1);
         await loadStorageInfo();
 
         // Check for sharing keys
@@ -474,7 +473,7 @@ function PrivateStorage() {
                 />
               </Button>
             </div>
-            <FileList view="compact" refreshKey={refreshFileListKey} />
+            <FileList view="compact" refreshKey={refreshFileListKey} userEmail={userEmail} />
           </div>
 
           <div className="col-span-1 flex flex-col items-start md:items-end">
