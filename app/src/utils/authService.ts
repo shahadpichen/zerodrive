@@ -12,7 +12,7 @@ const GOOGLE_TOKEN_EXPIRY_KEY = 'zerodrive_google_token_expiry';
  * Initiate login by redirecting to backend OAuth
  */
 export function login(): void {
-  window.location.href = `${API_URL}/api/auth/google`;
+  window.location.href = `${API_URL}/auth/google`;
 }
 
 /**
@@ -173,7 +173,7 @@ export async function fetchGoogleToken(): Promise<string | null> {
   }
 
   try {
-    const response = await fetch(`${API_URL}/api/auth/google-token`, {
+    const response = await fetch(`${API_URL}/auth/google-token`, {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${jwtToken}`,
