@@ -30,6 +30,7 @@ export function getAuthUrl(): string {
     'https://www.googleapis.com/auth/userinfo.email',
     'https://www.googleapis.com/auth/userinfo.profile',
     'https://www.googleapis.com/auth/drive.file', // ZeroDrive file access
+    'https://www.googleapis.com/auth/drive.appdata', // RSA key backup to appDataFolder
   ];
 
   const authUrl = oauth2Client.generateAuthUrl({

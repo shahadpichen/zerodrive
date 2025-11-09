@@ -28,6 +28,7 @@ import {
   storeUserKeyPair,
   userHasStoredKeys,
   getUserKeyPair,
+  deleteUserKeyPair,
 } from "../utils/keyStorage";
 import {
   encryptRsaPrivateKeyWithAesKey,
@@ -53,6 +54,24 @@ const ShareFilesPage: React.FC = () => {
     useState<boolean>(false);
   const [isSendingInvitation, setIsSendingInvitation] =
     useState<boolean>(false);
+
+  // Rollback function to clean up keys if backup fails
+  const rollbackKeyGeneration = async (email: string) => {
+    try {
+      console.log('Rolling back key generation for:', email);
+
+      // 1. Delete from IndexedDB
+      await deleteUserKeyPair(email);
+
+      // 2. Delete from PostgreSQL
+      const hashedEmail = await hashEmail(email);
+      await apiClient.publicKeys.delete(hashedEmail);
+
+      console.log('Rollback completed: keys deleted from all storage locations');
+    } catch (error) {
+      console.error('Error during rollback:', error);
+    }
+  };
 
   useEffect(() => {
     const initializeAndCheckKeys = async () => {
@@ -274,9 +293,22 @@ const ShareFilesPage: React.FC = () => {
     }
 
     setIsGeneratingKeys(true);
-    const genToastId = toast.loading("Checking for primary encryption key...");
+    const genToastId = toast.loading("Performing preflight checks...");
 
     try {
+      // 1. Check Google Drive authentication FIRST
+      const authInstance = gapi.auth2?.getAuthInstance();
+      if (!authInstance || !authInstance.isSignedIn.get()) {
+        toast.error('Google Drive not authenticated', {
+          description: 'Backup is required for file sharing. Please ensure you are signed in.',
+          id: genToastId
+        });
+        setIsGeneratingKeys(false);
+        return;
+      }
+
+      // 2. Check for primary encryption key
+      toast.loading("Checking for primary encryption key...", { id: genToastId });
       const primaryAesKey = await getStoredKey();
 
       if (!primaryAesKey) {
@@ -289,23 +321,21 @@ const ShareFilesPage: React.FC = () => {
         return;
       }
 
+      // 3. Generate RSA keys
       toast.loading("Generating your sharing keys...", { id: genToastId });
-
       const keyPair = await generateUserKeyPair();
       const hashedEmail = await hashEmail(senderEmail);
+
+      // 4. Store keys locally (IndexedDB and PostgreSQL)
       await storeUserPublicKey(hashedEmail, keyPair.publicKeyJwk);
       await storeUserKeyPair(senderEmail, keyPair);
 
-      toast.success(
-        "Sharing keys generated and public key registered locally.",
-        { id: genToastId }
-      );
-      setHasGeneratedKeys(true);
-
+      // 5. Backup to Google Drive (MANDATORY)
       if (keyPair.privateKeyJwk) {
-        toast.loading("Backing up sharing private key to Google Drive...", {
+        toast.loading("Backing up to Google Drive (required)...", {
           id: genToastId,
         });
+
         try {
           const encryptedPrivateKeyBlob = await encryptRsaPrivateKeyWithAesKey(
             keyPair.privateKeyJwk,
@@ -321,35 +351,34 @@ const ShareFilesPage: React.FC = () => {
             encryptedPrivateKeyBlob
           );
 
-          if (uploadFileId) {
-            toast.success(`Sharing private key backed up to Google Drive `);
-          } else {
-            toast.error(
-              "Failed to back up sharing private key to Google Drive.",
-              {
-                description:
-                  "Please check console for errors. Your keys are generated locally, but backup failed.",
-                id: genToastId,
-                duration: 10000,
-              }
-            );
+          if (!uploadFileId) {
+            throw new Error('Google Drive upload returned null');
           }
+
+          // ✅ SUCCESS - Everything worked!
+          setHasGeneratedKeys(true);
+          toast.success('Sharing keys generated and backed up to Drive', {
+            id: genToastId
+          });
+
         } catch (backupError) {
-          console.error(
-            "Failed to encrypt or backup sharing private key:",
-            backupError
-          );
-          toast.error(
-            "Keys generated locally, but failed to prepare/backup sharing private key.",
-            {
-              description:
-                backupError instanceof Error
-                  ? backupError.message
-                  : "Unknown error during backup.",
-              id: genToastId,
-              duration: 10000,
-            }
-          );
+          // ❌ BACKUP FAILED - Rollback everything
+          console.error('Backup failed, rolling back:', backupError);
+
+          toast.loading('Backup failed - cleaning up...', { id: genToastId });
+
+          await rollbackKeyGeneration(senderEmail);
+
+          toast.error('Key generation cancelled due to backup failure', {
+            description: backupError instanceof Error
+              ? backupError.message
+              : 'Could not backup to Google Drive. Please check connection and try again.',
+            id: genToastId,
+            duration: 8000
+          });
+
+          setIsGeneratingKeys(false);
+          return; // Stop here - don't continue
         }
       }
     } catch (error) {
