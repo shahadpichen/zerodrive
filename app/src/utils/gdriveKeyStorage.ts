@@ -1,6 +1,7 @@
 import { gapi } from "gapi-script";
 import { toast } from "sonner";
 import logger from "./logger";
+import { getGoogleAccessToken } from "./gapiInit";
 
 // const FOLDER_NAME = "ZeroDrive_Key_Backup"; // No longer using a visible custom folder
 const RSA_KEY_FILE_NAME = "zerodrive_rsa_key_backup.json"; // Stored in appDataFolder
@@ -21,19 +22,19 @@ async function ensureDriveApiLoaded() {
  * Uploads the encrypted RSA private key to the user's Google Drive root folder.
  * If a file with the same name exists, it will be updated.
  * @param keyBlob The encrypted RSA private key as a Blob.
- * @returns A Promise that resolves to the file ID if successful, or null on failure.
+ * @returns A Promise that resolves to the file ID if successful.
+ * @throws Error if upload fails
  */
 export async function uploadEncryptedRsaKeyToDrive(
   keyBlob: Blob
-): Promise<string | null> {
+): Promise<string> {
   const fileName = RSA_KEY_FILE_NAME;
   try {
     await ensureDriveApiLoaded();
-    const authInstance = gapi.auth2?.getAuthInstance();
-    if (!authInstance || !authInstance.isSignedIn.get()) {
+    const token = await getGoogleAccessToken();
+    if (!token) {
       throw new Error("User not authenticated for Google Drive upload.");
     }
-    const token = authInstance.currentUser.get().getAuthResponse().access_token;
 
     // Check if the file already exists in appDataFolder (hidden from user)
     const query = `name='${fileName}' and trashed=false`;
@@ -105,26 +106,24 @@ export async function uploadEncryptedRsaKeyToDrive(
       `Error uploading RSA key backup '${fileName}' to Google Drive appDataFolder:`,
       error
     );
-    toast.error(`Failed to upload RSA key backup to Google Drive.`, {
-      description: error.message,
-    });
-    return null;
+    // Re-throw error so caller can handle it with proper context
+    throw error;
   }
 }
 
 /**
  * Downloads the encrypted RSA private key from the user's Google Drive appDataFolder (hidden).
- * @returns A Promise that resolves to a Blob containing the key data, or null if not found or on error.
+ * @returns A Promise that resolves to a Blob containing the key data.
+ * @throws Error if download fails or file not found
  */
-export async function downloadEncryptedRsaKeyFromDrive(): Promise<Blob | null> {
+export async function downloadEncryptedRsaKeyFromDrive(): Promise<Blob> {
   const fileName = RSA_KEY_FILE_NAME;
   try {
     await ensureDriveApiLoaded();
-    const authInstance = gapi.auth2?.getAuthInstance();
-    if (!authInstance || !authInstance.isSignedIn.get()) {
+    const token = await getGoogleAccessToken();
+    if (!token) {
       throw new Error("User not authenticated for Google Drive download.");
     }
-    const token = authInstance.currentUser.get().getAuthResponse().access_token;
 
     // Find the file by name within appDataFolder (hidden from user)
     const query = `name='${fileName}' and trashed=false`;
@@ -136,10 +135,9 @@ export async function downloadEncryptedRsaKeyFromDrive(): Promise<Blob | null> {
     });
 
     if (!listResponse.result.files || listResponse.result.files.length === 0) {
-      logger.warn(
-        `RSA key backup file '${fileName}' not found in Google Drive appDataFolder.`
-      );
-      return null; // File not found
+      const errorMsg = `RSA key backup file '${fileName}' not found in Google Drive appDataFolder.`;
+      logger.warn(errorMsg);
+      throw new Error(errorMsg);
     }
 
     const fileId = listResponse.result.files[0].id!;
@@ -166,9 +164,7 @@ export async function downloadEncryptedRsaKeyFromDrive(): Promise<Blob | null> {
       `Error downloading RSA key backup '${fileName}' from Google Drive appDataFolder:`,
       error
     );
-    toast.error(`Failed to download RSA key backup from Google Drive.`, {
-      description: error.message,
-    });
-    return null;
+    // Re-throw error so caller can handle it with proper context
+    throw error;
   }
 }
