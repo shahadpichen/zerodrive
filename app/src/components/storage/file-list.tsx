@@ -258,6 +258,17 @@ export const FileList: React.FC<FileListProps> = ({
   const performDelete = async () => {
     if (!fileToDelete || !userEmail) return;
 
+    // Check for encryption key before allowing deletion
+    const key = await getStoredKey();
+    if (!key) {
+      toast.error("Encryption key required", {
+        description: "You need your encryption key to delete files. Please upload it first.",
+      });
+      setShowDeleteConfirm(false);
+      setFileToDelete(null);
+      return;
+    }
+
     const { id: fileId, name: fileName } = fileToDelete;
     let deleteToastId: string | number | undefined;
     let deleteSuccess = false;

@@ -10,6 +10,7 @@ dotenv.config();
 import express, { Application, Request, Response, NextFunction } from 'express';
 import helmet from 'helmet';
 import compression from 'compression';
+import cookieParser from 'cookie-parser';
 import rateLimit from 'express-rate-limit';
 import cron from 'node-cron';
 import { testConnection } from './config/database';
@@ -70,6 +71,9 @@ if (NODE_ENV === 'production') {
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
+// Cookie parser middleware
+app.use(cookieParser());
+
 // Compression middleware
 app.use(compression());
 
@@ -91,7 +95,15 @@ const limiter = rateLimit({
   legacyHeaders: false
 });
 
-app.use('/api', limiter);
+// Apply rate limiting with exemptions for auth health checks
+app.use('/api', (req: Request, res: Response, next: NextFunction) => {
+  // Exempt auth health check and logout endpoints from rate limiting
+  // These are lightweight cookie checks called frequently by UI
+  if (req.path === '/auth/me' || req.path === '/auth/verify' || req.path === '/auth/logout') {
+    return next();
+  }
+  return limiter(req, res, next);
+});
 
 // Request ID and timing middleware
 app.use((req: Request, res: Response, next: NextFunction) => {

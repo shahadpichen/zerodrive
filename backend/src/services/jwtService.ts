@@ -8,7 +8,8 @@ import crypto from 'crypto';
 import logger from '../utils/logger';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-jwt-secret-here';
-const JWT_EXPIRY = process.env.JWT_EXPIRY || '7d';
+const JWT_EXPIRY = process.env.JWT_EXPIRY || '15m'; // Short-lived access token
+const REFRESH_TOKEN_EXPIRY = process.env.REFRESH_TOKEN_EXPIRY || '7d'; // Long-lived refresh token
 
 interface JWTPayload {
   email: string;
@@ -74,17 +75,46 @@ function hashEmail(email: string): string {
 }
 
 /**
- * Extract token from Authorization header
+ * Generate a refresh token for a user
  */
-export function extractTokenFromHeader(authHeader: string | undefined): string | null {
-  if (!authHeader) {
-    return null;
-  }
+export function generateRefreshToken(email: string): string {
+  try {
+    const emailHash = hashEmail(email);
 
-  const parts = authHeader.split(' ');
-  if (parts.length !== 2 || parts[0] !== 'Bearer') {
-    return null;
-  }
+    const payload: JWTPayload = {
+      email,
+      emailHash,
+    };
 
-  return parts[1];
+    const token = jwt.sign(payload, JWT_SECRET, {
+      expiresIn: REFRESH_TOKEN_EXPIRY,
+    } as any);
+
+    logger.info('[JWT] Refresh token generated', { emailHash });
+    return token;
+  } catch (error) {
+    logger.error('[JWT] Failed to generate refresh token', error as Error);
+    throw new Error('Refresh token generation failed');
+  }
 }
+
+/**
+ * Verify and decode a refresh token
+ */
+export function verifyRefreshToken(token: string): JWTPayload {
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET) as JWTPayload;
+    return decoded;
+  } catch (error) {
+    if (error instanceof jwt.TokenExpiredError) {
+      logger.warn('[JWT] Refresh token expired');
+      throw new Error('Refresh token expired');
+    } else if (error instanceof jwt.JsonWebTokenError) {
+      logger.warn('[JWT] Invalid refresh token');
+      throw new Error('Invalid refresh token');
+    }
+    logger.error('[JWT] Refresh token verification failed', error as Error);
+    throw new Error('Refresh token verification failed');
+  }
+}
+

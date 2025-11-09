@@ -1,14 +1,13 @@
 /**
  * Unit Tests for Auth Service (Frontend)
- * Tests JWT token management and authentication state
+ * Tests cookie-based authentication and token management
  */
 
 import {
-  setToken,
-  getToken,
   isAuthenticated,
   getUserEmail,
   logout,
+  getCsrfToken,
   setGoogleToken,
   getGoogleToken,
   isGoogleTokenExpired,
@@ -17,116 +16,158 @@ import {
 // Mock fetch globally
 global.fetch = jest.fn();
 
+// Mock document.cookie
+Object.defineProperty(document, 'cookie', {
+  writable: true,
+  value: '',
+});
+
 describe('AuthService', () => {
   beforeEach(() => {
     // Clear storage before each test
     localStorage.clear();
     sessionStorage.clear();
     jest.clearAllMocks();
-  });
-
-  describe('JWT Token Management', () => {
-    it('should store JWT token in localStorage', () => {
-      const token = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.test.token';
-
-      setToken(token);
-
-      expect(localStorage.getItem('zerodrive_auth_token')).toBe(token);
-    });
-
-    it('should retrieve stored JWT token', () => {
-      const token = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.test.token';
-      localStorage.setItem('zerodrive_auth_token', token);
-
-      const retrieved = getToken();
-
-      expect(retrieved).toBe(token);
-    });
-
-    it('should return null when no token stored', () => {
-      const retrieved = getToken();
-
-      expect(retrieved).toBeNull();
-    });
+    // Clear cookies
+    document.cookie = '';
   });
 
   describe('isAuthenticated', () => {
-    it('should return true for valid non-expired token', () => {
-      // Create a token that expires in 1 hour
-      const futureTime = Math.floor(Date.now() / 1000) + 3600;
-      const payload = btoa(JSON.stringify({ exp: futureTime }));
-      const token = `header.${payload}.signature`;
+    it('should return false when no CSRF cookie exists', async () => {
+      document.cookie = '';
 
-      localStorage.setItem('zerodrive_auth_token', token);
+      const result = await isAuthenticated();
 
-      expect(isAuthenticated()).toBe(true);
+      expect(result).toBe(false);
     });
 
-    it('should return false for expired token', () => {
-      // Create a token that expired 1 hour ago
-      const pastTime = Math.floor(Date.now() / 1000) - 3600;
-      const payload = btoa(JSON.stringify({ exp: pastTime }));
-      const token = `header.${payload}.signature`;
+    it('should return true when /auth/me returns 200', async () => {
+      document.cookie = 'zerodrive_csrf=test-csrf-token';
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: true,
+        status: 200,
+      });
 
-      localStorage.setItem('zerodrive_auth_token', token);
+      const result = await isAuthenticated();
 
-      expect(isAuthenticated()).toBe(false);
+      expect(result).toBe(true);
+      expect(global.fetch).toHaveBeenCalledWith(
+        expect.stringContaining('/auth/me'),
+        expect.objectContaining({
+          credentials: 'include',
+        })
+      );
     });
 
-    it('should return false when no token exists', () => {
-      expect(isAuthenticated()).toBe(false);
+    it('should return false when /auth/me returns 401', async () => {
+      document.cookie = 'zerodrive_csrf=test-csrf-token';
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: false,
+        status: 401,
+      });
+
+      const result = await isAuthenticated();
+
+      expect(result).toBe(false);
     });
 
-    it('should return false for malformed token', () => {
-      localStorage.setItem('zerodrive_auth_token', 'invalid.token');
+    it('should return false when /auth/me request fails', async () => {
+      document.cookie = 'zerodrive_csrf=test-csrf-token';
+      (global.fetch as jest.Mock).mockRejectedValue(new Error('Network error'));
 
-      expect(isAuthenticated()).toBe(false);
+      const result = await isAuthenticated();
+
+      expect(result).toBe(false);
     });
   });
 
   describe('getUserEmail', () => {
-    it('should extract email from JWT payload', () => {
+    it('should return email from /auth/me endpoint', async () => {
       const email = 'test@example.com';
-      const payload = btoa(JSON.stringify({ email }));
-      const token = `header.${payload}.signature`;
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          data: { email },
+        }),
+      });
 
-      localStorage.setItem('zerodrive_auth_token', token);
+      const result = await getUserEmail();
 
-      expect(getUserEmail()).toBe(email);
+      expect(result).toBe(email);
+      expect(global.fetch).toHaveBeenCalledWith(
+        expect.stringContaining('/auth/me'),
+        expect.objectContaining({
+          credentials: 'include',
+        })
+      );
     });
 
-    it('should return null when no token exists', () => {
-      expect(getUserEmail()).toBeNull();
+    it('should return null when /auth/me returns error', async () => {
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: false,
+        status: 401,
+      });
+
+      const result = await getUserEmail();
+
+      expect(result).toBeNull();
     });
 
-    it('should return null for invalid token', () => {
-      localStorage.setItem('zerodrive_auth_token', 'invalid');
+    it('should return null when request fails', async () => {
+      (global.fetch as jest.Mock).mockRejectedValue(new Error('Network error'));
 
-      expect(getUserEmail()).toBeNull();
+      const result = await getUserEmail();
+
+      expect(result).toBeNull();
+    });
+
+    it('should return null when response has no email', async () => {
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          data: {},
+        }),
+      });
+
+      const result = await getUserEmail();
+
+      expect(result).toBeNull();
+    });
+  });
+
+  describe('getCsrfToken', () => {
+    it('should extract CSRF token from cookie', () => {
+      document.cookie = 'zerodrive_csrf=test-csrf-token';
+
+      const token = getCsrfToken();
+
+      expect(token).toBe('test-csrf-token');
+    });
+
+    it('should return null when no CSRF cookie exists', () => {
+      document.cookie = '';
+
+      const token = getCsrfToken();
+
+      expect(token).toBeNull();
+    });
+
+    it('should extract CSRF token from multiple cookies', () => {
+      document.cookie = 'other_cookie=value; zerodrive_csrf=my-token; another=cookie';
+
+      const token = getCsrfToken();
+
+      expect(token).toBe('my-token');
     });
   });
 
   describe('logout', () => {
-    it('should clear JWT token from localStorage', async () => {
-      localStorage.setItem('zerodrive_auth_token', 'test-token');
-      sessionStorage.setItem('test-session', 'value');
-
-      (global.fetch as jest.Mock).mockResolvedValue({
-        ok: true,
-        json: async () => ({}),
-      });
-
-      await logout();
-
-      expect(localStorage.getItem('zerodrive_auth_token')).toBeNull();
-    });
-
     it('should clear sessionStorage', async () => {
       sessionStorage.setItem('test-key', 'test-value');
 
       (global.fetch as jest.Mock).mockResolvedValue({
         ok: true,
-        json: async () => ({}),
+        text: async () => JSON.stringify({}),
       });
 
       await logout();
@@ -134,37 +175,71 @@ describe('AuthService', () => {
       expect(sessionStorage.getItem('test-key')).toBeNull();
     });
 
-    it('should call backend logout endpoint', async () => {
-      const token = 'test-token';
-      localStorage.setItem('zerodrive_auth_token', token);
+    it('should clear Google tokens from localStorage', async () => {
+      localStorage.setItem('zerodrive_google_token', 'google-token');
+      localStorage.setItem('zerodrive_google_token_expiry', 'expiry');
 
       (global.fetch as jest.Mock).mockResolvedValue({
         ok: true,
-        json: async () => ({}),
+        text: async () => JSON.stringify({}),
+      });
+
+      await logout();
+
+      expect(localStorage.getItem('zerodrive_google_token')).toBeNull();
+      expect(localStorage.getItem('zerodrive_google_token_expiry')).toBeNull();
+    });
+
+    it('should call backend logout endpoint with CSRF token', async () => {
+      document.cookie = 'zerodrive_csrf=test-csrf-token';
+
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: true,
+        text: async () => JSON.stringify({}),
       });
 
       await logout();
 
       expect(global.fetch).toHaveBeenCalledWith(
-        expect.stringContaining('/api/auth/logout'),
+        expect.stringContaining('/auth/logout'),
         expect.objectContaining({
           method: 'POST',
           headers: expect.objectContaining({
-            Authorization: `Bearer ${token}`,
+            'X-CSRF-Token': 'test-csrf-token',
           }),
+          credentials: 'include',
         })
       );
     });
 
     it('should continue logout even if backend call fails', async () => {
-      localStorage.setItem('zerodrive_auth_token', 'test-token');
+      sessionStorage.setItem('test-key', 'test-value');
 
       (global.fetch as jest.Mock).mockRejectedValue(new Error('Network error'));
 
       await logout();
 
-      // Should still clear local storage even if backend fails
-      expect(localStorage.getItem('zerodrive_auth_token')).toBeNull();
+      // Should still clear session storage even if backend fails
+      expect(sessionStorage.getItem('test-key')).toBeNull();
+    });
+
+    it('should handle missing CSRF token gracefully', async () => {
+      document.cookie = '';
+
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: true,
+        text: async () => JSON.stringify({}),
+      });
+
+      await logout();
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        expect.stringContaining('/auth/logout'),
+        expect.objectContaining({
+          method: 'POST',
+          credentials: 'include',
+        })
+      );
     });
   });
 

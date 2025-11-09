@@ -40,12 +40,17 @@ const checkEnvironmentVariables = () => {
 
 // Root route component - checks auth when it renders
 const RootRoute: React.FC = () => {
-  const isAuthenticated = checkAuth();
-  return isAuthenticated ? (
-    <Navigate to="/storage" replace />
-  ) : (
-    <LandingPage />
-  );
+  const [isAuthenticated, setIsAuthenticated] = React.useState<boolean | null>(null);
+
+  React.useEffect(() => {
+    checkAuth().then(setIsAuthenticated);
+  }, []);
+
+  if (isAuthenticated === null) {
+    return null;
+  }
+
+  return isAuthenticated ? <Navigate to="/storage" replace /> : <LandingPage />;
 };
 
 function App() {

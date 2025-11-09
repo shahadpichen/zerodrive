@@ -11,8 +11,15 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
   children,
   redirectPath = "/",
 }) => {
-  // Check authentication fresh every time this route renders
-  const isAuthenticated = checkAuth();
+  const [isAuthenticated, setIsAuthenticated] = React.useState<boolean | null>(null);
+
+  React.useEffect(() => {
+    checkAuth().then(setIsAuthenticated);
+  }, []);
+
+  if (isAuthenticated === null) {
+    return null;
+  }
 
   if (!isAuthenticated) {
     return <Navigate to={redirectPath} replace />;

@@ -45,6 +45,7 @@ const corsOptions: cors.CorsOptions = {
     'Content-Type',
     'Accept',
     'Authorization',
+    'X-CSRF-Token',
     'Cache-Control',
     'X-Forwarded-For'
   ],

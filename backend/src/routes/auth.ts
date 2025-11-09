@@ -4,8 +4,9 @@
  */
 
 import { Router, Request, Response } from 'express';
+import crypto from 'crypto';
 import { getAuthUrl, getTokensFromCode, getUserInfo, hasFullDriveScope } from '../services/googleOAuthService';
-import { generateToken, verifyToken } from '../services/jwtService';
+import { generateToken, generateRefreshToken, verifyToken, verifyRefreshToken } from '../services/jwtService';
 import { requireAuth } from '../middleware/auth';
 import { asyncHandler, ApiErrors } from '../middleware/errorHandler';
 import { trackEvent, AnalyticsEvent, AnalyticsCategory } from '../services/analytics';
@@ -15,6 +16,7 @@ import logger from '../utils/logger';
 const router = Router();
 
 const FRONTEND_URL = process.env.APP_URL || 'http://localhost:5173';
+const NODE_ENV = process.env.NODE_ENV || 'development';
 
 /**
  * GET /api/auth/google
@@ -104,8 +106,14 @@ router.get('/callback/google', asyncHandler(async (req: Request, res: Response) 
       // Don't fail login if analytics fails
     }
 
-    // Generate JWT session token
+    // Generate JWT access token (15 minutes)
     const jwtToken = generateToken(userInfo.email);
+
+    // Generate JWT refresh token (7 days)
+    const jwtRefreshToken = generateRefreshToken(userInfo.email);
+
+    // Generate CSRF token
+    const csrfToken = crypto.randomBytes(32).toString('hex');
 
     logger.info('[Auth] User authenticated successfully', {
       email: userInfo.email,
@@ -113,8 +121,35 @@ router.get('/callback/google', asyncHandler(async (req: Request, res: Response) 
       hasLimitedScope,
     });
 
-    // Redirect to frontend with JWT token
-    res.redirect(`${FRONTEND_URL}/oauth/callback?token=${jwtToken}`);
+    // Set access token cookie (httpOnly, 15 minutes)
+    res.cookie('zerodrive_token', jwtToken, {
+      httpOnly: true,
+      secure: NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 15 * 60 * 1000, // 15 minutes in milliseconds
+      path: '/',
+    });
+
+    // Set JWT refresh token cookie (httpOnly, 7 days)
+    res.cookie('zerodrive_refresh', jwtRefreshToken, {
+      httpOnly: true,
+      secure: NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days in milliseconds
+      path: '/',
+    });
+
+    // Set CSRF token cookie (readable by frontend)
+    res.cookie('zerodrive_csrf', csrfToken, {
+      httpOnly: false, // Frontend needs to read this
+      secure: NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 7 * 24 * 60 * 60 * 1000, // Same as refresh token
+      path: '/',
+    });
+
+    // Redirect to frontend WITHOUT token in URL (more secure)
+    res.redirect(`${FRONTEND_URL}/oauth/callback`);
   } catch (error) {
     logger.error('[Auth] OAuth callback failed', error as Error);
     res.redirect(`${FRONTEND_URL}?error=auth_failed`);
@@ -126,6 +161,12 @@ router.get('/callback/google', asyncHandler(async (req: Request, res: Response) 
  * Get current authenticated user info
  */
 router.get('/me', requireAuth, asyncHandler(async (req: Request, res: Response) => {
+  logger.info('[Auth /me] Request received', {
+    hasCookie: !!req.cookies.zerodrive_token,
+    hasUser: !!req.user,
+    path: req.path,
+  });
+
   if (!req.user) {
     throw ApiErrors.Unauthorized('Not authenticated');
   }
@@ -137,43 +178,73 @@ router.get('/me', requireAuth, asyncHandler(async (req: Request, res: Response) 
 }));
 
 /**
- * POST /api/auth/logout
- * Logout user (client should clear JWT)
+ * POST /api/auth/refresh
+ * Refresh access token using refresh token from cookie
  */
-router.post('/logout', requireAuth, asyncHandler(async (req: Request, res: Response) => {
-  // In a more advanced setup, you would blacklist the token here
-  // For now, client-side token removal is sufficient
+router.post('/refresh', asyncHandler(async (req: Request, res: Response) => {
+  const refreshToken = req.cookies.zerodrive_refresh;
 
-  logger.info('[Auth] User logged out', {
-    emailHash: req.user?.emailHash,
-  });
-
-  res.apiSuccess({}, 'Logged out successfully');
-}));
-
-/**
- * POST /api/auth/verify
- * Verify if a JWT token is valid (useful for frontend)
- */
-router.post('/verify', asyncHandler(async (req: Request, res: Response) => {
-  const { token } = req.body;
-
-  if (!token) {
-    throw ApiErrors.ValidationError('Token is required');
+  if (!refreshToken) {
+    throw ApiErrors.Unauthorized('No refresh token provided');
   }
 
   try {
-    const payload = verifyToken(token);
-    res.apiSuccess({
-      valid: true,
-      email: payload.email,
+    // Verify refresh token
+    const payload = verifyRefreshToken(refreshToken);
+
+    // Generate new access token
+    const newAccessToken = generateToken(payload.email);
+
+    // Set new access token cookie
+    res.cookie('zerodrive_token', newAccessToken, {
+      httpOnly: true,
+      secure: NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 15 * 60 * 1000, // 15 minutes
+      path: '/',
+    });
+
+    logger.info('[Auth] Access token refreshed', {
       emailHash: payload.emailHash,
-    }, 'Token is valid');
+    });
+
+    res.apiSuccess({}, 'Token refreshed successfully');
   } catch (error) {
-    res.apiSuccess({
-      valid: false,
-    }, 'Token is invalid or expired');
+    logger.warn('[Auth] Token refresh failed', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    throw ApiErrors.Unauthorized('Invalid or expired refresh token');
   }
+}));
+
+/**
+ * POST /api/auth/logout
+ * Logout user (clear all auth cookies)
+ * No auth required - allows logout even with expired token
+ */
+router.post('/logout', asyncHandler(async (req: Request, res: Response) => {
+  logger.info('[Auth] User logged out');
+
+  // Clear all auth cookies with matching options (httpOnly, secure, sameSite must match)
+  const cookieOptions = {
+    httpOnly: true,
+    secure: NODE_ENV === 'production',
+    sameSite: 'lax' as const,
+    path: '/',
+  };
+
+  res.clearCookie('zerodrive_token', cookieOptions);
+  res.clearCookie('zerodrive_refresh', cookieOptions);
+
+  // CSRF token is not httpOnly (frontend needs to read it)
+  res.clearCookie('zerodrive_csrf', {
+    httpOnly: false,
+    secure: NODE_ENV === 'production',
+    sameSite: 'lax' as const,
+    path: '/',
+  });
+
+  res.apiSuccess({}, 'Logged out successfully');
 }));
 
 /**

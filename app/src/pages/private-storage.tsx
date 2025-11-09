@@ -33,7 +33,11 @@ import {
   storeUserPublicKey,
   hashEmail,
 } from "../utils/fileSharing";
-import { userHasStoredKeys, storeUserKeyPair, deleteUserKeyPair } from "../utils/keyStorage";
+import {
+  userHasStoredKeys,
+  storeUserKeyPair,
+  deleteUserKeyPair,
+} from "../utils/keyStorage";
 import { encryptRsaPrivateKeyWithAesKey } from "../utils/rsaKeyManager";
 import { uploadEncryptedRsaKeyToDrive } from "../utils/gdriveKeyStorage";
 import apiClient from "../utils/apiClient";
@@ -123,7 +127,7 @@ function PrivateStorage() {
       try {
         // Get user info from JWT first
         const { getUserEmail } = await import("../utils/authService");
-        const email = getUserEmail();
+        const email = await getUserEmail();
 
         if (!email) {
           console.error("No user email found in JWT");
@@ -138,17 +142,15 @@ function PrivateStorage() {
         }
 
         // Account switch detection
-        const { getSessionUser, setSessionUser, clearSession } =
-          await import("../utils/sessionManager");
+        const { getSessionUser, setSessionUser, clearSession } = await import(
+          "../utils/sessionManager"
+        );
         const sessionEmail = getSessionUser();
 
         if (sessionEmail && sessionEmail !== email) {
-          console.warn(
-            `Account switch detected: ${sessionEmail} -> ${email}`
-          );
+          console.warn(`Account switch detected: ${sessionEmail} -> ${email}`);
           clearSession();
           setSessionUser(email);
-          sessionStorage.setItem("isAuthenticated", "true");
           window.location.reload();
           return;
         }
@@ -159,7 +161,7 @@ function PrivateStorage() {
 
         // Set user info (no name/image from JWT, just email)
         setUserEmail(email);
-        setUserName(email.split('@')[0]); // Use email prefix as name for now
+        setUserName(email.split("@")[0]); // Use email prefix as name for now
 
         // Initialize Google API with backend tokens
         const { initializeGapi } = await import("../utils/gapiInit");
@@ -169,7 +171,8 @@ function PrivateStorage() {
         } catch (gapiError) {
           console.error("Failed to initialize Google API:", gapiError);
           toast.error("Google Drive connection failed", {
-            description: "Could not connect to Google Drive. Some features may not work. Try signing out and back in.",
+            description:
+              "Could not connect to Google Drive. Some features may not work. Try signing out and back in.",
             duration: 10000,
           });
           // Don't redirect - let user stay on page with error state
@@ -190,7 +193,8 @@ function PrivateStorage() {
       } catch (error) {
         console.error("Error loading user info or storage:", error);
         toast.error("Failed to load storage", {
-          description: "An error occurred while loading your storage. Please try refreshing the page.",
+          description:
+            "An error occurred while loading your storage. Please try refreshing the page.",
         });
         // Don't automatically redirect - stay on page with error
       } finally {
@@ -227,14 +231,22 @@ function PrivateStorage() {
       const { clearSession } = await import("../utils/sessionManager");
       const { logout } = await import("../utils/authService");
 
-      // Call auth service logout (clears JWT and Google tokens)
+      // Call auth service logout (clears cookies, localStorage, sessionStorage)
       await logout();
       clearSession();
 
-      console.log("Logout complete - all session data cleared");
-      window.location.href = "/";
+      console.log("Logout complete - redirecting to home");
+
+      // Use replace() to prevent back button issues
+      // Longer timeout to ensure cookies are fully cleared before redirect
+      setTimeout(() => {
+        console.log("[Logout Handler] Redirecting to home page");
+        window.location.replace("/");
+      }, 500);
     } catch (error) {
       console.error("Error during logout:", error);
+      // Redirect anyway on error
+      window.location.replace("/");
     }
   };
 
@@ -307,6 +319,18 @@ function PrivateStorage() {
 
   const performDeleteAllFiles = async () => {
     if (!userEmail) return;
+
+    // Check for encryption key before allowing deletion
+    const key = await getStoredKey();
+    if (!key) {
+      toast.error("Encryption key required", {
+        description:
+          "You need your encryption key to delete files. Please upload it first.",
+      });
+      setShowDeleteConfirm(false);
+      return;
+    }
+
     setIsDeleting(true);
     const success = await deleteAllAndSyncFiles(userEmail);
     setIsDeleting(false);
@@ -324,13 +348,15 @@ function PrivateStorage() {
 
   const rollbackKeyGeneration = async (email: string) => {
     try {
-      console.log('Rolling back key generation for:', email);
+      console.log("Rolling back key generation for:", email);
       await deleteUserKeyPair(email);
       const hashedEmail = await hashEmail(email);
       await apiClient.publicKeys.delete(hashedEmail);
-      console.log('Rollback completed: keys deleted from all storage locations');
+      console.log(
+        "Rollback completed: keys deleted from all storage locations"
+      );
     } catch (error) {
-      console.error('Error during rollback:', error);
+      console.error("Error during rollback:", error);
     }
   };
 
@@ -371,7 +397,7 @@ function PrivateStorage() {
 
       // 5. Backup to Google Drive (MANDATORY - rollback if fails)
       if (!keyPair.privateKeyJwk) {
-        throw new Error('Private key not generated properly');
+        throw new Error("Private key not generated properly");
       }
 
       toast.loading("Backing up sharing private key to Google Drive...", {
@@ -388,28 +414,27 @@ function PrivateStorage() {
 
         // ✅ SUCCESS - Everything worked!
         setHasSharingKeys(true);
-        toast.success('Sharing keys generated and backed up to Drive', {
-          id: genToastId
+        toast.success("Sharing keys generated and backed up to Drive", {
+          id: genToastId,
         });
-
       } catch (backupError) {
         // ❌ BACKUP FAILED - Rollback everything
-        console.error('Backup failed, rolling back:', backupError);
-        toast.loading('Backup failed - cleaning up...', { id: genToastId });
+        console.error("Backup failed, rolling back:", backupError);
+        toast.loading("Backup failed - cleaning up...", { id: genToastId });
 
         await rollbackKeyGeneration(userEmail);
 
-        toast.error('Key generation cancelled due to backup failure', {
-          description: backupError instanceof Error
-            ? backupError.message
-            : 'Could not backup to Google Drive. Please check connection and try again.',
+        toast.error("Key generation cancelled due to backup failure", {
+          description:
+            backupError instanceof Error
+              ? backupError.message
+              : "Could not backup to Google Drive. Please check connection and try again.",
           id: genToastId,
-          duration: 8000
+          duration: 8000,
         });
         setIsProcessingSharingKeys(false);
         return;
       }
-
     } catch (error) {
       console.error("Error during sharing key generation process:", error);
       const errorMessage =
@@ -475,8 +500,8 @@ function PrivateStorage() {
           </p>
         )}
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 sm:gap-8">
-          <div className="col-span-1">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 sm:gap-8">
+          <div className="col-span-2">
             <div className="flex items-center mb-3">
               <h2 className="text-base sm:text-lg font-mono font-normal">
                 Your Files
@@ -495,7 +520,11 @@ function PrivateStorage() {
                 />
               </Button>
             </div>
-            <FileList view="compact" refreshKey={refreshFileListKey} userEmail={userEmail} />
+            <FileList
+              view="compact"
+              refreshKey={refreshFileListKey}
+              userEmail={userEmail}
+            />
           </div>
 
           <div className="col-span-1 flex flex-col items-start md:items-end">

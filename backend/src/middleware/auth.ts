@@ -4,7 +4,7 @@
  */
 
 import { Request, Response, NextFunction } from 'express';
-import { verifyToken, extractTokenFromHeader } from '../services/jwtService';
+import { verifyToken } from '../services/jwtService';
 import logger from '../utils/logger';
 import { ApiErrors } from './errorHandler';
 
@@ -25,14 +25,30 @@ declare global {
  */
 export function requireAuth(req: Request, res: Response, next: NextFunction): void {
   try {
-    // Extract token from Authorization header
-    const token = extractTokenFromHeader(req.headers.authorization);
+    // Extract token from cookie (httpOnly)
+    const token = req.cookies.zerodrive_token;
 
     if (!token) {
       throw ApiErrors.Unauthorized('No authentication token provided');
     }
 
-    // Verify token
+    // CSRF validation for state-changing requests
+    if (['POST', 'PUT', 'DELETE', 'PATCH'].includes(req.method)) {
+      const csrfTokenFromHeader = req.headers['x-csrf-token'];
+      const csrfTokenFromCookie = req.cookies.zerodrive_csrf;
+
+      if (!csrfTokenFromHeader || !csrfTokenFromCookie) {
+        logger.warn('[Auth] CSRF token missing', { method: req.method, path: req.path });
+        throw ApiErrors.Forbidden('CSRF token required');
+      }
+
+      if (csrfTokenFromHeader !== csrfTokenFromCookie) {
+        logger.warn('[Auth] CSRF token mismatch', { method: req.method, path: req.path });
+        throw ApiErrors.Forbidden('CSRF validation failed');
+      }
+    }
+
+    // Verify JWT token
     const payload = verifyToken(token);
 
     // Attach user info to request
@@ -53,6 +69,8 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
       next(ApiErrors.Unauthorized('Token expired'));
     } else if (error instanceof Error && error.message.includes('Invalid')) {
       next(ApiErrors.Unauthorized('Invalid token'));
+    } else if (error instanceof Error && error.message.includes('CSRF')) {
+      next(error); // Pass CSRF errors directly
     } else {
       next(ApiErrors.Unauthorized('Authentication failed'));
     }
@@ -65,7 +83,8 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
  */
 export function optionalAuth(req: Request, res: Response, next: NextFunction): void {
   try {
-    const token = extractTokenFromHeader(req.headers.authorization);
+    // Extract token from cookie
+    const token = req.cookies.zerodrive_token;
 
     if (token) {
       const payload = verifyToken(token);
