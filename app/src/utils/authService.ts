@@ -3,8 +3,9 @@
  * Handles JWT token management and authentication flow
  */
 
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001';
-const TOKEN_KEY = 'zerodrive_auth_token';
+const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001/api';
+// JWT token is now stored in httpOnly cookie, not localStorage
+// Only Google tokens are still cached in localStorage
 const GOOGLE_TOKEN_KEY = 'zerodrive_google_token';
 const GOOGLE_TOKEN_EXPIRY_KEY = 'zerodrive_google_token_expiry';
 
@@ -19,108 +20,122 @@ export function login(): void {
  * Logout user
  */
 export async function logout(): Promise<void> {
-  const token = getToken();
+  console.log('[Logout] Starting logout process...');
+  console.log('[Logout] CSRF token:', getCsrfToken() ? 'Present' : 'Missing');
+  console.log('[Logout] API URL:', API_URL);
 
-  // Clear tokens locally
-  localStorage.removeItem(TOKEN_KEY);
-  clearGoogleTokens();
-  sessionStorage.clear();
-
-  // Call backend logout endpoint (best effort)
-  if (token) {
-    try {
-      await fetch(`${API_URL}/api/auth/logout`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      });
-    } catch (error) {
-      console.error('Backend logout failed:', error);
-      // Continue with local logout even if backend fails
-    }
-  }
-}
-
-/**
- * Store JWT token
- */
-export function setToken(token: string): void {
-  localStorage.setItem(TOKEN_KEY, token);
-}
-
-/**
- * Get stored JWT token
- */
-export function getToken(): string | null {
-  return localStorage.getItem(TOKEN_KEY);
-}
-
-/**
- * Check if user is authenticated (has valid token)
- */
-export function isAuthenticated(): boolean {
-  const token = getToken();
-  if (!token) {
-    return false;
-  }
-
-  // Basic check: decode JWT and check expiry
+  // Call backend logout endpoint to clear httpOnly cookies FIRST
   try {
-    const payload = JSON.parse(atob(token.split('.')[1]));
-    const expiryTime = payload.exp * 1000; // Convert to milliseconds
-    return Date.now() < expiryTime;
-  } catch (error) {
-    console.error('Failed to decode token:', error);
-    return false;
-  }
-}
+    const csrfToken = getCsrfToken();
+    console.log('[Logout] Sending logout request to backend...');
 
-/**
- * Get user email from JWT (client-side decode, for display only)
- */
-export function getUserEmail(): string | null {
-  const token = getToken();
-  if (!token) {
-    return null;
-  }
-
-  try {
-    const payload = JSON.parse(atob(token.split('.')[1]));
-    return payload.email || null;
-  } catch (error) {
-    console.error('Failed to decode token:', error);
-    return null;
-  }
-}
-
-/**
- * Verify token with backend (optional, for extra security)
- */
-export async function verifyToken(token?: string): Promise<boolean> {
-  const tokenToVerify = token || getToken();
-  if (!tokenToVerify) {
-    return false;
-  }
-
-  try {
-    const response = await fetch(`${API_URL}/api/auth/verify`, {
+    const response = await fetch(`${API_URL}/auth/logout`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        ...(csrfToken && { 'X-CSRF-Token': csrfToken }),
       },
-      body: JSON.stringify({ token: tokenToVerify }),
+      credentials: 'include', // Send cookies
+    });
+
+    console.log('[Logout] Backend response status:', response.status, response.ok ? 'OK' : 'ERROR');
+
+    // Consume the response body to ensure request completes
+    const responseData = await response.text();
+    console.log('[Logout] Backend response:', responseData);
+
+    if (!response.ok) {
+      console.warn('[Logout] Backend logout returned error status:', response.status);
+      // Continue with local logout even if backend fails
+    } else {
+      console.log('[Logout] Backend logout successful');
+    }
+  } catch (error) {
+    console.error('[Logout] Backend logout failed with error:', error);
+    // Continue with local logout even if backend fails
+  }
+
+  // Clear local storage and session storage
+  console.log('[Logout] Clearing local storage and session storage...');
+  clearGoogleTokens();
+  sessionStorage.clear();
+  console.log('[Logout] Logout process complete');
+}
+
+/**
+ * Get CSRF token from cookie (readable by JavaScript)
+ */
+export function getCsrfToken(): string | null {
+  const name = 'zerodrive_csrf=';
+  const cookies = document.cookie.split(';');
+  for (let cookie of cookies) {
+    cookie = cookie.trim();
+    if (cookie.startsWith(name)) {
+      return cookie.substring(name.length);
+    }
+  }
+  return null;
+}
+
+/**
+ * Check if user is authenticated by calling backend
+ * (JWT token is httpOnly cookie, can't access from JavaScript)
+ */
+export async function isAuthenticated(): Promise<boolean> {
+  // Quick check: do we have auth cookies?
+  const hasCookies = document.cookie.includes('zerodrive_csrf');
+
+  if (!hasCookies) {
+    return false;
+  }
+
+  try {
+    const response = await fetch(`${API_URL}/auth/me`, {
+      credentials: 'include', // Send cookies
+    });
+    return response.ok;
+  } catch (error) {
+    console.error('[Auth] Check failed with error:', error);
+    return false;
+  }
+}
+
+/**
+ * Get user email from backend /me endpoint
+ */
+export async function getUserEmail(): Promise<string | null> {
+  try {
+    const response = await fetch(`${API_URL}/auth/me`, {
+      credentials: 'include',
     });
 
     if (!response.ok) {
-      return false;
+      return null;
     }
 
     const data = await response.json();
-    return data.success && data.data?.valid === true;
+    return data.data?.email || null;
   } catch (error) {
-    console.error('Token verification failed:', error);
+    console.error('Failed to get user email:', error);
+    return null;
+  }
+}
+
+/**
+ * Refresh access token using refresh token cookie
+ */
+export async function refreshToken(): Promise<boolean> {
+  try {
+    const response = await fetch(`${API_URL}/auth/refresh`, {
+      method: 'POST',
+      credentials: 'include', // Send refresh token cookie
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+    return response.ok;
+  } catch (error) {
+    console.error('Token refresh failed:', error);
     return false;
   }
 }
@@ -166,19 +181,13 @@ export function isGoogleTokenExpired(): boolean {
  * Fetch Google access token from backend
  */
 export async function fetchGoogleToken(): Promise<string | null> {
-  const jwtToken = getToken();
-  if (!jwtToken) {
-    console.error('No JWT token found');
-    return null;
-  }
-
   try {
     const response = await fetch(`${API_URL}/auth/google-token`, {
       method: 'GET',
       headers: {
-        'Authorization': `Bearer ${jwtToken}`,
         'Content-Type': 'application/json',
       },
+      credentials: 'include', // Send JWT token cookie
     });
 
     if (!response.ok) {

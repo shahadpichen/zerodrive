@@ -5,7 +5,6 @@
 
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { setToken } from '../utils/authService';
 import { toast } from 'sonner';
 import { Loader2 } from 'lucide-react';
 
@@ -16,8 +15,7 @@ const OAuthCallback: React.FC = () => {
 
   useEffect(() => {
     const handleCallback = async () => {
-      // Get token from query params
-      const token = searchParams.get('token');
+      // Check for OAuth error
       const errorParam = searchParams.get('error');
 
       if (errorParam) {
@@ -56,35 +54,20 @@ const OAuthCallback: React.FC = () => {
         return;
       }
 
-      if (!token) {
-        setError('No authentication token received');
-        toast.error('Sign-in failed', {
-          description: 'No token received from server',
-        });
-
-        setTimeout(() => {
-          navigate('/');
-        }, 3000);
-        return;
-      }
-
       try {
-        // Store token
-        setToken(token);
-
-        // Store authentication status
-        sessionStorage.setItem('isAuthenticated', 'true');
+        // Token is already set as httpOnly cookie by backend
+        // No need to extract or store anything
 
         // Show success message
         toast.success('Signed in successfully!');
 
-        // Navigate to storage - ProtectedRoute will check auth fresh
+        // Navigate to storage - ProtectedRoute will verify auth via cookie
         navigate('/storage');
       } catch (error) {
-        console.error('Failed to store token:', error);
+        console.error('Failed to complete sign-in:', error);
         setError('Failed to complete sign-in');
         toast.error('Sign-in failed', {
-          description: 'Failed to store authentication token',
+          description: 'Failed to complete authentication process',
         });
 
         setTimeout(() => {

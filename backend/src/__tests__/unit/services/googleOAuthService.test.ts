@@ -58,11 +58,12 @@ describe('GoogleOAuthService', () => {
       expect(mockGenerateAuthUrl).toHaveBeenCalled();
     });
 
-    it('should request correct OAuth scopes', () => {
+    it('should request correct OAuth scopes including appDataFolder', () => {
       mockGenerateAuthUrl.mockImplementation((options) => {
         expect(options.scope).toContain('https://www.googleapis.com/auth/userinfo.email');
         expect(options.scope).toContain('https://www.googleapis.com/auth/userinfo.profile');
         expect(options.scope).toContain('https://www.googleapis.com/auth/drive.file');
+        expect(options.scope).toContain('https://www.googleapis.com/auth/drive.appdata');
         return 'https://accounts.google.com/o/oauth2/auth?...';
       });
 
@@ -85,6 +86,17 @@ describe('GoogleOAuthService', () => {
     it('should request consent prompt', () => {
       mockGenerateAuthUrl.mockImplementation((options) => {
         expect(options.prompt).toBe('consent');
+        return 'https://accounts.google.com/o/oauth2/auth?...';
+      });
+
+      getAuthUrl();
+
+      expect(mockGenerateAuthUrl).toHaveBeenCalled();
+    });
+
+    it('should request exactly 4 scopes', () => {
+      mockGenerateAuthUrl.mockImplementation((options) => {
+        expect(options.scope).toHaveLength(4);
         return 'https://accounts.google.com/o/oauth2/auth?...';
       });
 

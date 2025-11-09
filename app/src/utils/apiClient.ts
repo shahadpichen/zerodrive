@@ -3,7 +3,7 @@
  * Replaces Supabase client with self-hosted backend
  */
 
-import { getToken, logout as authLogout } from './authService';
+import { getCsrfToken, refreshToken, logout as authLogout } from './authService';
 
 // API Configuration
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001/api';
@@ -101,21 +101,25 @@ class HttpClient {
     const timeoutId = setTimeout(() => controller.abort(), this.timeout);
 
     try {
-      // Get JWT token and add to headers
-      const token = getToken();
+      // Prepare headers
       const headers: HeadersInit = {
         'Content-Type': 'application/json',
         ...options.headers,
       };
 
-      if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
+      // Add CSRF token for state-changing requests
+      if (['POST', 'PUT', 'DELETE', 'PATCH'].includes(options.method?.toUpperCase() || 'GET')) {
+        const csrfToken = getCsrfToken();
+        if (csrfToken) {
+          headers['X-CSRF-Token'] = csrfToken;
+        }
       }
 
       const response = await fetch(url, {
         ...options,
         signal: controller.signal,
         headers,
+        credentials: 'include', // Send cookies automatically
       });
 
       clearTimeout(timeoutId);
@@ -140,9 +144,22 @@ class HttpClient {
 
       // Handle HTTP errors
       if (!response.ok) {
-        // Handle 401 Unauthorized - logout and redirect to login
+        // Handle 401 Unauthorized - try refresh, then logout if refresh fails
         if (response.status === 401) {
-          console.warn('Unauthorized request, logging out...');
+          console.warn('Unauthorized request, attempting token refresh...');
+
+          // Try to refresh access token
+          const refreshed = await refreshToken();
+
+          if (refreshed) {
+            // Token refreshed successfully, retry original request
+            console.log('Token refreshed, retrying request...');
+            clearTimeout(timeoutId);
+            return this.request<T>(endpoint, options);
+          }
+
+          // Refresh failed, logout and redirect
+          console.warn('Token refresh failed, logging out...');
           await authLogout();
           window.location.href = '/';
           throw new ApiError(

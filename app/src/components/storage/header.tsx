@@ -44,7 +44,7 @@ function Header({ setIsAuthenticated }: HeaderProps) {
       await initializeGapi();
 
       // Get user email from JWT
-      const currentEmail = getUserEmail();
+      const currentEmail = await getUserEmail();
 
       if (!currentEmail) {
         console.log("User not signed in");
@@ -65,7 +65,6 @@ function Header({ setIsAuthenticated }: HeaderProps) {
 
         // Set new user
         setSessionUser(currentEmail);
-        sessionStorage.setItem("isAuthenticated", "true");
 
         // Reload to reinitialize with new account
         window.location.reload();
@@ -137,18 +136,25 @@ function Header({ setIsAuthenticated }: HeaderProps) {
   const handleLogout = async () => {
     try {
       const { logout } = await import("../../utils/authService");
+      const { clearSession } = await import("../../utils/sessionManager");
 
+      // Call auth service logout (clears cookies, localStorage, sessionStorage)
       await logout();
+      clearSession();
       setIsAuthenticated(false);
 
-      // Clear all session data (AES key, user email, auth state, etc.)
-        clearSession();
+      console.log("Logout complete - redirecting to home");
 
-        console.log("Logout complete - all session data cleared");
-        window.location.href = "/";
-      }
+      // Use replace() to prevent back button issues
+      // Longer timeout to ensure cookies are fully cleared before redirect
+      setTimeout(() => {
+        console.log('[Logout Handler] Redirecting to home page');
+        window.location.replace("/");
+      }, 500);
     } catch (error) {
       console.error("Error during logout:", error);
+      // Redirect anyway on error
+      window.location.replace("/");
     }
   };
 

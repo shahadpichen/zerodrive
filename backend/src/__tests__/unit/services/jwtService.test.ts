@@ -3,7 +3,7 @@
  * Tests JWT generation, verification, and security
  */
 
-import { generateToken, verifyToken, extractTokenFromHeader } from '../../../services/jwtService';
+import { generateToken, verifyToken, generateRefreshToken, verifyRefreshToken } from '../../../services/jwtService';
 import { generateExpiredToken } from '../../helpers/testHelpers';
 import jwt from 'jsonwebtoken';
 
@@ -88,40 +88,73 @@ describe('JWTService', () => {
     });
   });
 
-  describe('extractTokenFromHeader', () => {
-    it('should extract token from valid Bearer header', () => {
-      const token = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.test.token';
-      const header = `Bearer ${token}`;
+  describe('generateRefreshToken', () => {
+    it('should generate a valid refresh token with email and emailHash', () => {
+      const email = 'test@example.com';
+      const token = generateRefreshToken(email);
 
-      const extracted = extractTokenFromHeader(header);
+      expect(token).toBeTruthy();
+      expect(typeof token).toBe('string');
 
-      expect(extracted).toBe(token);
+      // Verify token structure (3 parts separated by dots)
+      const parts = token.split('.');
+      expect(parts).toHaveLength(3);
     });
 
-    it('should return null for missing header', () => {
-      const extracted = extractTokenFromHeader(undefined);
+    it('should include email and emailHash in refresh token payload', () => {
+      const email = 'test@example.com';
+      const token = generateRefreshToken(email);
+      const decoded = verifyRefreshToken(token);
 
-      expect(extracted).toBeNull();
+      expect(decoded.email).toBe(email);
+      expect(decoded.emailHash).toBeTruthy();
+      expect(typeof decoded.emailHash).toBe('string');
+      expect(decoded.emailHash).toHaveLength(64); // SHA-256 hash is 64 chars
     });
 
-    it('should return null for header without Bearer prefix', () => {
-      const token = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.test.token';
+    it('should have longer expiry than access token', () => {
+      const email = 'test@example.com';
+      const accessToken = generateToken(email);
+      const refreshToken = generateRefreshToken(email);
 
-      const extracted = extractTokenFromHeader(token);
+      const accessDecoded = verifyToken(accessToken);
+      const refreshDecoded = verifyRefreshToken(refreshToken);
 
-      expect(extracted).toBeNull();
+      // Refresh token should expire after access token
+      expect(refreshDecoded.exp).toBeGreaterThan(accessDecoded.exp!);
+    });
+  });
+
+  describe('verifyRefreshToken', () => {
+    it('should verify and decode a valid refresh token', () => {
+      const email = 'test@example.com';
+      const token = generateRefreshToken(email);
+      const decoded = verifyRefreshToken(token);
+
+      expect(decoded).toBeTruthy();
+      expect(decoded.email).toBe(email);
+      expect(decoded.emailHash).toBeTruthy();
     });
 
-    it('should return null for malformed Bearer header', () => {
-      const extracted = extractTokenFromHeader('Bearer');
+    it('should throw error for expired refresh token', () => {
+      // Create an expired refresh token
+      const expiredToken = jwt.sign(
+        { email: 'test@example.com', emailHash: 'hash' },
+        process.env.JWT_SECRET || 'your-jwt-secret-here',
+        { expiresIn: '-1s' }
+      );
 
-      expect(extracted).toBeNull();
+      expect(() => verifyRefreshToken(expiredToken)).toThrow('Refresh token expired');
     });
 
-    it('should return null for header with multiple spaces', () => {
-      const extracted = extractTokenFromHeader('Bearer  token  extra');
+    it('should throw error for invalid refresh token signature', () => {
+      const email = 'test@example.com';
+      const token = generateRefreshToken(email);
 
-      expect(extracted).toBeNull();
+      // Tamper with token
+      const tamperedToken = token.slice(0, -1) + 'X';
+
+      expect(() => verifyRefreshToken(tamperedToken)).toThrow('Invalid refresh token');
     });
   });
 });
