@@ -14,7 +14,9 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
   const [isAuthenticated, setIsAuthenticated] = React.useState<boolean | null>(null);
 
   React.useEffect(() => {
-    checkAuth().then(setIsAuthenticated);
+    checkAuth()
+      .then(setIsAuthenticated)
+      .catch(() => setIsAuthenticated(false));
   }, []);
 
   if (isAuthenticated === null) {

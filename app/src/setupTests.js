@@ -145,3 +145,33 @@ if (typeof Blob !== 'undefined' && !Blob.prototype.arrayBuffer) {
     });
   };
 }
+
+// Polyfill Blob.prototype.text for Jest
+if (typeof Blob !== 'undefined' && !Blob.prototype.text) {
+  Blob.prototype.text = async function() {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        if (reader.error) {
+          reject(reader.error);
+        } else {
+          resolve(reader.result);
+        }
+      };
+      reader.readAsText(this);
+    });
+  };
+}
+
+// Mock gapi-script globally to prevent ES module import errors
+jest.mock('gapi-script', () => ({
+  gapi: {
+    load: jest.fn(),
+    client: {
+      init: jest.fn(),
+      setToken: jest.fn(),
+      request: jest.fn(),
+    },
+  },
+  gapiComplete: jest.fn(),
+}));

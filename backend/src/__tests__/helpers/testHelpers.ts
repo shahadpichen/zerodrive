@@ -15,6 +15,12 @@ export const mockRequest = (overrides?: Partial<Request>): Partial<Request> => {
     body: {},
     params: {},
     query: {},
+    get: jest.fn((header: string): string | string[] | undefined => {
+      if (header === 'User-Agent') return 'Test User Agent';
+      if (header === 'set-cookie') return undefined;
+      return undefined;
+    }) as any,
+    ip: '127.0.0.1',
     ...overrides,
   };
 };
