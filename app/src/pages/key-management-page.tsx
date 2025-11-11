@@ -5,6 +5,7 @@ import {
   deriveKeyFromMnemonic,
   storeKey,
 } from "../utils/cryptoUtils";
+import { setMnemonic } from "../utils/mnemonicManager";
 import { testEncryptionKey } from "../utils/keyTest";
 import { Button } from "../components/ui/button";
 import {
@@ -60,7 +61,9 @@ export const KeyManagementPage: React.FC = () => {
       const newMnemonic = generateMnemonic();
       setGeneratedMnemonic(newMnemonic);
       const key = await deriveKeyFromMnemonic(newMnemonic);
-      await storeKey(key);
+      // Store mnemonic in memory and encrypt key with it
+      setMnemonic(newMnemonic);
+      await storeKey(key, newMnemonic);
       toast.success("New Mnemonic & Key Generated!", {
         description:
           "Your new mnemonic phrase is displayed below. PLEASE SAVE IT SECURELY. It is the only way to recover your key.",
@@ -82,8 +85,11 @@ export const KeyManagementPage: React.FC = () => {
       return;
     }
     try {
-      const key = await deriveKeyFromMnemonic(inputMnemonic.trim());
-      await storeKey(key);
+      const trimmedMnemonic = inputMnemonic.trim();
+      const key = await deriveKeyFromMnemonic(trimmedMnemonic);
+      // Store mnemonic in memory and encrypt key with it
+      setMnemonic(trimmedMnemonic);
+      await storeKey(key, trimmedMnemonic);
       toast.success("Key Loaded Successfully!", {
         description: "Your encryption key has been loaded from the mnemonic.",
       });
@@ -128,14 +134,19 @@ export const KeyManagementPage: React.FC = () => {
             true,
             ["encrypt", "decrypt"]
           );
-          await storeKey(key);
+
+          // Generate a mnemonic to encrypt this imported key
+          const mnemonic = generateMnemonic();
+          setGeneratedMnemonic(mnemonic);
+          setMnemonic(mnemonic);
+          await storeKey(key, mnemonic);
+
           toast.success("Encryption key added from file!", {
-            description: "Your encryption key has been added to storage.",
+            description: "A mnemonic has been generated to protect this key. Please save it!",
+            duration: 10000,
           });
-          // Navigate to storage instead of reloading
-          setTimeout(() => {
-            navigate("/storage");
-          }, 1500);
+          // Don't navigate immediately - let user see and save the mnemonic
+          setViewMode("generate");
         } catch (error) {
           console.error("Error processing key file:", error);
           setError(

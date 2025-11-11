@@ -4,13 +4,23 @@
  */
 
 import { decryptFile } from '../../utils/decryptFile';
-import { generateKey, storeKey } from '../../utils/cryptoUtils';
+import { generateKey, storeKey, generateMnemonic } from '../../utils/cryptoUtils';
 import { encryptFile } from '../../utils/encryptFile';
+import { setMnemonic, clearMnemonic } from '../../utils/mnemonicManager';
 
 describe('DecryptFile', () => {
+  let testMnemonic: string;
+
   beforeEach(() => {
     // Clear session storage before each test
     sessionStorage.clear();
+    // Set up test mnemonic
+    testMnemonic = generateMnemonic();
+    setMnemonic(testMnemonic);
+  });
+
+  afterEach(() => {
+    clearMnemonic();
   });
 
   describe('decryptFile', () => {
@@ -43,18 +53,28 @@ describe('DecryptFile', () => {
     });
 
     it('should throw error when key format is invalid JSON', async () => {
-      // Store invalid JSON
+      // Clear mnemonic so getStoredKey returns null
+      clearMnemonic();
+
+      // Store invalid encrypted data
       sessionStorage.setItem('aes-gcm-key', 'not-valid-json{');
 
       const blob = new Blob(['test']);
 
+      // Should fail because getStoredKey() returns null
       await expect(decryptFile(blob)).rejects.toThrow(
-        'Invalid encryption key format in session storage'
+        'No encryption key found in session storage'
       );
+
+      // Restore mnemonic for other tests
+      setMnemonic(testMnemonic);
     });
 
     it('should throw error when JWK is missing required fields', async () => {
-      // Store JWK missing 'k' field
+      // Clear mnemonic so getStoredKey returns null
+      clearMnemonic();
+
+      // Store invalid encrypted data
       const invalidJWK = {
         kty: 'oct',
         // missing 'k' field
@@ -63,13 +83,20 @@ describe('DecryptFile', () => {
 
       const blob = new Blob(['test']);
 
+      // Should fail because getStoredKey() returns null
       await expect(decryptFile(blob)).rejects.toThrow(
-        'Invalid encryption key format'
+        'No encryption key found in session storage'
       );
+
+      // Restore mnemonic for other tests
+      setMnemonic(testMnemonic);
     });
 
     it('should throw error when JWK has wrong key type', async () => {
-      // Store JWK with wrong key type
+      // Clear mnemonic so getStoredKey returns null
+      clearMnemonic();
+
+      // Store invalid encrypted data
       const invalidJWK = {
         kty: 'RSA', // Should be 'oct' for AES
         k: 'somebase64value',
@@ -78,9 +105,13 @@ describe('DecryptFile', () => {
 
       const blob = new Blob(['test']);
 
+      // Should fail because getStoredKey() returns null
       await expect(decryptFile(blob)).rejects.toThrow(
-        'Invalid encryption key format'
+        'No encryption key found in session storage'
       );
+
+      // Restore mnemonic for other tests
+      setMnemonic(testMnemonic);
     });
 
     it('should throw error when file is too small (missing IV)', async () => {

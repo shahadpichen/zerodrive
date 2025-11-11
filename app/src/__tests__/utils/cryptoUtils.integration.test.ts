@@ -279,8 +279,8 @@ describe('CryptoUtils Integration Tests (Real BIP39)', () => {
       const mnemonic = generateMnemonic();
       const originalKey = await deriveKeyFromMnemonic(mnemonic);
 
-      await storeKey(originalKey);
-      const retrievedKey = await getStoredKey();
+      await storeKey(originalKey, mnemonic);
+      const retrievedKey = await getStoredKey(mnemonic);
 
       expect(retrievedKey).not.toBeNull();
 
@@ -295,12 +295,12 @@ describe('CryptoUtils Integration Tests (Real BIP39)', () => {
 
       // First derivation
       const key1 = await deriveKeyFromMnemonic(mnemonic);
-      await storeKey(key1);
+      await storeKey(key1, mnemonic);
 
       // Clear and re-derive
       clearStoredKey();
       const key2 = await deriveKeyFromMnemonic(mnemonic);
-      await storeKey(key2);
+      await storeKey(key2, mnemonic);
 
       // Keys should be identical
       const jwk1 = await crypto.subtle.exportKey('jwk', key1);

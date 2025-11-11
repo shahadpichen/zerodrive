@@ -4,10 +4,14 @@
  */
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001/api';
+
 // JWT token is now stored in httpOnly cookie, not localStorage
-// Only Google tokens are still cached in localStorage
-const GOOGLE_TOKEN_KEY = 'zerodrive_google_token';
-const GOOGLE_TOKEN_EXPIRY_KEY = 'zerodrive_google_token_expiry';
+// Google tokens are cached in memory (not localStorage) for security
+let googleTokenCache: {
+  token: string;
+  expiry: Date;
+  userEmail: string;
+} | null = null;
 
 /**
  * Initiate login by redirecting to backend OAuth
@@ -58,6 +62,11 @@ export async function logout(): Promise<void> {
   // Clear local storage and session storage
   console.log('[Logout] Clearing local storage and session storage...');
   clearGoogleTokens();
+
+  // Clear mnemonic from memory
+  const { clearMnemonic } = await import('./mnemonicManager');
+  clearMnemonic();
+
   sessionStorage.clear();
   console.log('[Logout] Logout process complete');
 }
@@ -141,46 +150,26 @@ export async function refreshToken(): Promise<boolean> {
 }
 
 /**
- * Store Google access token
+ * Check if cached Google token is valid for the given user
  */
-export function setGoogleToken(accessToken: string, expiresAt: string): void {
-  localStorage.setItem(GOOGLE_TOKEN_KEY, accessToken);
-  localStorage.setItem(GOOGLE_TOKEN_EXPIRY_KEY, expiresAt);
-}
-
-/**
- * Get stored Google access token
- */
-export function getGoogleToken(): string | null {
-  return localStorage.getItem(GOOGLE_TOKEN_KEY);
-}
-
-/**
- * Check if Google token is expired
- */
-export function isGoogleTokenExpired(): boolean {
-  const expiryStr = localStorage.getItem(GOOGLE_TOKEN_EXPIRY_KEY);
-  if (!expiryStr) {
-    return true;
+function isGoogleTokenCacheValid(userEmail: string): boolean {
+  if (!googleTokenCache) {
+    return false;
   }
 
-  try {
-    const expiryTime = new Date(expiryStr).getTime();
-    // Check if date is valid (NaN means invalid date)
-    if (isNaN(expiryTime)) {
-      return true;
-    }
-    return Date.now() >= expiryTime;
-  } catch (error) {
-    console.error('Failed to parse Google token expiry:', error);
-    return true;
+  // Check if cache is for the same user
+  if (googleTokenCache.userEmail !== userEmail) {
+    return false;
   }
+
+  // Check if token is expired
+  return Date.now() < googleTokenCache.expiry.getTime();
 }
 
 /**
  * Fetch Google access token from backend
  */
-export async function fetchGoogleToken(): Promise<string | null> {
+export async function fetchGoogleToken(userEmail: string): Promise<string | null> {
   try {
     const response = await fetch(`${API_URL}/auth/google-token`, {
       method: 'GET',
@@ -197,8 +186,12 @@ export async function fetchGoogleToken(): Promise<string | null> {
 
     const data = await response.json();
     if (data.success && data.data?.accessToken) {
-      // Store token locally
-      setGoogleToken(data.data.accessToken, data.data.expiresAt);
+      // Cache token in memory
+      googleTokenCache = {
+        token: data.data.accessToken,
+        expiry: new Date(data.data.expiresAt),
+        userEmail: userEmail,
+      };
       return data.data.accessToken;
     }
 
@@ -213,20 +206,25 @@ export async function fetchGoogleToken(): Promise<string | null> {
  * Get Google token (from cache or fetch from backend)
  */
 export async function getOrFetchGoogleToken(): Promise<string | null> {
+  // Get current user email
+  const userEmail = await getUserEmail();
+  if (!userEmail) {
+    console.error('Cannot get Google token: user not authenticated');
+    return null;
+  }
+
   // Check if we have a valid cached token
-  const cachedToken = getGoogleToken();
-  if (cachedToken && !isGoogleTokenExpired()) {
-    return cachedToken;
+  if (isGoogleTokenCacheValid(userEmail)) {
+    return googleTokenCache!.token;
   }
 
   // Token expired or not found, fetch from backend
-  return await fetchGoogleToken();
+  return await fetchGoogleToken(userEmail);
 }
 
 /**
- * Clear Google tokens
+ * Clear Google tokens from memory cache
  */
 export function clearGoogleTokens(): void {
-  localStorage.removeItem(GOOGLE_TOKEN_KEY);
-  localStorage.removeItem(GOOGLE_TOKEN_EXPIRY_KEY);
+  googleTokenCache = null;
 }
