@@ -93,29 +93,16 @@ CREATE TRIGGER update_analytics_daily_summary_updated_at
     FOR EACH ROW
     EXECUTE FUNCTION update_updated_at_column();
 
--- Create user_google_tokens table
--- Stores Google OAuth tokens server-side for Drive API access
-CREATE TABLE IF NOT EXISTS user_google_tokens (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    user_id VARCHAR(255) NOT NULL UNIQUE,
-    access_token TEXT NOT NULL,
-    refresh_token TEXT,
-    token_expiry TIMESTAMP WITH TIME ZONE NOT NULL,
-    scope TEXT NOT NULL,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-);
-
--- Create indexes for user_google_tokens
-CREATE INDEX IF NOT EXISTS idx_google_tokens_user_id ON user_google_tokens(user_id);
-CREATE INDEX IF NOT EXISTS idx_google_tokens_expiry ON user_google_tokens(token_expiry);
-
--- Create trigger for user_google_tokens
-DROP TRIGGER IF EXISTS update_google_tokens_updated_at ON user_google_tokens;
-CREATE TRIGGER update_google_tokens_updated_at
-    BEFORE UPDATE ON user_google_tokens
-    FOR EACH ROW
-    EXECUTE FUNCTION update_updated_at_column();
+-- TABLE REMOVED: user_google_tokens (Risk #35 - Zero-knowledge architecture)
+-- Google OAuth tokens are now encrypted client-side with PBKDF2 and stored in sessionStorage
+-- Backend never stores or has access to Google Drive tokens
+-- This implements true zero-knowledge encryption where:
+-- - Frontend encrypts tokens with mnemonic-derived key
+-- - Backend only handles OAuth flow and returns tokens once
+-- - User's Google Drive access is never compromised even if backend is breached
+--
+-- See: app/src/utils/authService.ts for encrypted storage implementation
+-- See: app/src/utils/cryptoUtils.ts for PBKDF2 encryption functions
 
 -- Create a view for active shared files (not expired)
 CREATE OR REPLACE VIEW active_shared_files AS
