@@ -35,18 +35,27 @@ export const uploadAndSyncFile = async (
       throw new Error("No encryption key found. Please manage keys.");
     }
 
-    // 2. Check auth and get token
+    // 2. Validate file size (max 100MB)
+    const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB in bytes
+    if (file.size > MAX_FILE_SIZE) {
+      const fileSizeMB = (file.size / 1024 / 1024).toFixed(2);
+      const errorMsg = `File too large. Maximum size is 100MB, your file is ${fileSizeMB}MB`;
+      toast.error(errorMsg, { id: uploadToastId });
+      throw new Error(errorMsg);
+    }
+
+    // 3. Check auth and get token
     const { getGoogleAccessToken } = await import("./gapiInit");
     const token = await getGoogleAccessToken();
     if (!token) {
       throw new Error("User not authenticated.");
     }
 
-    // 3. Encrypt
+    // 4. Encrypt
     toast.loading(`Encrypting ${file.name}...`, { id: uploadToastId });
     const encryptedBlob = await encryptFile(file);
 
-    // 4. Prepare metadata & form data
+    // 5. Prepare metadata & form data
     const metadata = {
       name: file.name, // Drive uses this name
       mimeType: "application/octet-stream", // Store as generic binary
@@ -60,7 +69,7 @@ export const uploadAndSyncFile = async (
     );
     form.append("file", encryptedBlob);
 
-    // 5. Upload to Google Drive
+    // 6. Upload to Google Drive
     toast.loading(`Uploading ${file.name} to Google Drive...`, {
       id: uploadToastId,
     });
@@ -85,7 +94,7 @@ export const uploadAndSyncFile = async (
 
     toast.loading(`Saving metadata for ${file.name}...`, { id: uploadToastId });
 
-    // 6. Add metadata to IndexedDB
+    // 7. Add metadata to IndexedDB
     const newFileMeta: FileMeta = {
       id: data.id,
       name: file.name, // Store original name
@@ -95,10 +104,10 @@ export const uploadAndSyncFile = async (
     };
     await addFile(newFileMeta);
 
-    // 7. Get updated full list from IndexedDB
+    // 8. Get updated full list from IndexedDB
     const updatedList = await getAllFilesForUser(userEmail);
 
-    // 8. Sync updated list to db-list.json on Google Drive
+    // 9. Sync updated list to db-list.json on Google Drive
     await sendToGoogleDrive(updatedList); // This handles its own toasts
 
     toast.success(`Successfully uploaded and synced ${file.name}`, {
