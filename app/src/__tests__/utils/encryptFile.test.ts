@@ -9,16 +9,26 @@
  */
 
 import { encryptFile } from '../../utils/encryptFile';
-import { generateKey, storeKey, clearStoredKey } from '../../utils/cryptoUtils';
+import { generateKey, storeKey, clearStoredKey, generateMnemonic } from '../../utils/cryptoUtils';
+import { setMnemonic, clearMnemonic } from '../../utils/mnemonicManager';
 
 // Skip these tests in CI environment (GitHub Actions)
 // The File/Blob/ArrayBuffer behavior is inconsistent in jsdom across environments
 const describeOrSkip = process.env.CI ? describe.skip : describe;
 
 describe('EncryptFile', () => {
+  let testMnemonic: string;
+
   beforeEach(() => {
     // Clear storage before each test
     sessionStorage.clear();
+    // Generate and set test mnemonic for encryption
+    testMnemonic = generateMnemonic();
+    setMnemonic(testMnemonic);
+  });
+
+  afterEach(() => {
+    clearMnemonic();
   });
 
   describeOrSkip('encryptFile', () => {

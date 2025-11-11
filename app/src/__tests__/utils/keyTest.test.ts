@@ -13,10 +13,20 @@ import {
   generateMnemonic,
   deriveKeyFromMnemonic,
 } from '../../utils/cryptoUtils';
+import { setMnemonic, clearMnemonic } from '../../utils/mnemonicManager';
 
 describe('testEncryptionKey', () => {
+  let testMnemonic: string;
+
   beforeEach(() => {
     sessionStorage.clear();
+    // Generate and set a test mnemonic for all tests
+    testMnemonic = generateMnemonic();
+    setMnemonic(testMnemonic);
+  });
+
+  afterEach(() => {
+    clearMnemonic();
   });
 
   describe('Success Cases', () => {

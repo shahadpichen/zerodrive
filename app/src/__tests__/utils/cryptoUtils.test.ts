@@ -11,6 +11,7 @@ import {
   generateMnemonic,
   deriveKeyFromMnemonic,
 } from '../../utils/cryptoUtils';
+import { setMnemonic, clearMnemonic } from '../../utils/mnemonicManager';
 import * as bip39 from 'bip39';
 
 // Mock bip39
@@ -20,11 +21,26 @@ jest.mock('bip39', () => ({
   mnemonicToSeedSync: jest.fn(),
 }));
 
+// Test mnemonic for all tests
+const TEST_MNEMONIC = 'test wallet brave hello world ocean cloud mountain river lake forest tree';
+
 describe('CryptoUtils', () => {
   beforeEach(() => {
     // Clear storage before each test
     sessionStorage.clear();
     jest.clearAllMocks();
+
+    // Set test mnemonic in memory cache for tests
+    (bip39.validateMnemonic as jest.Mock).mockReturnValue(true);
+    (bip39.mnemonicToSeedSync as jest.Mock).mockReturnValue(
+      new Uint8Array(64).fill(1) // Mock seed
+    );
+    setMnemonic(TEST_MNEMONIC);
+  });
+
+  afterEach(() => {
+    // Clear mnemonic after each test
+    clearMnemonic();
   });
 
   describe('generateKey', () => {
@@ -254,13 +270,17 @@ describe('CryptoUtils', () => {
     it('should handle corrupted sessionStorage data', async () => {
       sessionStorage.setItem('aes-gcm-key', 'not-valid-json');
 
-      await expect(getStoredKey()).rejects.toThrow();
+      // Should return null instead of throwing
+      const key = await getStoredKey();
+      expect(key).toBeNull();
     });
 
     it('should handle partial key data in storage', async () => {
       sessionStorage.setItem('aes-gcm-key', JSON.stringify({ kty: 'oct' }));
 
-      await expect(getStoredKey()).rejects.toThrow();
+      // Should return null for invalid/partial data
+      const key = await getStoredKey();
+      expect(key).toBeNull();
     });
 
     it('should handle very long mnemonic', async () => {

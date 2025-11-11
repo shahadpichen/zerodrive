@@ -1,38 +1,12 @@
 import logger from "./logger";
+import { getStoredKey } from "./cryptoUtils";
 
 export const decryptFile = async (fileBlob: Blob): Promise<Blob> => {
   try {
-    const storedKey = sessionStorage.getItem("aes-gcm-key");
-    if (!storedKey) {
+    // Get the decryption key using getStoredKey (handles encrypted storage)
+    const key = await getStoredKey();
+    if (!key) {
       throw new Error("No encryption key found in session storage");
-    }
-
-    let keyJWK;
-    try {
-      keyJWK = JSON.parse(storedKey);
-    } catch (parseError) {
-      throw new Error("Invalid encryption key format in session storage");
-    }
-
-    if (!keyJWK || !keyJWK.k || !keyJWK.kty || keyJWK.kty !== "oct") {
-      throw new Error("Invalid encryption key format");
-    }
-
-    // Import the key
-    let key;
-    try {
-      key = await crypto.subtle.importKey(
-        "jwk",
-        keyJWK,
-        { name: "AES-GCM" },
-        true,
-        ["decrypt"]
-      );
-    } catch (keyImportError) {
-      logger.error("Key import error:", keyImportError);
-      throw new Error(
-        "Could not import encryption key: " + keyImportError.message
-      );
     }
 
     const fileArrayBuffer = await fileBlob.arrayBuffer();
