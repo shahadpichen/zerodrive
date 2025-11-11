@@ -36,9 +36,16 @@ const deriveWrappingKeyFromMnemonic = async (
     ["deriveKey"]
   );
 
-  // Use a fixed salt for deterministic key derivation
-  // In production, you might want a per-user salt stored alongside encrypted data
-  const salt = encoder.encode("zerodrive-key-wrapping-salt-v1");
+  // Get salt from environment variable
+  // This must be stable across all deployments - changing it breaks key decryption!
+  const saltString = process.env.REACT_APP_PBKDF2_SALT;
+  if (!saltString) {
+    throw new Error(
+      "PBKDF2 salt not configured. Please set REACT_APP_PBKDF2_SALT in your .env file. " +
+      "Generate one using: node -e \"console.log(require('crypto').randomBytes(32).toString('base64'))\""
+    );
+  }
+  const salt = encoder.encode(saltString);
 
   // Derive wrapping key using PBKDF2
   return crypto.subtle.deriveKey(
