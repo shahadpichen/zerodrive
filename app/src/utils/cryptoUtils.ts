@@ -219,6 +219,91 @@ export const decryptPrivateKeyJwk = async (
   return JSON.parse(new TextDecoder().decode(decryptedKeyData));
 };
 
+/**
+ * Encrypt Google OAuth tokens using mnemonic-derived wrapping key
+ * If mnemonic not provided, gets it from memory cache
+ */
+export const encryptGoogleTokens = async (
+  tokens: {
+    accessToken: string;
+    refreshToken?: string;
+    expiresAt: Date;
+    scope: string;
+  },
+  mnemonic?: string
+): Promise<{ iv: number[]; encryptedTokens: number[] }> => {
+  // Get mnemonic from cache if not provided
+  const mnemonicToUse = mnemonic || getMnemonic();
+  if (!mnemonicToUse) {
+    throw new Error(
+      "No mnemonic available. Please enter your mnemonic first."
+    );
+  }
+
+  // Convert tokens to bytes
+  const tokenData = new TextEncoder().encode(JSON.stringify(tokens));
+
+  // Derive wrapping key from mnemonic
+  const wrappingKey = await deriveWrappingKeyFromMnemonic(mnemonicToUse);
+
+  // Generate random IV for encryption
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+
+  // Encrypt the token data
+  const encryptedTokens = await crypto.subtle.encrypt(
+    { name: "AES-GCM", iv: iv },
+    wrappingKey,
+    tokenData
+  );
+
+  // Return IV + encrypted tokens
+  return {
+    iv: Array.from(iv),
+    encryptedTokens: Array.from(new Uint8Array(encryptedTokens)),
+  };
+};
+
+/**
+ * Decrypt Google OAuth tokens using mnemonic-derived wrapping key
+ * If mnemonic not provided, gets it from memory cache
+ */
+export const decryptGoogleTokens = async (
+  encryptedData: { iv: number[]; encryptedTokens: number[] },
+  mnemonic?: string
+): Promise<{
+  accessToken: string;
+  refreshToken?: string;
+  expiresAt: Date;
+  scope: string;
+}> => {
+  // Get mnemonic from cache if not provided
+  const mnemonicToUse = mnemonic || getMnemonic();
+  if (!mnemonicToUse) {
+    throw new Error(
+      "No mnemonic available. Please enter your mnemonic first."
+    );
+  }
+
+  // Derive wrapping key from mnemonic
+  const wrappingKey = await deriveWrappingKeyFromMnemonic(mnemonicToUse);
+
+  // Decrypt the token data
+  const decryptedTokenData = await crypto.subtle.decrypt(
+    { name: "AES-GCM", iv: new Uint8Array(encryptedData.iv) },
+    wrappingKey,
+    new Uint8Array(encryptedData.encryptedTokens)
+  );
+
+  // Parse and return the decrypted tokens
+  const tokens = JSON.parse(new TextDecoder().decode(decryptedTokenData));
+
+  // Convert expiresAt back to Date object
+  return {
+    ...tokens,
+    expiresAt: new Date(tokens.expiresAt),
+  };
+};
+
 export const generateMnemonic = (): string => {
   return bip39.generateMnemonic(128);
 };

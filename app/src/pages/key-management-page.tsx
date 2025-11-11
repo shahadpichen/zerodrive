@@ -7,6 +7,7 @@ import {
 } from "../utils/cryptoUtils";
 import { setMnemonic } from "../utils/mnemonicManager";
 import { testEncryptionKey } from "../utils/keyTest";
+import { encryptPendingGoogleTokens } from "../utils/authService";
 import { Button } from "../components/ui/button";
 import {
   Card,
@@ -64,6 +65,13 @@ export const KeyManagementPage: React.FC = () => {
       // Store mnemonic in memory and encrypt key with it
       setMnemonic(newMnemonic);
       await storeKey(key, newMnemonic);
+
+      // Encrypt any pending Google tokens now that mnemonic is available
+      const tokensEncrypted = await encryptPendingGoogleTokens();
+      if (tokensEncrypted) {
+        console.log('[KeyManagement] Encrypted pending Google tokens');
+      }
+
       toast.success("New Mnemonic & Key Generated!", {
         description:
           "Your new mnemonic phrase is displayed below. PLEASE SAVE IT SECURELY. It is the only way to recover your key.",
@@ -90,6 +98,13 @@ export const KeyManagementPage: React.FC = () => {
       // Store mnemonic in memory and encrypt key with it
       setMnemonic(trimmedMnemonic);
       await storeKey(key, trimmedMnemonic);
+
+      // Encrypt any pending Google tokens now that mnemonic is available
+      const tokensEncrypted = await encryptPendingGoogleTokens();
+      if (tokensEncrypted) {
+        console.log('[KeyManagement] Encrypted pending Google tokens');
+      }
+
       toast.success("Key Loaded Successfully!", {
         description: "Your encryption key has been loaded from the mnemonic.",
       });
@@ -140,6 +155,12 @@ export const KeyManagementPage: React.FC = () => {
           setGeneratedMnemonic(mnemonic);
           setMnemonic(mnemonic);
           await storeKey(key, mnemonic);
+
+          // Encrypt any pending Google tokens now that mnemonic is available
+          const tokensEncrypted = await encryptPendingGoogleTokens();
+          if (tokensEncrypted) {
+            console.log('[KeyManagement] Encrypted pending Google tokens');
+          }
 
           toast.success("Encryption key added from file!", {
             description: "A mnemonic has been generated to protect this key. Please save it!",

@@ -1,12 +1,16 @@
 /**
  * OAuth Callback Page
- * Handles OAuth callback from backend and stores JWT token
+ * Handles OAuth callback from backend
+ * - JWT token stored in httpOnly cookie by backend
+ * - Google tokens encrypted and stored in sessionStorage by frontend
  */
 
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { Loader2 } from 'lucide-react';
+import { storeGoogleTokens } from '../utils/authService';
+import { getUserEmail } from '../utils/authService';
 
 const OAuthCallback: React.FC = () => {
   const navigate = useNavigate();
@@ -55,11 +59,49 @@ const OAuthCallback: React.FC = () => {
       }
 
       try {
-        // Token is already set as httpOnly cookie by backend
-        // No need to extract or store anything
+        // JWT token is already set as httpOnly cookie by backend
 
-        // Show success message
-        toast.success('Signed in successfully!');
+        // Get Google tokens from URL (base64-encoded by backend)
+        const encodedTokens = searchParams.get('tokens');
+
+        if (encodedTokens) {
+          // Decode tokens
+          const tokenData = JSON.parse(atob(encodedTokens));
+
+          // Get user email (from JWT cookie)
+          const userEmail = await getUserEmail();
+
+          if (!userEmail) {
+            throw new Error('Failed to get user email');
+          }
+
+          // Encrypt and store Google tokens in sessionStorage
+          await storeGoogleTokens({
+            accessToken: tokenData.accessToken,
+            refreshToken: tokenData.refreshToken,
+            expiresAt: new Date(tokenData.expiresAt),
+            scope: tokenData.scope,
+          }, userEmail);
+
+          console.log('[OAuth] Google tokens encrypted and stored in sessionStorage');
+        }
+
+        // Check for special flags
+        const isNewUser = searchParams.get('new') === 'true';
+        const hasLimitedScope = searchParams.get('limited') === 'true';
+
+        // Show appropriate message
+        if (hasLimitedScope) {
+          toast.warning('Limited permissions granted', {
+            description: 'Some features may not work without full Google Drive access',
+          });
+        } else if (isNewUser) {
+          toast.success('Welcome to ZeroDrive!', {
+            description: 'Your account has been created successfully',
+          });
+        } else {
+          toast.success('Signed in successfully!');
+        }
 
         // Navigate to storage - ProtectedRoute will verify auth via cookie
         navigate('/storage');
@@ -67,7 +109,7 @@ const OAuthCallback: React.FC = () => {
         console.error('Failed to complete sign-in:', error);
         setError('Failed to complete sign-in');
         toast.error('Sign-in failed', {
-          description: 'Failed to complete authentication process',
+          description: error instanceof Error ? error.message : 'Failed to complete authentication process',
         });
 
         setTimeout(() => {
