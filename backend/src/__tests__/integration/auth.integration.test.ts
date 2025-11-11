@@ -118,7 +118,13 @@ describe('Auth Routes Integration', () => {
         .query({ code: mockCode });
 
       expect(response.status).toBe(302);
-      expect(response.headers.location).toBe('http://localhost:3000/oauth/callback');
+
+      // Verify redirect includes tokens in URL (zero-knowledge architecture)
+      const redirectUrl = response.headers.location as string;
+      expect(redirectUrl).toContain('http://localhost:3000/oauth/callback');
+      expect(redirectUrl).toContain('tokens='); // Base64-encoded tokens
+      expect(redirectUrl).toContain('new=true'); // New user flag
+      expect(redirectUrl).toContain('limited=false'); // Full scope granted
 
       // Verify cookies were set
       const cookies = response.headers['set-cookie'] as unknown as string[];
@@ -127,10 +133,12 @@ describe('Auth Routes Integration', () => {
       expect(cookies.some((c: string) => c.startsWith('zerodrive_refresh='))).toBe(true);
       expect(cookies.some((c: string) => c.startsWith('zerodrive_csrf='))).toBe(true);
 
-      // Verify Google tokens were stored
+      // Google tokens are NO LONGER stored in database (zero-knowledge architecture)
+      // They are passed once via URL redirect to frontend, which encrypts them client-side
+      // Verify that we only query for existing user (public_keys check), not insert tokens
       expect(mockQuery).toHaveBeenCalledWith(
-        expect.stringContaining('INSERT INTO user_google_tokens'),
-        expect.arrayContaining([mockUserEmail, mockAccessToken])
+        expect.stringContaining('SELECT user_id FROM public_keys'),
+        expect.arrayContaining([mockUserEmail])
       );
 
       // Verify analytics tracked
@@ -291,84 +299,13 @@ describe('Auth Routes Integration', () => {
     });
   });
 
-  describe('GET /api/auth/google-token', () => {
-    beforeEach(() => {
-      mockQuery.mockResolvedValue({
-        rows: [
-          {
-            access_token: 'google-token',
-            refresh_token: 'google-refresh',
-            token_expiry: new Date(Date.now() + 3600000), // 1 hour from now
-            scope: 'https://www.googleapis.com/auth/drive',
-          },
-        ],
-      });
-    });
-
-    it('should return Google token when authenticated', async () => {
-      const userEmail = 'test@example.com';
-      const token = generateToken(userEmail);
-
-      const response = await request(app)
-        .get('/api/auth/google-token')
-        .set('Cookie', [`zerodrive_token=${token}`]);
-
-      expect(response.status).toBe(200);
-      expect(response.body.data.accessToken).toBe('google-token');
-      expect(response.body.data.scope).toBeDefined();
-    });
-
-    it('should return 401 when not authenticated', async () => {
-      const response = await request(app).get('/api/auth/google-token');
-
-      expect(response.status).toBe(401);
-    });
-
-    it('should refresh expired Google token if refresh token available', async () => {
-      const userEmail = 'test@example.com';
-      const token = generateToken(userEmail);
-
-      // Mock expired token
-      mockQuery.mockResolvedValueOnce({
-        rows: [
-          {
-            access_token: 'expired-token',
-            refresh_token: 'google-refresh',
-            token_expiry: new Date(Date.now() - 3600000), // Expired
-            scope: 'https://www.googleapis.com/auth/drive',
-          },
-        ],
-      });
-
-      // Mock successful refresh
-      mockRefreshAccessToken.mockResolvedValue({
-        accessToken: 'new-google-token',
-      });
-
-      // Mock database update
-      mockQuery.mockResolvedValueOnce({ rows: [] });
-
-      const response = await request(app)
-        .get('/api/auth/google-token')
-        .set('Cookie', [`zerodrive_token=${token}`]);
-
-      expect(response.status).toBe(200);
-      expect(response.body.data.accessToken).toBe('new-google-token');
-      expect(mockRefreshAccessToken).toHaveBeenCalledWith('google-refresh');
-    });
-
-    it('should return 404 when no Google token found', async () => {
-      const userEmail = 'test@example.com';
-      const token = generateToken(userEmail);
-
-      mockQuery.mockResolvedValue({ rows: [] });
-
-      const response = await request(app)
-        .get('/api/auth/google-token')
-        .set('Cookie', [`zerodrive_token=${token}`]);
-
-      expect(response.status).toBe(404);
-      expect(response.body.error.message).toContain('No Google token found');
-    });
-  });
+  // ENDPOINT REMOVED: /api/auth/google-token (Risk #35 - Zero-knowledge architecture)
+  // Google tokens are now encrypted client-side and never stored in database
+  // Backend passes tokens once via URL redirect during OAuth callback
+  // See: backend/src/routes/auth.ts (lines 140-151)
+  // See: app/src/utils/authService.ts (storeGoogleTokens function)
+  //
+  // describe('GET /api/auth/google-token', () => {
+  //   // Tests removed - endpoint no longer exists
+  // });
 });
