@@ -14,9 +14,9 @@ export const generateKey = async (): Promise<CryptoKey> => {
 
 /**
  * Derive a wrapping key from mnemonic using PBKDF2
- * This key is used to encrypt the AES encryption key before storing in sessionStorage
+ * This key is used to encrypt encryption keys (AES and RSA) before storing
  */
-const deriveWrappingKeyFromMnemonic = async (
+export const deriveWrappingKeyFromMnemonic = async (
   mnemonic: string
 ): Promise<CryptoKey> => {
   if (!bip39.validateMnemonic(mnemonic)) {
@@ -148,6 +148,75 @@ export const getStoredKey = async (
 
 export const clearStoredKey = () => {
   sessionStorage.removeItem("aes-gcm-key");
+};
+
+/**
+ * Encrypt RSA private key JWK using mnemonic-derived wrapping key
+ * If mnemonic not provided, gets it from memory cache
+ */
+export const encryptPrivateKeyJwk = async (
+  privateKeyJwk: JsonWebKey,
+  mnemonic?: string
+): Promise<{ iv: number[]; encryptedKey: number[] }> => {
+  // Get mnemonic from cache if not provided
+  const mnemonicToUse = mnemonic || getMnemonic();
+  if (!mnemonicToUse) {
+    throw new Error(
+      "No mnemonic available. Please enter your mnemonic first."
+    );
+  }
+
+  // Convert JWK to bytes
+  const keyData = new TextEncoder().encode(JSON.stringify(privateKeyJwk));
+
+  // Derive wrapping key from mnemonic
+  const wrappingKey = await deriveWrappingKeyFromMnemonic(mnemonicToUse);
+
+  // Generate random IV for encryption
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+
+  // Encrypt the private key data
+  const encryptedKey = await crypto.subtle.encrypt(
+    { name: "AES-GCM", iv: iv },
+    wrappingKey,
+    keyData
+  );
+
+  // Return IV + encrypted key
+  return {
+    iv: Array.from(iv),
+    encryptedKey: Array.from(new Uint8Array(encryptedKey)),
+  };
+};
+
+/**
+ * Decrypt RSA private key JWK using mnemonic-derived wrapping key
+ * If mnemonic not provided, gets it from memory cache
+ */
+export const decryptPrivateKeyJwk = async (
+  encryptedData: { iv: number[]; encryptedKey: number[] },
+  mnemonic?: string
+): Promise<JsonWebKey> => {
+  // Get mnemonic from cache if not provided
+  const mnemonicToUse = mnemonic || getMnemonic();
+  if (!mnemonicToUse) {
+    throw new Error(
+      "No mnemonic available. Please enter your mnemonic first."
+    );
+  }
+
+  // Derive wrapping key from mnemonic
+  const wrappingKey = await deriveWrappingKeyFromMnemonic(mnemonicToUse);
+
+  // Decrypt the key data
+  const decryptedKeyData = await crypto.subtle.decrypt(
+    { name: "AES-GCM", iv: new Uint8Array(encryptedData.iv) },
+    wrappingKey,
+    new Uint8Array(encryptedData.encryptedKey)
+  );
+
+  // Parse and return the decrypted JWK
+  return JSON.parse(new TextDecoder().decode(decryptedKeyData));
 };
 
 export const generateMnemonic = (): string => {
