@@ -313,12 +313,15 @@ export function base64ToArrayBuffer(base64: string): ArrayBuffer {
  * @param file The file to be shared.
  * @param recipientEmail The email address of the intended recipient.
  * @param senderEmail The email address of the sender (used for generating sender proof).
+ * @param mnemonic The mnemonic phrase used to decrypt sender's RSA private key.
+ * @param customMessage Optional custom message to include with the shared file.
  * @returns A Promise that resolves to a FilePreparationResult object containing all necessary components.
  */
 export async function prepareFileForSharing(
   file: File,
   recipientEmail: string,
   senderEmail: string,
+  mnemonic: string,
   customMessage?: string
 ): Promise<{
   encryptedFileBlob: Blob;
@@ -333,8 +336,8 @@ export async function prepareFileForSharing(
   senderProof: string;
 }> {
   try {
-    // Get the sender's private key
-    const senderKeyPair = await getUserKeyPair(senderEmail);
+    // Get the sender's private key (requires mnemonic to decrypt)
+    const senderKeyPair = await getUserKeyPair(senderEmail, mnemonic);
     if (!senderKeyPair) {
       throw new Error(
         "Sender private key not found. Please generate your keys first."
