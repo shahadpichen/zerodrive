@@ -41,12 +41,12 @@ export const initializeGapi = async (): Promise<void> => {
         ],
       });
 
-      // Get access token from backend
-      logger.log("[GAPI] Fetching Google access token from backend...");
+      // Get access token from sessionStorage
+      logger.log("[GAPI] Fetching Google access token from sessionStorage...");
       const accessToken = await getOrFetchGoogleToken();
       if (!accessToken) {
-        logger.error("[GAPI] No access token received from backend");
-        throw new Error("Failed to get Google access token from backend. Please ensure you've completed Google OAuth.");
+        logger.error("[GAPI] No access token found in sessionStorage");
+        throw new Error("Google access token not found. Your session may have expired. Please sign out and sign in again to reconnect Google Drive.");
       }
 
       // Set the token for API requests

@@ -73,7 +73,7 @@ router.get('/callback/google', asyncHandler(async (req: Request, res: Response) 
     const hasLimitedScope = !hasFullDriveScope(scope);
 
     // NO LONGER STORING TOKENS IN DATABASE - Zero-knowledge architecture!
-    // Frontend will encrypt and store in sessionStorage with PBKDF2
+    // Frontend stores tokens in sessionStorage (cleared on tab close)
     const tokenExpiry = new Date(Date.now() + 3600 * 1000); // Access tokens typically expire in 1 hour
 
     logger.info('[Auth] Google tokens obtained (not storing in database)', {

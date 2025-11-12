@@ -112,39 +112,77 @@ export async function uploadEncryptedRsaKeyToDrive(
 }
 
 /**
- * Downloads the encrypted RSA private key from the user's Google Drive appDataFolder (hidden).
+ * Downloads the encrypted RSA private key from the user's Google Drive.
+ * Searches in multiple locations for backward compatibility:
+ * 1. appDataFolder (hidden, preferred)
+ * 2. Root of Google Drive (My Drive)
  * @returns A Promise that resolves to a Blob containing the key data.
- * @throws Error if download fails or file not found
+ * @throws Error if download fails or file not found in any location
  */
 export async function downloadEncryptedRsaKeyFromDrive(): Promise<Blob> {
   const fileName = RSA_KEY_FILE_NAME;
-  try {
-    await ensureDriveApiLoaded();
-    const token = await getGoogleAccessToken();
-    if (!token) {
-      throw new Error("User not authenticated for Google Drive download.");
-    }
 
-    // Find the file by name within appDataFolder (hidden from user)
+  await ensureDriveApiLoaded();
+  const token = await getGoogleAccessToken();
+  if (!token) {
+    throw new Error("User not authenticated for Google Drive download.");
+  }
+
+  let fileId: string | null = null;
+  let foundLocation: string = "";
+
+  // FIRST: Try appDataFolder (hidden, preferred location)
+  try {
+    logger.log(`Searching for RSA key backup in appDataFolder...`);
     const query = `name='${fileName}' and trashed=false`;
     const listResponse = await (gapi.client as any).drive.files.list({
       q: query,
       fields: "files(id, name)",
-      spaces: "appDataFolder", // Search in hidden appDataFolder for security
+      spaces: "appDataFolder",
       access_token: token,
     });
 
-    if (!listResponse.result.files || listResponse.result.files.length === 0) {
-      const errorMsg = `RSA key backup file '${fileName}' not found in Google Drive appDataFolder.`;
-      logger.warn(errorMsg);
-      throw new Error(errorMsg);
+    if (listResponse.result.files && listResponse.result.files.length > 0) {
+      fileId = listResponse.result.files[0].id!;
+      foundLocation = "appDataFolder (hidden)";
+      logger.log(`Found RSA key backup in appDataFolder with ID: ${fileId}`);
     }
+  } catch (appDataError) {
+    logger.warn(`Could not search appDataFolder:`, appDataError);
+  }
 
-    const fileId = listResponse.result.files[0].id!;
-    logger.log(
-      `Found RSA key backup file '${fileName}' in appDataFolder with ID: ${fileId}. Downloading...`
-    );
+  // SECOND: If not found, try root of Google Drive
+  if (!fileId) {
+    try {
+      logger.log(`Searching for RSA key backup in root Google Drive...`);
+      const query = `name='${fileName}' and 'root' in parents and trashed=false`;
+      const listResponse = await (gapi.client as any).drive.files.list({
+        q: query,
+        fields: "files(id, name)",
+        spaces: "drive", // Search in regular Drive space
+        access_token: token,
+      });
 
+      if (listResponse.result.files && listResponse.result.files.length > 0) {
+        fileId = listResponse.result.files[0].id!;
+        foundLocation = "root Google Drive";
+        logger.log(`Found RSA key backup in root Drive with ID: ${fileId}`);
+      }
+    } catch (rootError) {
+      logger.warn(`Could not search root Google Drive:`, rootError);
+    }
+  }
+
+  // If still not found, throw error
+  if (!fileId) {
+    const errorMsg = `RSA key backup file '${fileName}' not found in appDataFolder or root Google Drive.`;
+    logger.error(errorMsg);
+    throw new Error(errorMsg);
+  }
+
+  // Download the file
+  try {
+    logger.log(`Downloading RSA key backup from ${foundLocation}...`);
     const fetchResponse = await fetch(
       `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`,
       {
@@ -155,16 +193,14 @@ export async function downloadEncryptedRsaKeyFromDrive(): Promise<Blob> {
 
     if (!fetchResponse.ok) {
       throw new Error(
-        `Failed to download key file from Google Drive appDataFolder: ${fetchResponse.statusText}`
+        `Failed to download key file from ${foundLocation}: ${fetchResponse.statusText}`
       );
     }
+
+    logger.log(`Successfully downloaded RSA key backup from ${foundLocation}`);
     return await fetchResponse.blob();
-  } catch (error: any) {
-    logger.error(
-      `Error downloading RSA key backup '${fileName}' from Google Drive appDataFolder:`,
-      error
-    );
-    // Re-throw error so caller can handle it with proper context
-    throw error;
+  } catch (downloadError: any) {
+    logger.error(`Error downloading RSA key backup from ${foundLocation}:`, downloadError);
+    throw downloadError;
   }
 }

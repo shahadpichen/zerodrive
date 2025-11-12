@@ -180,11 +180,11 @@ describe('gdriveKeyStorage', () => {
       );
     });
 
-    it('should throw error when file not found in appDataFolder', async () => {
+    it('should throw error when file not found in appDataFolder or root Drive', async () => {
       (getGoogleAccessToken as jest.Mock).mockResolvedValue(mockAccessToken);
       (gapi.client.load as jest.Mock).mockResolvedValue(undefined);
 
-      // Mock list response (no files found)
+      // Mock list response (no files found in either location)
       (gapi.client as any).drive = {
         files: {
           list: jest.fn().mockResolvedValue({
@@ -194,7 +194,7 @@ describe('gdriveKeyStorage', () => {
       };
 
       await expect(downloadEncryptedRsaKeyFromDrive()).rejects.toThrow(
-        'not found in Google Drive appDataFolder'
+        'not found in appDataFolder or root Google Drive'
       );
     });
 
@@ -253,7 +253,7 @@ describe('gdriveKeyStorage', () => {
       });
 
       await expect(downloadEncryptedRsaKeyFromDrive()).rejects.toThrow(
-        'Failed to download key file from Google Drive appDataFolder'
+        'Failed to download key file from appDataFolder (hidden)'
       );
     });
 

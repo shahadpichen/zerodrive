@@ -13,13 +13,13 @@ import {
 } from "../components/ui/card";
 import { Separator } from "../components/ui/separator";
 import {
-  findFilesSharedWithRecipient,
   decryptSharedFile,
   hashEmail,
   arrayBufferToBase64,
-  UserKeyPair,
   storeUserPublicKey,
   deleteFileFromStorage,
+  fetchUserPublicKey,
+  downloadEncryptedFile,
 } from "../utils/fileSharing";
 import {
   Table,
@@ -29,18 +29,13 @@ import {
   TableHeader,
   TableRow,
 } from "../components/ui/table";
-import {
-  userHasStoredKeys,
-  getUserKeyPair,
-  storeUserKeyPair,
-} from "../utils/keyStorage";
+import { getUserKeyPair, storeUserKeyPair } from "../utils/keyStorage";
 import apiClient from "../utils/apiClient";
-import { downloadEncryptedFile } from "../utils/fileSharing";
 import { getStoredKey } from "../utils/cryptoUtils";
-import { downloadEncryptedRsaKeyFromDrive } from "../utils/gdriveKeyStorage";
-import { decryptRsaPrivateKeyWithAesKey } from "../utils/rsaKeyManager";
 import { uploadAndSyncFile } from "../utils/fileOperations";
 import { trackEvent, AnalyticsEvent, AnalyticsCategory } from "../utils/analyticsTracker";
+import { requireMnemonicWithPrompt } from "../utils/mnemonicManager";
+import { recoverRsaKeysIfNeeded } from "../utils/rsaKeyRecovery";
 
 interface SharedFile {
   id: string;
@@ -56,6 +51,14 @@ interface SharedFile {
 
 const SharedWithMePage: FC = () => {
   const navigate = useNavigate();
+
+  // Guard: Require mnemonic before accessing this page
+  useEffect(() => {
+    if (!requireMnemonicWithPrompt('file sharing')) {
+      navigate('/key-management');
+    }
+  }, [navigate]);
+
   const [userEmail, setUserEmail] = useState<string>("");
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [sharedFiles, setSharedFiles] = useState<SharedFile[]>([]);
@@ -90,15 +93,38 @@ const SharedWithMePage: FC = () => {
     getUserEmail();
   }, [navigate]);
 
-  // Check if user has generated keys
+  // Check if user has generated keys and recover if needed
   useEffect(() => {
     const checkForKeys = async () => {
       if (!userEmail) return;
 
       setIsCheckingKeys(true);
       try {
-        const hasStoredKeysInDb = await userHasStoredKeys(userEmail);
-        setHasKeys(hasStoredKeysInDb);
+        // Use centralized recovery utility
+        const result = await recoverRsaKeysIfNeeded(userEmail, false);
+
+        if (result.keysExisted || result.recovered) {
+          setHasKeys(true);
+
+          // Auto-repair: Ensure public key is synced to server
+          if (result.keysExisted) {
+            const hashedEmail = await hashEmail(userEmail);
+            try {
+              const serverKey = await fetchUserPublicKey(hashedEmail);
+              if (!serverKey) {
+                const localKeyPair = await getUserKeyPair(userEmail);
+                if (localKeyPair?.publicKeyJwk) {
+                  await storeUserPublicKey(hashedEmail, localKeyPair.publicKeyJwk);
+                  console.log('Public key synced to server');
+                }
+              }
+            } catch (syncError) {
+              console.error('Error syncing public key to server:', syncError);
+            }
+          }
+        } else {
+          setHasKeys(false);
+        }
       } catch (error) {
         console.error("Error checking for keys:", error);
         setHasKeys(false);
@@ -260,89 +286,22 @@ const SharedWithMePage: FC = () => {
     try {
       if (!currentHasKeys) {
         toast.dismiss(downloadToastId);
-        const recoveryToastId = toast.loading(
-          "Sharing keys not found locally. Checking primary key for backup recovery..."
-        );
-        const primaryAesKey = await getStoredKey();
 
-        if (!primaryAesKey) {
-          toast.error("Primary encryption key missing.", {
-            id: recoveryToastId,
-            description:
-              "Redirecting to Key Management to set up or restore your primary key.",
-            duration: 5000,
+        // Attempt recovery using centralized utility
+        const result = await recoverRsaKeysIfNeeded(userEmail, false);
+
+        if (result.recovered || result.keysExisted) {
+          setHasKeys(true);
+          currentHasKeys = true;
+          toast.loading(`Downloading ${file.originalFileName}...`, {
+            id: downloadToastId,
           });
-          navigate("/key-management");
-          setIsDownloading(null);
-          return;
-        }
-
-        toast.loading(
-          "Attempting to recover sharing keys from Google Drive backup...",
-          { id: recoveryToastId }
-        );
-        const backupBlob = await downloadEncryptedRsaKeyFromDrive();
-
-        if (backupBlob) {
-          try {
-            const privateKeyJwk = await decryptRsaPrivateKeyWithAesKey(
-              backupBlob,
-              primaryAesKey
-            );
-            const publicKeyJwk: JsonWebKey = {
-              kty: privateKeyJwk.kty,
-              n: privateKeyJwk.n,
-              e: privateKeyJwk.e,
-              alg: privateKeyJwk.alg
-                ? privateKeyJwk.alg.replace("PS", "RS")
-                : "RSA-OAEP-256",
-              key_ops: ["encrypt"],
-              ext: true,
-            };
-            if (!publicKeyJwk.n || !publicKeyJwk.e || !publicKeyJwk.kty) {
-              throw new Error(
-                "Failed to reconstruct public key from private key backup."
-              );
-            }
-            if (!privateKeyJwk.key_ops) {
-              privateKeyJwk.key_ops = ["decrypt"];
-            }
-            const recoveredKeyPair: UserKeyPair = {
-              publicKeyJwk,
-              privateKeyJwk,
-            };
-
-            await storeUserKeyPair(userEmail, recoveredKeyPair);
-            const hashedEmailForSupabase = await hashEmail(userEmail);
-            await storeUserPublicKey(
-              hashedEmailForSupabase,
-              recoveredKeyPair.publicKeyJwk
-            );
-
-            setHasKeys(true);
-            currentHasKeys = true;
-            toast.success("Sharing keys recovered from backup and loaded.", {
-              id: recoveryToastId,
-            });
-            toast.loading(`Downloading ${file.originalFileName}...`, {
-              id: downloadToastId,
-            });
-          } catch (decryptionError) {
-            toast.error("Failed to decrypt sharing key backup.", {
-              id: recoveryToastId,
-              description:
-                decryptionError instanceof Error
-                  ? decryptionError.message
-                  : "Primary key might be incorrect or backup corrupted.",
-            });
-            setIsDownloading(null);
-            return;
-          }
         } else {
-          toast.error("No sharing key backup found on Google Drive.", {
-            id: recoveryToastId,
+          // Recovery failed or no backup found
+          toast.error("Sharing keys not available", {
             description:
-              "Please generate sharing keys on the Share Files page if this is your first time or a new device.",
+              "Please enable file sharing in the storage page to generate your sharing keys.",
+            duration: 5000,
           });
           setIsDownloading(null);
           return;

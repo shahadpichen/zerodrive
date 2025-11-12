@@ -18,6 +18,7 @@ import ShareFilesPage from "./pages/share-files";
 import SharedWithMePage from "./pages/shared-with-me";
 import KeyTestPage from "./pages/KeyTestPage";
 import { isAuthenticated as checkAuth } from "./utils/authService";
+import { useRsaKeyRecovery } from "./hooks/useRsaKeyRecovery";
 
 // Polyfill global Buffer for libraries that expect it (e.g., bip39)
 window.Buffer = Buffer as any;
@@ -57,6 +58,9 @@ function App() {
   useEffect(() => {
     checkEnvironmentVariables();
   }, []);
+
+  // Automatically recover RSA keys on page load if mnemonic is available
+  useRsaKeyRecovery();
 
   return (
     <Router>

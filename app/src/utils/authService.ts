@@ -3,13 +3,11 @@
  * Handles JWT token management and authentication flow
  */
 
-import { encryptGoogleTokens, decryptGoogleTokens } from './cryptoUtils';
-import { hasMnemonic } from './mnemonicManager';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001/api';
 
 // JWT token is now stored in httpOnly cookie, not localStorage
-// Google tokens are encrypted in sessionStorage with PBKDF2 (same as AES/RSA keys)
+// Google tokens are stored unencrypted in sessionStorage (cleared on tab close)
 // Also cached in memory for performance
 let googleTokenCache: {
   token: string;
@@ -172,11 +170,10 @@ function isGoogleTokenCacheValid(userEmail: string): boolean {
 
 /**
  * Get Google access token from sessionStorage
- * Handles both encrypted (with mnemonic) and unencrypted (temporary) formats
  */
 export async function getGoogleTokenFromStorage(userEmail: string): Promise<string | null> {
   try {
-    const storedData = sessionStorage.getItem('google-tokens-encrypted');
+    const storedData = sessionStorage.getItem('google-tokens');
     if (!storedData) {
       console.log('[Auth] No Google tokens found in sessionStorage');
       return null;
@@ -191,68 +188,32 @@ export async function getGoogleTokenFromStorage(userEmail: string): Promise<stri
       return null;
     }
 
-    // Check if tokens are unencrypted (temporary storage during OAuth)
-    if (parsed.needsEncryption === true) {
-      console.warn('[Auth] Using unencrypted Google tokens (mnemonic not yet entered)');
-
-      // Check if token is expired
-      const expiresAt = new Date(parsed.expiresAt);
-      const now = Date.now();
-      if (now >= expiresAt.getTime()) {
-        console.log('[Auth] Access token expired');
-        clearGoogleTokens();
-        return null;
-      }
-
-      // Update memory cache
-      googleTokenCache = {
-        token: parsed.accessToken,
-        expiry: expiresAt,
-        userEmail,
-      };
-
-      return parsed.accessToken;
-    }
-
-    // Tokens are encrypted - decrypt them
-    const tokens = await decryptGoogleTokens({
-      iv: parsed.iv,
-      encryptedTokens: parsed.encryptedTokens,
-    });
-
     // Check if token is expired
+    const expiresAt = new Date(parsed.expiresAt);
     const now = Date.now();
-    if (now >= tokens.expiresAt.getTime()) {
+    if (now >= expiresAt.getTime()) {
       console.log('[Auth] Access token expired');
-
-      // TODO: Implement token refresh using refresh_token
-      // For now, return null and user will need to re-authenticate
-      if (tokens.refreshToken) {
-        console.warn('[Auth] Token refresh not yet implemented, clearing tokens');
-        clearGoogleTokens();
-      }
-
+      clearGoogleTokens();
       return null;
     }
 
     // Update memory cache
     googleTokenCache = {
-      token: tokens.accessToken,
-      expiry: tokens.expiresAt,
+      token: parsed.accessToken,
+      expiry: expiresAt,
       userEmail,
     };
 
-    return tokens.accessToken;
+    return parsed.accessToken;
   } catch (error) {
     console.error('[Auth] Error reading Google tokens:', error);
-    // If decryption fails (e.g., wrong mnemonic), clear the storage
     clearGoogleTokens();
     return null;
   }
 }
 
 /**
- * Get Google token (from cache or decrypt from sessionStorage)
+ * Get Google token (from cache or retrieve from sessionStorage)
  */
 export async function getOrFetchGoogleToken(): Promise<string | null> {
   // Get current user email
@@ -272,9 +233,8 @@ export async function getOrFetchGoogleToken(): Promise<string | null> {
 }
 
 /**
- * Store Google OAuth tokens in sessionStorage
- * If mnemonic is available: Encrypts with PBKDF2 before storing
- * If mnemonic NOT available: Stores unencrypted temporarily (auto-encrypted when mnemonic entered)
+ * Store Google OAuth tokens in sessionStorage (unencrypted)
+ * SessionStorage is cleared when tab closes, providing adequate security
  */
 export async function storeGoogleTokens(tokens: {
   accessToken: string;
@@ -290,76 +250,20 @@ export async function storeGoogleTokens(tokens: {
       userEmail,
     };
 
-    // Check if mnemonic is available
-    if (hasMnemonic()) {
-      // Encrypt tokens with PBKDF2-derived key from mnemonic
-      const encryptedData = await encryptGoogleTokens(tokens);
-
-      // Store in sessionStorage (encrypted)
-      const stored = {
-        ...encryptedData,
-        userEmail,
-      };
-      sessionStorage.setItem('google-tokens-encrypted', JSON.stringify(stored));
-      console.log('[Auth] Stored encrypted Google tokens in sessionStorage');
-    } else {
-      // No mnemonic yet - store unencrypted temporarily
-      // This happens during OAuth before user sets up keys
-      // Tokens will be encrypted automatically when mnemonic is entered
-      const stored = {
-        accessToken: tokens.accessToken,
-        refreshToken: tokens.refreshToken,
-        expiresAt: tokens.expiresAt.toISOString(),
-        scope: tokens.scope,
-        userEmail,
-        needsEncryption: true, // Flag to encrypt later
-      };
-      sessionStorage.setItem('google-tokens-encrypted', JSON.stringify(stored));
-      console.warn('[Auth] Stored UNENCRYPTED Google tokens in sessionStorage (will encrypt when mnemonic available)');
-    }
+    // Store tokens unencrypted in sessionStorage
+    // sessionStorage is cleared when tab closes, providing adequate security
+    const stored = {
+      accessToken: tokens.accessToken,
+      refreshToken: tokens.refreshToken,
+      expiresAt: tokens.expiresAt.toISOString(),
+      scope: tokens.scope,
+      userEmail,
+    };
+    sessionStorage.setItem('google-tokens', JSON.stringify(stored));
+    console.log('[Auth] Stored Google tokens in sessionStorage');
   } catch (error) {
     console.error('[Auth] Failed to store Google tokens:', error);
     throw error;
-  }
-}
-
-/**
- * Encrypt pending Google tokens if they were stored unencrypted
- * Called automatically when mnemonic is entered
- * @returns true if tokens were encrypted, false if no pending tokens
- */
-export async function encryptPendingGoogleTokens(): Promise<boolean> {
-  try {
-    const storedData = sessionStorage.getItem('google-tokens-encrypted');
-    if (!storedData) {
-      return false; // No tokens to encrypt
-    }
-
-    const parsed = JSON.parse(storedData);
-
-    // Check if tokens need encryption
-    if (parsed.needsEncryption !== true) {
-      return false; // Already encrypted or not flagged
-    }
-
-    console.log('[Auth] Encrypting pending Google tokens...');
-
-    // Extract token data
-    const tokens = {
-      accessToken: parsed.accessToken,
-      refreshToken: parsed.refreshToken,
-      expiresAt: new Date(parsed.expiresAt),
-      scope: parsed.scope,
-    };
-
-    // Re-store with encryption (will use mnemonic now available)
-    await storeGoogleTokens(tokens, parsed.userEmail);
-
-    console.log('[Auth] Successfully encrypted pending Google tokens');
-    return true;
-  } catch (error) {
-    console.error('[Auth] Failed to encrypt pending Google tokens:', error);
-    return false;
   }
 }
 
@@ -368,5 +272,14 @@ export async function encryptPendingGoogleTokens(): Promise<boolean> {
  */
 export function clearGoogleTokens(): void {
   googleTokenCache = null;
-  sessionStorage.removeItem('google-tokens-encrypted');
+  sessionStorage.removeItem('google-tokens');
+}
+
+/**
+ * Check if Google tokens exist in sessionStorage
+ * @returns true if tokens exist, false otherwise
+ */
+export function hasGoogleTokensInStorage(): boolean {
+  const storedData = sessionStorage.getItem('google-tokens');
+  return storedData !== null;
 }

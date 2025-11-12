@@ -1,13 +1,12 @@
 /**
  * KeyStorage utility for securely managing cryptographic keys
  * Stores keys in IndexedDB associated with specific user accounts
- * Private keys are encrypted using PBKDF2-derived wrapping key from mnemonic
+ * Keys are stored unencrypted (IndexedDB is client-side only)
  */
 
 import { openDB, IDBPDatabase } from "idb";
 import { UserKeyPair } from "./fileSharing";
 import logger from "./logger";
-import { encryptPrivateKeyJwk, decryptPrivateKeyJwk } from "./cryptoUtils";
 
 const DB_NAME = "zerodrive-keys";
 const DB_VERSION = 1;
@@ -16,13 +15,7 @@ const KEY_STORE = "user-keys";
 interface UserKeyData {
   email: string;
   publicKeyJwk: JsonWebKey;
-  /** @deprecated Legacy plaintext private key - migrated to encryptedPrivateKey */
-  privateKeyJwk?: JsonWebKey;
-  /** Encrypted private key (PBKDF2-wrapped) */
-  encryptedPrivateKey?: {
-    iv: number[];
-    encryptedKey: number[];
-  };
+  privateKeyJwk: JsonWebKey;
   createdAt: number;
 }
 
@@ -47,7 +40,6 @@ const getDb = async (): Promise<IDBPDatabase> => {
 
 /**
  * Store a user's key pair in IndexedDB
- * Private key is encrypted with PBKDF2-derived wrapping key from mnemonic
  * @param email The user's email to associate with the keys
  * @param keyPair The key pair to store
  */
@@ -60,14 +52,11 @@ export async function storeUserKeyPair(
     throw new Error("Complete key pair is required");
   }
 
-  // Encrypt the private key using mnemonic-derived wrapping key
-  const encryptedPrivateKey = await encryptPrivateKeyJwk(keyPair.privateKeyJwk);
-
   const db = await getDb();
   const userData: UserKeyData = {
     email,
     publicKeyJwk: keyPair.publicKeyJwk,
-    encryptedPrivateKey: encryptedPrivateKey,
+    privateKeyJwk: keyPair.privateKeyJwk,
     createdAt: Date.now(),
   };
 
@@ -94,8 +83,6 @@ export async function userHasStoredKeys(email: string): Promise<boolean> {
 
 /**
  * Get a user's key pair from IndexedDB
- * Decrypts the private key using mnemonic-derived wrapping key
- * Handles migration from legacy plaintext keys
  * @param email The user's email
  * @returns The user's key pair or null if not found
  */
@@ -110,36 +97,13 @@ export async function getUserKeyPair(
 
     if (!userData) return null;
 
-    let privateKeyJwk: JsonWebKey;
-
-    // Check if we have encrypted private key (new format)
-    if (userData.encryptedPrivateKey) {
-      // Decrypt the private key
-      privateKeyJwk = await decryptPrivateKeyJwk(userData.encryptedPrivateKey);
-    }
-    // Migration: Handle legacy plaintext private keys
-    else if (userData.privateKeyJwk) {
-      logger.warn(`Migrating legacy plaintext private key for ${email} to encrypted format`);
-      privateKeyJwk = userData.privateKeyJwk;
-
-      // Re-encrypt and save (migration)
-      try {
-        const encryptedPrivateKey = await encryptPrivateKeyJwk(privateKeyJwk);
-        userData.encryptedPrivateKey = encryptedPrivateKey;
-        delete userData.privateKeyJwk; // Remove legacy plaintext
-        await db.put(KEY_STORE, userData);
-        logger.log(`Successfully migrated private key for ${email} to encrypted format`);
-      } catch (migrationError) {
-        logger.error(`Failed to migrate private key for ${email}:`, migrationError);
-        // Continue with plaintext key if migration fails
-      }
-    } else {
-      throw new Error("No private key found (neither encrypted nor plaintext)");
+    if (!userData.privateKeyJwk) {
+      throw new Error("No private key found");
     }
 
     return {
       publicKeyJwk: userData.publicKeyJwk,
-      privateKeyJwk: privateKeyJwk,
+      privateKeyJwk: userData.privateKeyJwk,
     };
   } catch (error) {
     logger.error("Error retrieving user keys:", error);

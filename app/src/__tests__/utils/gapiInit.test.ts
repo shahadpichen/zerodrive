@@ -102,7 +102,7 @@ describe('GapiInit', () => {
       mockGetOrFetchGoogleToken.mockResolvedValue(null);
 
       await expect(initializeGapi()).rejects.toThrow(
-        'Failed to get Google access token from backend'
+        'Google access token not found'
       );
     });
 

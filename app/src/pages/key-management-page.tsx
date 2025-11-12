@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   generateMnemonic,
@@ -7,7 +7,9 @@ import {
 } from "../utils/cryptoUtils";
 import { setMnemonic } from "../utils/mnemonicManager";
 import { testEncryptionKey } from "../utils/keyTest";
-import { encryptPendingGoogleTokens } from "../utils/authService";
+import { recoverRsaKeysIfNeeded } from "../utils/rsaKeyRecovery";
+import { hasGoogleTokensInStorage } from "../utils/authService";
+import { gapi } from "gapi-script";
 import { Button } from "../components/ui/button";
 import {
   Card,
@@ -47,6 +49,27 @@ export const KeyManagementPage: React.FC = () => {
   const [showGenerateWarning, setShowGenerateWarning] = useState(false);
   const [understandLoss, setUnderstandLoss] = useState(false);
   const [readyToSave, setReadyToSave] = useState(false);
+  const [isGapiReady, setIsGapiReady] = useState(false);
+
+  // Initialize Google API when page loads
+  useEffect(() => {
+    const initGapi = async () => {
+      try {
+        const { initializeGapi } = await import("../utils/gapiInit");
+        await initializeGapi();
+        setIsGapiReady(true);
+        console.log('[KeyManagement] GAPI initialized successfully');
+      } catch (error) {
+        console.error('[KeyManagement] GAPI initialization failed:', error);
+        // RSA recovery will be skipped, but key generation still works
+        toast.warning('Google Drive connection unavailable', {
+          description: 'RSA key recovery from backup will not be available.',
+          duration: 5000,
+        });
+      }
+    };
+    initGapi();
+  }, []);
 
   const handleShowWarning = () => {
     setShowGenerateWarning(true);
@@ -62,14 +85,41 @@ export const KeyManagementPage: React.FC = () => {
       const newMnemonic = generateMnemonic();
       setGeneratedMnemonic(newMnemonic);
       const key = await deriveKeyFromMnemonic(newMnemonic);
-      // Store mnemonic in memory and encrypt key with it
+      // Store mnemonic in memory and store key in sessionStorage
       setMnemonic(newMnemonic);
-      await storeKey(key, newMnemonic);
+      await storeKey(key);
 
-      // Encrypt any pending Google tokens now that mnemonic is available
-      const tokensEncrypted = await encryptPendingGoogleTokens();
-      if (tokensEncrypted) {
-        console.log('[KeyManagement] Encrypted pending Google tokens');
+      // Attempt to recover RSA keys from Google Drive if not in IndexedDB
+      if (isGapiReady) {
+        try {
+          // Check if Google tokens exist (better indicator than GAPI sign-in state)
+          if (hasGoogleTokensInStorage()) {
+            const authInstance = gapi.auth2?.getAuthInstance();
+            if (authInstance && authInstance.isSignedIn.get()) {
+              const profile = authInstance.currentUser.get().getBasicProfile();
+              if (profile) {
+                const userEmail = profile.getEmail();
+                await recoverRsaKeysIfNeeded(userEmail);
+              }
+            } else {
+              console.log('[KeyManagement] Google tokens exist but GAPI not fully initialized - recovery will happen on other pages');
+            }
+          } else {
+            console.log('[KeyManagement] Google Drive not connected - RSA key recovery skipped');
+            toast.info('RSA key recovery skipped', {
+              description: 'Google Drive not connected. You can enable file sharing later to create RSA keys.',
+              duration: 5000,
+            });
+          }
+        } catch (recoveryError) {
+          console.error('[KeyManagement] RSA key recovery failed:', recoveryError);
+          toast.error('RSA key recovery failed', {
+            description: String(recoveryError),
+            duration: 5000,
+          });
+        }
+      } else {
+        console.log('[KeyManagement] GAPI not ready - RSA key recovery skipped');
       }
 
       toast.success("New Mnemonic & Key Generated!", {
@@ -95,14 +145,41 @@ export const KeyManagementPage: React.FC = () => {
     try {
       const trimmedMnemonic = inputMnemonic.trim();
       const key = await deriveKeyFromMnemonic(trimmedMnemonic);
-      // Store mnemonic in memory and encrypt key with it
+      // Store mnemonic in memory and store key in sessionStorage
       setMnemonic(trimmedMnemonic);
-      await storeKey(key, trimmedMnemonic);
+      await storeKey(key);
 
-      // Encrypt any pending Google tokens now that mnemonic is available
-      const tokensEncrypted = await encryptPendingGoogleTokens();
-      if (tokensEncrypted) {
-        console.log('[KeyManagement] Encrypted pending Google tokens');
+      // Attempt to recover RSA keys from Google Drive if not in IndexedDB
+      if (isGapiReady) {
+        try {
+          // Check if Google tokens exist (better indicator than GAPI sign-in state)
+          if (hasGoogleTokensInStorage()) {
+            const authInstance = gapi.auth2?.getAuthInstance();
+            if (authInstance && authInstance.isSignedIn.get()) {
+              const profile = authInstance.currentUser.get().getBasicProfile();
+              if (profile) {
+                const userEmail = profile.getEmail();
+                await recoverRsaKeysIfNeeded(userEmail);
+              }
+            } else {
+              console.log('[KeyManagement] Google tokens exist but GAPI not fully initialized - recovery will happen on other pages');
+            }
+          } else {
+            console.log('[KeyManagement] Google Drive not connected - RSA key recovery skipped');
+            toast.info('RSA key recovery skipped', {
+              description: 'Google Drive not connected. You can enable file sharing later to create RSA keys.',
+              duration: 5000,
+            });
+          }
+        } catch (recoveryError) {
+          console.error('[KeyManagement] RSA key recovery failed:', recoveryError);
+          toast.error('RSA key recovery failed', {
+            description: String(recoveryError),
+            duration: 5000,
+          });
+        }
+      } else {
+        console.log('[KeyManagement] GAPI not ready - RSA key recovery skipped');
       }
 
       toast.success("Key Loaded Successfully!", {
@@ -154,12 +231,39 @@ export const KeyManagementPage: React.FC = () => {
           const mnemonic = generateMnemonic();
           setGeneratedMnemonic(mnemonic);
           setMnemonic(mnemonic);
-          await storeKey(key, mnemonic);
+          await storeKey(key);
 
-          // Encrypt any pending Google tokens now that mnemonic is available
-          const tokensEncrypted = await encryptPendingGoogleTokens();
-          if (tokensEncrypted) {
-            console.log('[KeyManagement] Encrypted pending Google tokens');
+          // Attempt to recover RSA keys from Google Drive if not in IndexedDB
+          if (isGapiReady) {
+            try {
+              // Check if Google tokens exist (better indicator than GAPI sign-in state)
+              if (hasGoogleTokensInStorage()) {
+                const authInstance = gapi.auth2?.getAuthInstance();
+                if (authInstance && authInstance.isSignedIn.get()) {
+                  const profile = authInstance.currentUser.get().getBasicProfile();
+                  if (profile) {
+                    const userEmail = profile.getEmail();
+                    await recoverRsaKeysIfNeeded(userEmail);
+                  }
+                } else {
+                  console.log('[KeyManagement] Google tokens exist but GAPI not fully initialized - recovery will happen on other pages');
+                }
+              } else {
+                console.log('[KeyManagement] Google Drive not connected - RSA key recovery skipped');
+                toast.info('RSA key recovery skipped', {
+                  description: 'Google Drive not connected. You can enable file sharing later to create RSA keys.',
+                  duration: 5000,
+                });
+              }
+            } catch (recoveryError) {
+              console.error('[KeyManagement] RSA key recovery failed:', recoveryError);
+              toast.error('RSA key recovery failed', {
+                description: String(recoveryError),
+                duration: 5000,
+              });
+            }
+          } else {
+            console.log('[KeyManagement] GAPI not ready - RSA key recovery skipped');
           }
 
           toast.success("Encryption key added from file!", {
