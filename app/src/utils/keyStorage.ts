@@ -9,13 +9,13 @@ import { UserKeyPair } from "./fileSharing";
 import logger from "./logger";
 
 const DB_NAME = "zerodrive-keys";
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const KEY_STORE = "user-keys";
 
 interface UserKeyData {
   email: string;
   publicKeyJwk: JsonWebKey;
-  privateKeyJwk: JsonWebKey;
+  encryptedPrivateKey: string;  // RSA private key encrypted with mnemonic
   createdAt: number;
 }
 
@@ -42,25 +42,37 @@ const getDb = async (): Promise<IDBPDatabase> => {
  * Store a user's key pair in IndexedDB
  * @param email The user's email to associate with the keys
  * @param keyPair The key pair to store
+ * @param mnemonic The mnemonic to encrypt the private key
  */
 export async function storeUserKeyPair(
   email: string,
-  keyPair: { publicKeyJwk: JsonWebKey; privateKeyJwk: JsonWebKey }
+  keyPair: { publicKeyJwk: JsonWebKey; privateKeyJwk: JsonWebKey },
+  mnemonic: string
 ): Promise<void> {
   if (!email) throw new Error("User email is required");
   if (!keyPair?.publicKeyJwk || !keyPair?.privateKeyJwk) {
     throw new Error("Complete key pair is required");
   }
+  if (!mnemonic) throw new Error("Mnemonic is required to encrypt private key");
+
+  const { encryptRsaPrivateKey } = await import('./cryptoUtils');
+
+  // Encrypt private key with mnemonic
+  const encryptedPrivateKey = await encryptRsaPrivateKey(
+    keyPair.privateKeyJwk,
+    mnemonic
+  );
 
   const db = await getDb();
   const userData: UserKeyData = {
     email,
     publicKeyJwk: keyPair.publicKeyJwk,
-    privateKeyJwk: keyPair.privateKeyJwk,
+    encryptedPrivateKey,
     createdAt: Date.now(),
   };
 
   await db.put(KEY_STORE, userData);
+  logger.info('[KeyStorage] RSA keys stored (private key encrypted with PBKDF2)');
 }
 
 /**
@@ -84,12 +96,15 @@ export async function userHasStoredKeys(email: string): Promise<boolean> {
 /**
  * Get a user's key pair from IndexedDB
  * @param email The user's email
+ * @param mnemonic The mnemonic to decrypt the private key
  * @returns The user's key pair or null if not found
  */
 export async function getUserKeyPair(
-  email: string
+  email: string,
+  mnemonic: string
 ): Promise<{ publicKeyJwk: JsonWebKey; privateKeyJwk: JsonWebKey } | null> {
   if (!email) return null;
+  if (!mnemonic) throw new Error("Mnemonic is required to decrypt private key");
 
   try {
     const db = await getDb();
@@ -97,17 +112,25 @@ export async function getUserKeyPair(
 
     if (!userData) return null;
 
-    if (!userData.privateKeyJwk) {
-      throw new Error("No private key found");
+    if (!userData.encryptedPrivateKey) {
+      throw new Error("No encrypted private key found in IndexedDB");
     }
+
+    const { decryptRsaPrivateKey } = await import('./cryptoUtils');
+
+    // Decrypt private key with mnemonic
+    const privateKeyJwk = await decryptRsaPrivateKey(
+      userData.encryptedPrivateKey,
+      mnemonic
+    );
 
     return {
       publicKeyJwk: userData.publicKeyJwk,
-      privateKeyJwk: userData.privateKeyJwk,
+      privateKeyJwk,
     };
   } catch (error) {
-    logger.error("Error retrieving user keys:", error);
-    return null;
+    logger.error("Error retrieving/decrypting RSA keys:", error);
+    throw error;  // Propagate error so caller can handle wrong mnemonic
   }
 }
 

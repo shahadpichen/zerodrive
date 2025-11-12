@@ -5,7 +5,7 @@
 
 import { Router, Request, Response } from 'express';
 import crypto from 'crypto';
-import { getAuthUrl, getTokensFromCode, getUserInfo, hasFullDriveScope } from '../services/googleOAuthService';
+import { getAuthUrl, getTokensFromCode, getUserInfo, hasFullDriveScope, refreshAccessToken } from '../services/googleOAuthService';
 import { generateToken, generateRefreshToken, verifyToken, verifyRefreshToken } from '../services/jwtService';
 import { requireAuth } from '../middleware/auth';
 import { asyncHandler, ApiErrors } from '../middleware/errorHandler';
@@ -213,6 +213,39 @@ router.post('/refresh', asyncHandler(async (req: Request, res: Response) => {
       error: error instanceof Error ? error.message : 'Unknown error',
     });
     throw ApiErrors.Unauthorized('Invalid or expired refresh token');
+  }
+}));
+
+/**
+ * POST /api/auth/google/refresh
+ * Refresh Google access token using refresh token
+ * No JWT auth required - uses Google refresh token from request body
+ */
+router.post('/google/refresh', asyncHandler(async (req: Request, res: Response) => {
+  const { refreshToken } = req.body;
+
+  if (!refreshToken || typeof refreshToken !== 'string') {
+    throw ApiErrors.BadRequest('Refresh token is required');
+  }
+
+  try {
+    // Use Google OAuth service to refresh the access token
+    const { accessToken } = await refreshAccessToken(refreshToken);
+
+    // Calculate new expiry (Google access tokens typically expire in 1 hour)
+    const expiresAt = new Date(Date.now() + 3600 * 1000);
+
+    logger.info('[Auth] Google access token refreshed successfully');
+
+    res.apiSuccess({
+      accessToken,
+      expiresAt: expiresAt.toISOString(),
+    }, 'Google access token refreshed');
+  } catch (error) {
+    logger.warn('[Auth] Google token refresh failed', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    throw ApiErrors.Unauthorized('Failed to refresh Google access token');
   }
 }));
 

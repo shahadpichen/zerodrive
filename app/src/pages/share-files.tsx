@@ -31,18 +31,12 @@ import {
 import { encryptRsaPrivateKeyWithAesKey } from "../utils/rsaKeyManager";
 import { uploadEncryptedRsaKeyToDrive } from "../utils/gdriveKeyStorage";
 import { getStoredKey } from "../utils/cryptoUtils";
-import { requireMnemonicWithPrompt } from "../utils/mnemonicManager";
+import { getMnemonic } from "../utils/mnemonicManager";
 import { recoverRsaKeysIfNeeded } from "../utils/rsaKeyRecovery";
 
 const ShareFilesPage: React.FC = () => {
   const navigate = useNavigate();
 
-  // Guard: Require mnemonic before accessing this page
-  useEffect(() => {
-    if (!requireMnemonicWithPrompt('file sharing')) {
-      navigate('/key-management');
-    }
-  }, [navigate]);
   const [file, setFile] = useState<File | null>(null);
   const [recipientEmail, setRecipientEmail] = useState<string>("");
   const [customMessage, setCustomMessage] = useState<string>("");
@@ -94,10 +88,13 @@ const ShareFilesPage: React.FC = () => {
             try {
               const serverKey = await fetchUserPublicKey(hashedEmail);
               if (!serverKey) {
-                const localKeyPair = await getUserKeyPair(senderEmail);
-                if (localKeyPair?.publicKeyJwk) {
-                  await storeUserPublicKey(hashedEmail, localKeyPair.publicKeyJwk);
-                  console.log('Public key synced to server');
+                const mnemonic = getMnemonic();
+                if (mnemonic) {
+                  const localKeyPair = await getUserKeyPair(senderEmail, mnemonic);
+                  if (localKeyPair?.publicKeyJwk) {
+                    await storeUserPublicKey(hashedEmail, localKeyPair.publicKeyJwk);
+                    console.log('Public key synced to server');
+                  }
                 }
               }
             } catch (syncError) {
@@ -120,23 +117,20 @@ const ShareFilesPage: React.FC = () => {
   }, [senderEmail, navigate]);
 
   useEffect(() => {
-    const getUserEmail = () => {
+    const getUserEmail = async () => {
       try {
-        const authInstance = gapi.auth2?.getAuthInstance();
-        if (authInstance && authInstance.isSignedIn.get()) {
-          const profile = authInstance.currentUser.get().getBasicProfile();
-          if (profile) {
-            setSenderEmail(profile.getEmail());
-          } else {
-            console.warn("GAPI signed in but profile is null.");
-            navigate("/");
-          }
+        // Use authService to get email (more reliable than GAPI)
+        const { getUserEmail: getEmail } = await import("../utils/authService");
+        const email = await getEmail();
+
+        if (email) {
+          setSenderEmail(email);
         } else {
-          console.warn("GAPI not signed in or auth instance unavailable.");
+          console.warn("User not authenticated");
           navigate("/");
         }
       } catch (error) {
-        console.error("Error getting user profile:", error);
+        console.error("Error getting user email:", error);
         navigate("/");
       }
     };
