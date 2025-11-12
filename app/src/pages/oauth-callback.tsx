@@ -65,8 +65,16 @@ const OAuthCallback: React.FC = () => {
         const encodedTokens = searchParams.get('tokens');
 
         if (encodedTokens) {
+          console.log('[OAuth] Received tokens from backend, decoding...');
+
           // Decode tokens
           const tokenData = JSON.parse(atob(encodedTokens));
+          console.log('[OAuth] Token data decoded:', {
+            hasAccessToken: !!tokenData.accessToken,
+            hasRefreshToken: !!tokenData.refreshToken,
+            expiresAt: tokenData.expiresAt,
+            scope: tokenData.scope,
+          });
 
           // Get user email (from JWT cookie)
           const userEmail = await getUserEmail();
@@ -74,6 +82,8 @@ const OAuthCallback: React.FC = () => {
           if (!userEmail) {
             throw new Error('Failed to get user email');
           }
+
+          console.log('[OAuth] Storing Google tokens for user:', userEmail);
 
           // Encrypt and store Google tokens in sessionStorage
           await storeGoogleTokens({
@@ -83,7 +93,13 @@ const OAuthCallback: React.FC = () => {
             scope: tokenData.scope,
           }, userEmail);
 
-          console.log('[OAuth] Google tokens encrypted and stored in sessionStorage');
+          console.log('[OAuth] Google tokens successfully stored in sessionStorage');
+
+          // Verify tokens were stored
+          const storedData = sessionStorage.getItem('google-tokens');
+          console.log('[OAuth] Verification - tokens exist in sessionStorage:', !!storedData);
+        } else {
+          console.warn('[OAuth] No tokens parameter in callback URL - this should not happen');
         }
 
         // Check for special flags

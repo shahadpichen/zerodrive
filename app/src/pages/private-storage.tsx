@@ -6,6 +6,7 @@ import { Button } from "../components/ui/button";
 import { toast } from "sonner";
 
 import { getStoredKey } from "../utils/cryptoUtils";
+import { requireMnemonicWithPrompt } from "../utils/mnemonicManager";
 import {
   getAllFilesForUser,
   fetchAndStoreFileMetadata,
@@ -34,12 +35,12 @@ import {
   hashEmail,
 } from "../utils/fileSharing";
 import {
-  userHasStoredKeys,
   storeUserKeyPair,
   deleteUserKeyPair,
 } from "../utils/keyStorage";
 import { encryptRsaPrivateKeyWithAesKey } from "../utils/rsaKeyManager";
 import { uploadEncryptedRsaKeyToDrive } from "../utils/gdriveKeyStorage";
+import { recoverRsaKeysIfNeeded } from "../utils/rsaKeyRecovery";
 import apiClient from "../utils/apiClient";
 
 function PrivateStorage() {
@@ -84,19 +85,19 @@ function PrivateStorage() {
   };
 
   const loadStorageInfo = async () => {
-    const authInstance = gapi.auth2?.getAuthInstance();
-    if (!authInstance || !authInstance.isSignedIn.get()) {
-      console.warn("[StorageInfo] Not signed in, cannot fetch storage.");
-      setStorageInfo(null);
-      setIsLoadingStorage(false);
-      return;
-    }
-
     setIsLoadingStorage(true);
     try {
-      const token = authInstance.currentUser
-        .get()
-        .getAuthResponse().access_token;
+      // Get Google access token from sessionStorage
+      const { getOrFetchGoogleToken } = await import("../utils/authService");
+      const token = await getOrFetchGoogleToken();
+
+      if (!token) {
+        console.warn("[StorageInfo] No Google token available, cannot fetch storage.");
+        setStorageInfo(null);
+        setIsLoadingStorage(false);
+        return;
+      }
+
       const response = await gapi.client.request({
         path: "https://www.googleapis.com/drive/v3/about",
         params: { fields: "storageQuota" },
@@ -163,6 +164,31 @@ function PrivateStorage() {
         setUserEmail(email);
         setUserName(email.split("@")[0]); // Use email prefix as name for now
 
+        // Check if Google tokens exist in sessionStorage before initializing GAPI
+        const { hasGoogleTokensInStorage } = await import("../utils/authService");
+        const tokensExist = hasGoogleTokensInStorage();
+
+        if (!tokensExist) {
+          console.warn("[Storage] Google tokens not found in sessionStorage");
+          toast.error("Google Drive disconnected", {
+            description:
+              "Your Google Drive session has expired or is missing. Please sign out and sign in again to reconnect.",
+            duration: 10000,
+            action: {
+              label: "Sign Out",
+              onClick: async () => {
+                const { logout } = await import("../utils/authService");
+                await logout();
+                window.location.href = "/";
+              },
+            },
+          });
+          // Don't redirect immediately - let user manually sign out
+          setIsLoadingUserFiles(false);
+          setIsLoadingStorage(false);
+          return;
+        }
+
         // Initialize Google API with backend tokens
         const { initializeGapi } = await import("../utils/gapiInit");
 
@@ -172,8 +198,16 @@ function PrivateStorage() {
           console.error("Failed to initialize Google API:", gapiError);
           toast.error("Google Drive connection failed", {
             description:
-              "Could not connect to Google Drive. Some features may not work. Try signing out and back in.",
+              "Could not connect to Google Drive. Try signing out and back in to reconnect.",
             duration: 10000,
+            action: {
+              label: "Sign Out",
+              onClick: async () => {
+                const { logout } = await import("../utils/authService");
+                await logout();
+                window.location.href = "/";
+              },
+            },
           });
           // Don't redirect - let user stay on page with error state
           setIsLoadingUserFiles(false);
@@ -187,9 +221,9 @@ function PrivateStorage() {
         setUserHasFiles(files.length > 0);
         await loadStorageInfo();
 
-        // Check for sharing keys
-        const keysExist = await userHasStoredKeys(email);
-        setHasSharingKeys(keysExist);
+        // Check for sharing keys and attempt recovery if needed
+        const result = await recoverRsaKeysIfNeeded(email, false);
+        setHasSharingKeys(result.keysExisted || result.recovered);
       } catch (error) {
         console.error("Error loading user info or storage:", error);
         toast.error("Failed to load storage", {
@@ -222,7 +256,9 @@ function PrivateStorage() {
         })
         .finally(() => setIsLoadingUserFiles(false));
       // Also re-check sharing keys if userEmail changes (though less likely here)
-      userHasStoredKeys(userEmail).then(setHasSharingKeys);
+      recoverRsaKeysIfNeeded(userEmail, false).then(result => {
+        setHasSharingKeys(result.keysExisted || result.recovered);
+      });
     }
   }, [userEmail, refreshFileListKey]);
 
@@ -363,6 +399,12 @@ function PrivateStorage() {
   const handleEnableFileSharing = async () => {
     if (!userEmail) {
       toast.error("User email not available. Cannot enable sharing.");
+      return;
+    }
+
+    // Check if mnemonic is available before proceeding
+    if (!requireMnemonicWithPrompt('file sharing')) {
+      navigate('/key-management');
       return;
     }
 
@@ -541,23 +583,33 @@ function PrivateStorage() {
                 {uploading ? "Uploading..." : "Upload Files"}
               </Button>
 
-              <Link to="/share">
-                <Button
-                  variant="ghost"
-                  className="justify-start md:justify-end px-1 h-auto py-1 text-sm"
-                >
-                  Share Files Page (Send)
-                </Button>
-              </Link>
+              <Button
+                variant="ghost"
+                className="justify-start md:justify-end px-1 h-auto py-1 text-sm"
+                onClick={() => {
+                  if (requireMnemonicWithPrompt('file sharing')) {
+                    navigate('/share');
+                  } else {
+                    navigate('/key-management');
+                  }
+                }}
+              >
+                Share Files Page (Send)
+              </Button>
 
-              <Link to="/shared-with-me">
-                <Button
-                  variant="ghost"
-                  className="justify-start md:justify-end px-1 h-auto py-1 text-sm"
-                >
-                  Shared with Me (Receive)
-                </Button>
-              </Link>
+              <Button
+                variant="ghost"
+                className="justify-start md:justify-end px-1 h-auto py-1 text-sm"
+                onClick={() => {
+                  if (requireMnemonicWithPrompt('file sharing')) {
+                    navigate('/shared-with-me');
+                  } else {
+                    navigate('/key-management');
+                  }
+                }}
+              >
+                Shared with Me (Receive)
+              </Button>
 
               <Button
                 variant="ghost"

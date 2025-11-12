@@ -3,6 +3,8 @@
  * Securely manages mnemonic phrase in memory (cleared on page refresh)
  */
 
+import { toast } from 'sonner';
+
 // In-memory storage for mnemonic (cleared on page refresh/navigation)
 let mnemonicCache: string | null = null;
 
@@ -32,4 +34,23 @@ export function clearMnemonic(): void {
  */
 export function hasMnemonic(): boolean {
   return mnemonicCache !== null;
+}
+
+/**
+ * Check if mnemonic is available and show user-friendly prompt if not
+ * @param featureName Optional name of feature requiring mnemonic (for better error message)
+ * @returns true if mnemonic is available, false otherwise
+ */
+export function requireMnemonicWithPrompt(featureName?: string): boolean {
+  if (hasMnemonic()) {
+    return true;
+  }
+
+  const feature = featureName || 'this feature';
+  toast.error('Mnemonic Required', {
+    description: `Please enter your mnemonic in Key Management to use ${feature}.`,
+    duration: 5000,
+  });
+
+  return false;
 }

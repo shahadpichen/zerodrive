@@ -82,7 +82,7 @@ describe('CryptoUtils', () => {
 
       await storeKey(key);
 
-      const storedValue = sessionStorage.getItem('aes-gcm-key');
+      const storedValue = sessionStorage.getItem('aes-key');
       expect(storedValue).toBeTruthy();
       expect(() => JSON.parse(storedValue!)).not.toThrow();
     });
@@ -135,7 +135,7 @@ describe('CryptoUtils', () => {
 
       clearStoredKey();
 
-      const storedValue = sessionStorage.getItem('aes-gcm-key');
+      const storedValue = sessionStorage.getItem('aes-key');
       expect(storedValue).toBeNull();
     });
 
@@ -268,7 +268,7 @@ describe('CryptoUtils', () => {
     });
 
     it('should handle corrupted sessionStorage data', async () => {
-      sessionStorage.setItem('aes-gcm-key', 'not-valid-json');
+      sessionStorage.setItem('aes-key', 'not-valid-json');
 
       // Should return null instead of throwing
       const key = await getStoredKey();
@@ -276,7 +276,7 @@ describe('CryptoUtils', () => {
     });
 
     it('should handle partial key data in storage', async () => {
-      sessionStorage.setItem('aes-gcm-key', JSON.stringify({ kty: 'oct' }));
+      sessionStorage.setItem('aes-key', JSON.stringify({ kty: 'oct' }));
 
       // Should return null for invalid/partial data
       const key = await getStoredKey();
@@ -312,7 +312,7 @@ describe('CryptoUtils', () => {
 
     it('should handle clearStoredKey when key does not exist', () => {
       expect(() => clearStoredKey()).not.toThrow();
-      expect(sessionStorage.getItem('aes-gcm-key')).toBeNull();
+      expect(sessionStorage.getItem('aes-key')).toBeNull();
     });
 
     it('should handle multiple rapid store/retrieve cycles', async () => {

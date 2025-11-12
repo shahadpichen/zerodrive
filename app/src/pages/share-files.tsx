@@ -20,28 +20,29 @@ import {
   generateUserKeyPair,
   storeUserPublicKey,
   hashEmail,
-  UserKeyPair,
   fetchUserPublicKey,
 } from "../utils/fileSharing";
 import apiClient from "../utils/apiClient";
 import {
   storeUserKeyPair,
-  userHasStoredKeys,
   getUserKeyPair,
   deleteUserKeyPair,
 } from "../utils/keyStorage";
-import {
-  encryptRsaPrivateKeyWithAesKey,
-  decryptRsaPrivateKeyWithAesKey,
-} from "../utils/rsaKeyManager";
-import {
-  uploadEncryptedRsaKeyToDrive,
-  downloadEncryptedRsaKeyFromDrive,
-} from "../utils/gdriveKeyStorage";
+import { encryptRsaPrivateKeyWithAesKey } from "../utils/rsaKeyManager";
+import { uploadEncryptedRsaKeyToDrive } from "../utils/gdriveKeyStorage";
 import { getStoredKey } from "../utils/cryptoUtils";
+import { requireMnemonicWithPrompt } from "../utils/mnemonicManager";
+import { recoverRsaKeysIfNeeded } from "../utils/rsaKeyRecovery";
 
 const ShareFilesPage: React.FC = () => {
   const navigate = useNavigate();
+
+  // Guard: Require mnemonic before accessing this page
+  useEffect(() => {
+    if (!requireMnemonicWithPrompt('file sharing')) {
+      navigate('/key-management');
+    }
+  }, [navigate]);
   const [file, setFile] = useState<File | null>(null);
   const [recipientEmail, setRecipientEmail] = useState<string>("");
   const [customMessage, setCustomMessage] = useState<string>("");
@@ -78,173 +79,41 @@ const ShareFilesPage: React.FC = () => {
       if (!senderEmail) return;
 
       setIsCheckingKeys(true);
-      let keysSuccessfullyLoaded = false;
-      const recoveryToastId = toast.loading(
-        "Checking for key backup in Google Drive..."
-      );
-      let encryptedKeyBlob: Blob | null = null;
 
       try {
-        encryptedKeyBlob = await downloadEncryptedRsaKeyFromDrive();
+        // Use centralized recovery utility
+        const result = await recoverRsaKeysIfNeeded(senderEmail, false);
 
-        if (encryptedKeyBlob) {
-          toast.loading(
-            "Backup found. Attempting to decrypt with your primary key...",
-            { id: recoveryToastId }
-          );
-          const primaryAesKey = await getStoredKey();
+        if (result.keysExisted || result.recovered) {
+          // Keys exist or were successfully recovered
+          setHasGeneratedKeys(true);
 
-          if (primaryAesKey) {
-            try {
-              const privateKeyJwk = await decryptRsaPrivateKeyWithAesKey(
-                encryptedKeyBlob,
-                primaryAesKey
-              );
-
-              // Construct publicKeyJwk from privateKeyJwk
-              // RSA private JWK contains public components (n, e, alg, kty, key_ops etc.)
-              // We need to ensure key_ops for public key is "encrypt"
-              const publicKeyJwk: JsonWebKey = {
-                kty: privateKeyJwk.kty,
-                n: privateKeyJwk.n,
-                e: privateKeyJwk.e,
-                alg: privateKeyJwk.alg
-                  ? privateKeyJwk.alg.replace("PS", "RS")
-                  : "RSA-OAEP-256", // Or determine alg based on private
-                key_ops: ["encrypt"],
-                ext: true, // Typically true for public keys
-              };
-
-              // Validate essential components for a public key
-              if (!publicKeyJwk.n || !publicKeyJwk.e || !publicKeyJwk.kty) {
-                throw new Error(
-                  "Failed to reconstruct public key from private key backup."
-                );
-              }
-
-              // Ensure the private key also has the correct key_ops if not already set
-              if (!privateKeyJwk.key_ops) {
-                privateKeyJwk.key_ops = ["decrypt"];
-              }
-
-              const recoveredKeyPair: UserKeyPair = {
-                publicKeyJwk,
-                privateKeyJwk,
-              };
-
-              await storeUserKeyPair(senderEmail, recoveredKeyPair);
-              const hashedEmail = await hashEmail(senderEmail);
-              await storeUserPublicKey(
-                hashedEmail,
-                recoveredKeyPair.publicKeyJwk
-              );
-
-              setHasGeneratedKeys(true);
-              keysSuccessfullyLoaded = true;
-              toast.success(
-                "Sharing keys successfully recovered from Google Drive backup and loaded.",
-                { id: recoveryToastId }
-              );
-            } catch (decryptionError) {
-              console.error("Failed to decrypt key backup:", decryptionError);
-              toast.error("Failed to decrypt key backup from Google Drive.", {
-                description:
-                  decryptionError instanceof Error
-                    ? decryptionError.message
-                    : "The primary key might be incorrect or backup corrupted.",
-                id: recoveryToastId,
-              });
-            }
-          } else {
-            toast.warning(
-              "Primary encryption key not found in local storage.",
-              {
-                description:
-                  "Cannot decrypt Google Drive backup. Please set up your main key in Key Management or generate new sharing keys.",
-                id: recoveryToastId,
-                duration: 7000,
-              }
-            );
-          }
-        } else {
-          toast.info(
-            "No key backup found in Google Drive. Checking local storage...",
-            { id: recoveryToastId }
-          );
-        }
-      } catch (driveError) {
-        console.error(
-          "Error checking Google Drive for key backup:",
-          driveError
-        );
-        toast.error("Could not check Google Drive for key backup.", {
-          description:
-            driveError instanceof Error
-              ? driveError.message
-              : "Please check your connection.",
-          id: recoveryToastId,
-        });
-      }
-
-      if (!keysSuccessfullyLoaded) {
-        // Fallback to checking IndexedDB if Drive recovery failed or no backup
-        try {
-          toast.dismiss(recoveryToastId); // Dismiss previous toast if any
-          const hasLocalKeys = await userHasStoredKeys(senderEmail);
-          if (hasLocalKeys) {
-            // Auto-repair: Check if public key exists in PostgreSQL
+          // Auto-repair: Ensure public key is synced to server
+          if (result.keysExisted) {
             const hashedEmail = await hashEmail(senderEmail);
             try {
               const serverKey = await fetchUserPublicKey(hashedEmail);
-
               if (!serverKey) {
-                // Public key missing from server - auto-upload from IndexedDB
-                console.log(
-                  "Public key missing from server, syncing from local storage..."
-                );
                 const localKeyPair = await getUserKeyPair(senderEmail);
                 if (localKeyPair?.publicKeyJwk) {
-                  await storeUserPublicKey(
-                    hashedEmail,
-                    localKeyPair.publicKeyJwk
-                  );
-                  toast.success(
-                    "Sharing keys loaded from local storage and synced to server."
-                  );
-                } else {
-                  toast.success("Sharing keys loaded from local storage.");
+                  await storeUserPublicKey(hashedEmail, localKeyPair.publicKeyJwk);
+                  console.log('Public key synced to server');
                 }
-              } else {
-                toast.success("Sharing keys loaded from local storage.");
               }
             } catch (syncError) {
-              console.error("Error syncing public key to server:", syncError);
-              // Still mark as loaded since keys exist locally
-              toast.success("Sharing keys loaded from local storage.");
+              console.error('Error syncing public key to server:', syncError);
             }
-
-            setHasGeneratedKeys(true);
-            keysSuccessfullyLoaded = true;
-          } else if (!encryptedKeyBlob) {
-            // Only show this if no Drive backup was attempted or found
-            toast.info("No sharing keys found locally. Please generate them.");
           }
-        } catch (localCheckError) {
-          console.error(
-            "Error checking local storage for keys:",
-            localCheckError
-          );
-          toast.error("Failed to check for local sharing keys.");
+        } else {
+          // No keys found (user hasn't enabled sharing yet)
+          setHasGeneratedKeys(false);
         }
-      }
-
-      if (!keysSuccessfullyLoaded) {
-        // This final check ensures that if neither Drive nor local keys were loaded,
-        // the state reflects that, and the user will be prompted to generate.
+      } catch (error) {
+        console.error('Error during key initialization:', error);
         setHasGeneratedKeys(false);
+      } finally {
+        setIsCheckingKeys(false);
       }
-
-      setIsCheckingKeys(false);
     };
 
     if (senderEmail) initializeAndCheckKeys();
