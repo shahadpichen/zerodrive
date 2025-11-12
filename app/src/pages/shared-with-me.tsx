@@ -34,7 +34,7 @@ import apiClient from "../utils/apiClient";
 import { getStoredKey } from "../utils/cryptoUtils";
 import { uploadAndSyncFile } from "../utils/fileOperations";
 import { trackEvent, AnalyticsEvent, AnalyticsCategory } from "../utils/analyticsTracker";
-import { requireMnemonicWithPrompt } from "../utils/mnemonicManager";
+import { getMnemonic } from "../utils/mnemonicManager";
 import { recoverRsaKeysIfNeeded } from "../utils/rsaKeyRecovery";
 
 interface SharedFile {
@@ -52,13 +52,6 @@ interface SharedFile {
 const SharedWithMePage: FC = () => {
   const navigate = useNavigate();
 
-  // Guard: Require mnemonic before accessing this page
-  useEffect(() => {
-    if (!requireMnemonicWithPrompt('file sharing')) {
-      navigate('/key-management');
-    }
-  }, [navigate]);
-
   const [userEmail, setUserEmail] = useState<string>("");
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [sharedFiles, setSharedFiles] = useState<SharedFile[]>([]);
@@ -68,24 +61,20 @@ const SharedWithMePage: FC = () => {
 
   // Get the user's email from Google auth
   useEffect(() => {
-    const getUserEmail = () => {
+    const getUserEmail = async () => {
       try {
-        const authInstance = gapi.auth2?.getAuthInstance();
-        if (authInstance && authInstance.isSignedIn.get()) {
-          const profile = authInstance.currentUser.get().getBasicProfile();
-          if (profile) {
-            const email = profile.getEmail();
-            setUserEmail(email);
-          } else {
-            console.warn("GAPI signed in but profile is null.");
-            navigate("/");
-          }
+        // Use authService to get email (more reliable than GAPI)
+        const { getUserEmail: getEmail } = await import("../utils/authService");
+        const email = await getEmail();
+
+        if (email) {
+          setUserEmail(email);
         } else {
-          console.warn("GAPI not signed in or auth instance unavailable.");
+          console.warn("User not authenticated");
           navigate("/");
         }
       } catch (error) {
-        console.error("Error getting user profile:", error);
+        console.error("Error getting user email:", error);
         navigate("/");
       }
     };
@@ -112,10 +101,13 @@ const SharedWithMePage: FC = () => {
             try {
               const serverKey = await fetchUserPublicKey(hashedEmail);
               if (!serverKey) {
-                const localKeyPair = await getUserKeyPair(userEmail);
-                if (localKeyPair?.publicKeyJwk) {
-                  await storeUserPublicKey(hashedEmail, localKeyPair.publicKeyJwk);
-                  console.log('Public key synced to server');
+                const mnemonic = getMnemonic();
+                if (mnemonic) {
+                  const localKeyPair = await getUserKeyPair(userEmail, mnemonic);
+                  if (localKeyPair?.publicKeyJwk) {
+                    await storeUserPublicKey(hashedEmail, localKeyPair.publicKeyJwk);
+                    console.log('Public key synced to server');
+                  }
                 }
               }
             } catch (syncError) {
@@ -308,7 +300,12 @@ const SharedWithMePage: FC = () => {
         }
       }
 
-      const userKeyPair = await getUserKeyPair(userEmail);
+      const mnemonic = getMnemonic();
+      if (!mnemonic) {
+        throw new Error("Mnemonic not available. Cannot decrypt RSA private key.");
+      }
+
+      const userKeyPair = await getUserKeyPair(userEmail, mnemonic);
       if (!userKeyPair || !userKeyPair.privateKeyJwk) {
         throw new Error(
           "Private key JWK not found even after checks/recovery. Please ensure keys are generated and retrieved correctly."

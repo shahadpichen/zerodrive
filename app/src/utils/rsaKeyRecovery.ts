@@ -9,6 +9,7 @@ import { decryptRsaPrivateKeyWithAesKey } from './rsaKeyManager';
 import { getStoredKey } from './cryptoUtils';
 import { userHasStoredKeys, storeUserKeyPair } from './keyStorage';
 import { storeUserPublicKey, hashEmail, UserKeyPair } from './fileSharing';
+import { getMnemonic } from './mnemonicManager';
 import logger from './logger';
 
 export interface RsaRecoveryResult {
@@ -152,8 +153,14 @@ export async function recoverRsaKeysIfNeeded(
         privateKeyJwk,
       };
 
-      // Store in IndexedDB
-      await storeUserKeyPair(userEmail, recoveredKeyPair);
+      // Get mnemonic for encrypting private key in IndexedDB
+      const mnemonic = getMnemonic();
+      if (!mnemonic) {
+        throw new Error('Mnemonic not available - cannot encrypt RSA private key');
+      }
+
+      // Store in IndexedDB (private key encrypted with mnemonic)
+      await storeUserKeyPair(userEmail, recoveredKeyPair, mnemonic);
 
       // Store public key in PostgreSQL
       const hashedEmail = await hashEmail(userEmail);

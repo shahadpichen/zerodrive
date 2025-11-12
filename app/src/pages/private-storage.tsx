@@ -6,7 +6,6 @@ import { Button } from "../components/ui/button";
 import { toast } from "sonner";
 
 import { getStoredKey } from "../utils/cryptoUtils";
-import { requireMnemonicWithPrompt } from "../utils/mnemonicManager";
 import {
   getAllFilesForUser,
   fetchAndStoreFileMetadata,
@@ -165,27 +164,14 @@ function PrivateStorage() {
         setUserName(email.split("@")[0]); // Use email prefix as name for now
 
         // Check if Google tokens exist in sessionStorage before initializing GAPI
-        const { hasGoogleTokensInStorage } = await import("../utils/authService");
+        const { hasGoogleTokensInStorage, logout } = await import("../utils/authService");
         const tokensExist = hasGoogleTokensInStorage();
 
         if (!tokensExist) {
-          console.warn("[Storage] Google tokens not found in sessionStorage");
-          toast.error("Google Drive disconnected", {
-            description:
-              "Your Google Drive session has expired or is missing. Please sign out and sign in again to reconnect.",
-            duration: 10000,
-            action: {
-              label: "Sign Out",
-              onClick: async () => {
-                const { logout } = await import("../utils/authService");
-                await logout();
-                window.location.href = "/";
-              },
-            },
-          });
-          // Don't redirect immediately - let user manually sign out
-          setIsLoadingUserFiles(false);
-          setIsLoadingStorage(false);
+          console.warn("[Storage] Google tokens not found in sessionStorage - redirecting to re-authenticate");
+          // Automatically logout and redirect to login to get fresh tokens
+          await logout();
+          window.location.href = "/";
           return;
         }
 
@@ -402,12 +388,6 @@ function PrivateStorage() {
       return;
     }
 
-    // Check if mnemonic is available before proceeding
-    if (!requireMnemonicWithPrompt('file sharing')) {
-      navigate('/key-management');
-      return;
-    }
-
     setIsProcessingSharingKeys(true);
     const genToastId = toast.loading("Checking for primary encryption key...");
 
@@ -415,14 +395,14 @@ function PrivateStorage() {
       // 1. Check for primary encryption key
       const primaryAesKey = await getStoredKey();
 
+      // If no AES key, redirect to key management
       if (!primaryAesKey) {
-        toast.info("Redirecting to Key Management page...", {
-          id: genToastId,
-          description:
-            "You need to set up your main encryption key first for backups.",
+        toast.dismiss(genToastId);
+        toast.info('Encryption key required', {
+          description: 'Please enter your mnemonic first to use file sharing.',
         });
+        navigate('/key-management');
         setIsProcessingSharingKeys(false);
-        navigate("/key-management");
         return;
       }
 
@@ -434,8 +414,15 @@ function PrivateStorage() {
       const hashedEmail = await hashEmail(userEmail);
       await storeUserPublicKey(hashedEmail, keyPair.publicKeyJwk);
 
-      // 4. Store in IndexedDB
-      await storeUserKeyPair(userEmail, keyPair);
+      // 4. Store in IndexedDB (encrypted with mnemonic)
+      const { getMnemonic } = await import("../utils/mnemonicManager");
+      const mnemonic = getMnemonic();
+
+      if (!mnemonic) {
+        throw new Error("Mnemonic not available - cannot encrypt RSA keys");
+      }
+
+      await storeUserKeyPair(userEmail, keyPair, mnemonic);
 
       // 5. Backup to Google Drive (MANDATORY - rollback if fails)
       if (!keyPair.privateKeyJwk) {
@@ -586,10 +573,17 @@ function PrivateStorage() {
               <Button
                 variant="ghost"
                 className="justify-start md:justify-end px-1 h-auto py-1 text-sm"
-                onClick={() => {
-                  if (requireMnemonicWithPrompt('file sharing')) {
-                    navigate('/share');
+                onClick={async () => {
+                  // Check if AES key exists in sessionStorage
+                  const aesKey = await getStoredKey();
+
+                  if (aesKey) {
+                    navigate('/share');  // Has key, can proceed
                   } else {
+                    // No key, redirect to key management
+                    toast.info('Encryption key required', {
+                      description: 'Please enter your mnemonic first to use file sharing.',
+                    });
                     navigate('/key-management');
                   }
                 }}
@@ -600,10 +594,17 @@ function PrivateStorage() {
               <Button
                 variant="ghost"
                 className="justify-start md:justify-end px-1 h-auto py-1 text-sm"
-                onClick={() => {
-                  if (requireMnemonicWithPrompt('file sharing')) {
-                    navigate('/shared-with-me');
+                onClick={async () => {
+                  // Check if AES key exists in sessionStorage
+                  const aesKey = await getStoredKey();
+
+                  if (aesKey) {
+                    navigate('/shared-with-me');  // Has key, can proceed
                   } else {
+                    // No key, redirect to key management
+                    toast.info('Encryption key required', {
+                      description: 'Please enter your mnemonic first to use file sharing.',
+                    });
                     navigate('/key-management');
                   }
                 }}

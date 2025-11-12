@@ -160,6 +160,67 @@ function isGoogleTokenCacheValid(userEmail: string): boolean {
 }
 
 /**
+ * Refresh Google access token using refresh token
+ * @returns Access token if successful, 'NO_REFRESH_TOKEN' if missing, null if refresh failed
+ */
+async function refreshGoogleAccessToken(userEmail: string): Promise<string | 'NO_REFRESH_TOKEN' | null> {
+  try {
+    const storedData = sessionStorage.getItem('google-tokens');
+    if (!storedData) {
+      console.log('[Auth] No tokens to refresh');
+      return null;
+    }
+
+    const parsed = JSON.parse(storedData);
+    if (!parsed.refreshToken) {
+      console.warn('[Auth] No refresh token available - cannot refresh access token');
+      console.log('[Auth] User will need to re-authenticate to get a new refresh token');
+      return 'NO_REFRESH_TOKEN';
+    }
+
+    console.log('[Auth] Attempting to refresh Google access token...');
+    const response = await fetch(`${API_URL}/auth/google/refresh`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      credentials: 'include',
+      body: JSON.stringify({
+        refreshToken: parsed.refreshToken,
+      }),
+    });
+
+    if (!response.ok) {
+      console.error('[Auth] Token refresh failed with status:', response.status);
+      return null;
+    }
+
+    const data = await response.json();
+    if (!data.accessToken || !data.expiresAt) {
+      console.error('[Auth] Invalid refresh response:', data);
+      return null;
+    }
+
+    // Store new tokens
+    await storeGoogleTokens(
+      {
+        accessToken: data.accessToken,
+        refreshToken: parsed.refreshToken, // Keep same refresh token
+        expiresAt: new Date(data.expiresAt),
+        scope: parsed.scope,
+      },
+      userEmail
+    );
+
+    console.log('[Auth] Google access token refreshed successfully');
+    return data.accessToken;
+  } catch (error) {
+    console.error('[Auth] Error refreshing Google token:', error);
+    return null;
+  }
+}
+
+/**
  * Get Google access token from sessionStorage
  */
 export async function getGoogleTokenFromStorage(userEmail: string): Promise<string | null> {
@@ -183,7 +244,30 @@ export async function getGoogleTokenFromStorage(userEmail: string): Promise<stri
     const expiresAt = new Date(parsed.expiresAt);
     const now = Date.now();
     if (now >= expiresAt.getTime()) {
-      console.log('[Auth] Access token expired');
+      console.log('[Auth] Access token expired, attempting refresh...');
+
+      // Try to refresh the token before clearing
+      const refreshResult = await refreshGoogleAccessToken(userEmail);
+
+      if (refreshResult === 'NO_REFRESH_TOKEN') {
+        // No refresh token available - need to re-authenticate
+        console.warn('[Auth] Cannot refresh without refresh token - redirecting to login');
+        console.log('[Auth] Clearing tokens and redirecting to re-authenticate...');
+        clearGoogleTokens();
+
+        // Redirect to login to get fresh tokens with refresh token
+        window.location.href = '/';
+        return null;
+      }
+
+      if (refreshResult) {
+        // Refresh successful
+        console.log('[Auth] Token refreshed successfully, continuing...');
+        return refreshResult;
+      }
+
+      // Refresh failed for other reasons, clear tokens
+      console.error('[Auth] Token refresh failed, clearing tokens');
       clearGoogleTokens();
       return null;
     }
@@ -251,7 +335,15 @@ export async function storeGoogleTokens(tokens: {
       userEmail,
     };
     sessionStorage.setItem('google-tokens', JSON.stringify(stored));
-    console.log('[Auth] Stored Google tokens in sessionStorage');
+    console.log('[Auth] Stored Google tokens in sessionStorage', {
+      hasRefreshToken: !!tokens.refreshToken,
+      expiresAt: tokens.expiresAt.toISOString(),
+    });
+
+    if (!tokens.refreshToken) {
+      console.warn('[Auth] No refresh token provided - token refresh will not be possible when access token expires');
+      console.log('[Auth] User may need to re-authenticate after 1 hour when access token expires');
+    }
   } catch (error) {
     console.error('[Auth] Failed to store Google tokens:', error);
     throw error;
