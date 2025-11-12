@@ -49,11 +49,16 @@ const ShareFilesPage: React.FC = () => {
     useState<boolean>(false);
   const [isSendingInvitation, setIsSendingInvitation] =
     useState<boolean>(false);
+  const [mnemonicInput, setMnemonicInput] = useState<string>("");
+  const [showMnemonicInput, setShowMnemonicInput] = useState<boolean>(false);
+  const [isVerifyingMnemonic, setIsVerifyingMnemonic] =
+    useState<boolean>(false);
+  const [mnemonicVerified, setMnemonicVerified] = useState<boolean>(false);
 
   // Rollback function to clean up keys if backup fails
   const rollbackKeyGeneration = async (email: string) => {
     try {
-      console.log('Rolling back key generation for:', email);
+      console.log("Rolling back key generation for:", email);
 
       // 1. Delete from IndexedDB
       await deleteUserKeyPair(email);
@@ -62,9 +67,11 @@ const ShareFilesPage: React.FC = () => {
       const hashedEmail = await hashEmail(email);
       await apiClient.publicKeys.delete(hashedEmail);
 
-      console.log('Rollback completed: keys deleted from all storage locations');
+      console.log(
+        "Rollback completed: keys deleted from all storage locations"
+      );
     } catch (error) {
-      console.error('Error during rollback:', error);
+      console.error("Error during rollback:", error);
     }
   };
 
@@ -90,15 +97,21 @@ const ShareFilesPage: React.FC = () => {
               if (!serverKey) {
                 const mnemonic = getMnemonic();
                 if (mnemonic) {
-                  const localKeyPair = await getUserKeyPair(senderEmail, mnemonic);
+                  const localKeyPair = await getUserKeyPair(
+                    senderEmail,
+                    mnemonic
+                  );
                   if (localKeyPair?.publicKeyJwk) {
-                    await storeUserPublicKey(hashedEmail, localKeyPair.publicKeyJwk);
-                    console.log('Public key synced to server');
+                    await storeUserPublicKey(
+                      hashedEmail,
+                      localKeyPair.publicKeyJwk
+                    );
+                    console.log("Public key synced to server");
                   }
                 }
               }
             } catch (syncError) {
-              console.error('Error syncing public key to server:', syncError);
+              console.error("Error syncing public key to server:", syncError);
             }
           }
         } else {
@@ -106,7 +119,7 @@ const ShareFilesPage: React.FC = () => {
           setHasGeneratedKeys(false);
         }
       } catch (error) {
-        console.error('Error during key initialization:', error);
+        console.error("Error during key initialization:", error);
         setHasGeneratedKeys(false);
       } finally {
         setIsCheckingKeys(false);
@@ -137,6 +150,45 @@ const ShareFilesPage: React.FC = () => {
     getUserEmail();
   }, [navigate]);
 
+  // Check if mnemonic exists in memory
+  useEffect(() => {
+    if (hasGeneratedKeys) {
+      const mnemonic = getMnemonic();
+      if (!mnemonic) {
+        // Keys exist but mnemonic not in memory - show input
+        setShowMnemonicInput(true);
+        setMnemonicVerified(false);
+      } else {
+        // Mnemonic in memory - no need for input
+        setShowMnemonicInput(false);
+        setMnemonicVerified(true);
+      }
+    }
+  }, [hasGeneratedKeys]);
+
+  // Verify mnemonic function - only for decryption, NOT stored in memory
+  const verifyMnemonic = async () => {
+    if (!mnemonicInput || !senderEmail) return;
+
+    setIsVerifyingMnemonic(true);
+    try {
+      // Try to decrypt keys with mnemonic
+      const keyPair = await getUserKeyPair(senderEmail, mnemonicInput);
+      if (keyPair) {
+        setMnemonicVerified(true);
+        setShowMnemonicInput(false);
+        toast.success("Mnemonic verified - you can now share files");
+      } else {
+        toast.error("Invalid mnemonic or keys not found");
+      }
+    } catch (error) {
+      console.error("Mnemonic verification failed:", error);
+      toast.error("Invalid mnemonic - cannot decrypt keys");
+    } finally {
+      setIsVerifyingMnemonic(false);
+    }
+  };
+
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
       setFile(e.target.files[0]);
@@ -162,16 +214,19 @@ const ShareFilesPage: React.FC = () => {
       // 1. Check Google Drive authentication FIRST
       const authInstance = gapi.auth2?.getAuthInstance();
       if (!authInstance || !authInstance.isSignedIn.get()) {
-        toast.error('Google Drive not authenticated', {
-          description: 'Backup is required for file sharing. Please ensure you are signed in.',
-          id: genToastId
+        toast.error("Google Drive not authenticated", {
+          description:
+            "Backup is required for file sharing. Please ensure you are signed in.",
+          id: genToastId,
         });
         setIsGeneratingKeys(false);
         return;
       }
 
       // 2. Check for primary encryption key
-      toast.loading("Checking for primary encryption key...", { id: genToastId });
+      toast.loading("Checking for primary encryption key...", {
+        id: genToastId,
+      });
       const primaryAesKey = await getStoredKey();
 
       if (!primaryAesKey) {
@@ -215,29 +270,29 @@ const ShareFilesPage: React.FC = () => {
           );
 
           if (!uploadFileId) {
-            throw new Error('Google Drive upload returned null');
+            throw new Error("Google Drive upload returned null");
           }
 
           // ✅ SUCCESS - Everything worked!
           setHasGeneratedKeys(true);
-          toast.success('Sharing keys generated and backed up to Drive', {
-            id: genToastId
+          toast.success("Sharing keys generated and backed up to Drive", {
+            id: genToastId,
           });
-
         } catch (backupError) {
           // ❌ BACKUP FAILED - Rollback everything
-          console.error('Backup failed, rolling back:', backupError);
+          console.error("Backup failed, rolling back:", backupError);
 
-          toast.loading('Backup failed - cleaning up...', { id: genToastId });
+          toast.loading("Backup failed - cleaning up...", { id: genToastId });
 
           await rollbackKeyGeneration(senderEmail);
 
-          toast.error('Key generation cancelled due to backup failure', {
-            description: backupError instanceof Error
-              ? backupError.message
-              : 'Could not backup to Google Drive. Please check connection and try again.',
+          toast.error("Key generation cancelled due to backup failure", {
+            description:
+              backupError instanceof Error
+                ? backupError.message
+                : "Could not backup to Google Drive. Please check connection and try again.",
             id: genToastId,
-            duration: 8000
+            duration: 8000,
           });
 
           setIsGeneratingKeys(false);
@@ -284,6 +339,13 @@ const ShareFilesPage: React.FC = () => {
       return;
     }
 
+    // Get mnemonic from memory or from input field
+    const mnemonic = getMnemonic() || mnemonicInput;
+    if (!mnemonic) {
+      toast.error("Mnemonic is required to decrypt sharing keys");
+      return;
+    }
+
     setIsSharing(true);
     setRecipientKeyMissing(false); // Reset state
     const sharingToastId = toast.loading(`Preparing to share ${file.name}...`);
@@ -292,6 +354,7 @@ const ShareFilesPage: React.FC = () => {
         file,
         recipientEmail,
         senderEmail,
+        mnemonic,
         customMessage || undefined
       );
       const shareId = crypto.randomUUID();
@@ -300,6 +363,10 @@ const ShareFilesPage: React.FC = () => {
         `File "${file.name}" has been prepared for sharing with ${recipientEmail}`,
         { id: sharingToastId }
       );
+
+      // Clear mnemonic input after successful share (one-time use)
+      setMnemonicInput("");
+
       setFile(null);
       setRecipientEmail("");
       const fileInput = document.getElementById(
@@ -385,7 +452,7 @@ const ShareFilesPage: React.FC = () => {
         {/* Two-Column Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Left Card: Main File Sharing */}
-          <Card>
+          <Card className="h-fit">
             <CardHeader>
               <CardTitle>File Sharing</CardTitle>
               <CardDescription>
@@ -430,14 +497,49 @@ const ShareFilesPage: React.FC = () => {
                   </p>
                 </div>
               ) : (
-                <div className="p-4 bg-green-50 dark:bg-green-950 rounded-md border border-green-200 dark:border-green-800">
-                  <h3 className="text-sm font-medium text-green-800 dark:text-green-300">
-                    Sharing Keys Active
-                  </h3>
-                  <p className="text-xs text-green-700 dark:text-green-400 mt-1">
-                    You can now select a file and recipient to share securely.
-                  </p>
-                </div>
+                <>
+                  <div className="p-4 bg-green-50 dark:bg-green-950 rounded-md border border-green-200 dark:border-green-800">
+                    <h3 className="text-sm font-medium text-green-800 dark:text-green-300">
+                      Sharing Keys Active
+                    </h3>
+                    <p className="text-xs text-green-700 dark:text-green-400 mt-1">
+                      You can now select a file and recipient to share securely.
+                    </p>
+                  </div>
+
+                  {showMnemonicInput && (
+                    <div className="mt-4 p-4 bg-yellow-50 dark:bg-yellow-950 rounded-md border border-yellow-200 dark:border-yellow-800">
+                      <h3 className="text-sm font-medium text-yellow-800 dark:text-yellow-300 mb-2">
+                        Mnemonic Required
+                      </h3>
+                      <p className="text-xs text-yellow-700 dark:text-yellow-400 mb-3">
+                        Enter your mnemonic to decrypt sharing keys. This will
+                        only be used for decryption.
+                      </p>
+                      <div className="flex gap-2">
+                        <Input
+                          type="password"
+                          placeholder="Enter your mnemonic phrase"
+                          value={mnemonicInput}
+                          onChange={(e) => setMnemonicInput(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" && mnemonicInput) {
+                              verifyMnemonic();
+                            }
+                          }}
+                          disabled={isVerifyingMnemonic}
+                          className="flex-1"
+                        />
+                        <Button
+                          onClick={verifyMnemonic}
+                          disabled={!mnemonicInput || isVerifyingMnemonic}
+                        >
+                          {isVerifyingMnemonic ? "Verifying..." : "Verify"}
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </>
               )}
 
               <Separator />
@@ -480,7 +582,8 @@ const ShareFilesPage: React.FC = () => {
                   !recipientEmail ||
                   isSharing ||
                   !senderEmail ||
-                  !hasGeneratedKeys
+                  !hasGeneratedKeys ||
+                  (showMnemonicInput && !mnemonicVerified)
                 }
               >
                 {isSharing ? "Preparing Share..." : "Share Encrypted File"}
@@ -489,7 +592,7 @@ const ShareFilesPage: React.FC = () => {
           </Card>
 
           {/* Right Card: Custom Message */}
-          <Card>
+          <Card className="h-fit">
             <CardHeader>
               <CardTitle>Personalize Email</CardTitle>
               <CardDescription>
