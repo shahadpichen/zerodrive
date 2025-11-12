@@ -246,7 +246,13 @@ const ShareFilesPage: React.FC = () => {
 
       // 4. Store keys locally (IndexedDB and PostgreSQL)
       await storeUserPublicKey(hashedEmail, keyPair.publicKeyJwk);
-      await storeUserKeyPair(senderEmail, keyPair);
+
+      // Get mnemonic from memory (user must have come from /key-management)
+      const mnemonic = getMnemonic();
+      if (!mnemonic) {
+        throw new Error('Mnemonic not found - cannot encrypt RSA private key');
+      }
+      await storeUserKeyPair(senderEmail, keyPair, mnemonic);
 
       // 5. Backup to Google Drive (MANDATORY)
       if (keyPair.privateKeyJwk) {
