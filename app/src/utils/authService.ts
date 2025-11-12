@@ -3,6 +3,7 @@
  * Handles JWT token management and authentication flow
  */
 
+import apiClient from './apiClient';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001/api';
 
@@ -101,12 +102,10 @@ export async function isAuthenticated(): Promise<boolean> {
   }
 
   try {
-    const response = await fetch(`${API_URL}/auth/me`, {
-      credentials: 'include', // Send cookies
-    });
-    return response.ok;
+    const response = await apiClient.get<{ email: string; emailHash: string }>('/auth/me');
+    return response.success && !!response.data?.email;
   } catch (error) {
-    console.error('[Auth] Check failed with error:', error);
+    console.error('[Auth] Authentication check failed:', error);
     return false;
   }
 }
@@ -116,16 +115,8 @@ export async function isAuthenticated(): Promise<boolean> {
  */
 export async function getUserEmail(): Promise<string | null> {
   try {
-    const response = await fetch(`${API_URL}/auth/me`, {
-      credentials: 'include',
-    });
-
-    if (!response.ok) {
-      return null;
-    }
-
-    const data = await response.json();
-    return data.data?.email || null;
+    const response = await apiClient.get<{ email: string; emailHash: string }>('/auth/me');
+    return response.data?.email || null;
   } catch (error) {
     console.error('Failed to get user email:', error);
     return null;
