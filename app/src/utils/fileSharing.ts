@@ -1,6 +1,6 @@
 /**
  * @file fileSharing.ts
- * Implements secure file sharing functionality using asymmetric cryptography and Supabase.
+ * Implements secure file sharing functionality using asymmetric cryptography.
  */
 
 import apiClient from "./apiClient";
@@ -19,8 +19,6 @@ export interface FilePreparationResult {
   senderEmailHash: string;
   /** The file's symmetric encryption key, itself encrypted for the recipient. */
   encryptedFileKeyForRecipient: ArrayBuffer;
-  /** A cryptographic proof of the sender's identity. */
-  senderProof: string;
   /** The original name of the file. */
   fileName: string;
   /** The original MIME type of the file. */
@@ -136,7 +134,7 @@ export async function generateUserKeyPair(): Promise<UserKeyPair> {
 }
 
 /**
- * Stores a user's public key in Supabase, associated with their hashed email.
+ * Stores a user's public key in the database, associated with their hashed email.
  * @param hashedEmail The SHA-256 hash of the user's email.
  * @param publicKeyJwk The user's public key in JWK format.
  * @returns A Promise that resolves when the key is stored.
@@ -165,7 +163,7 @@ export async function storeUserPublicKey(
   } catch (error) {
     logger.error("Error in storeUserPublicKey:", error);
 
-    // Check if it's a Supabase error or a more general error
+    // Re-throw the error
     if (error instanceof Error) {
       throw error; // Re-throw the error with its original message
     } else {
@@ -333,7 +331,6 @@ export async function prepareFileForSharing(
   fileId: string;
   mimeType: string;
   fileSize: number;
-  senderProof: string;
 }> {
   try {
     // Get the sender's private key (requires mnemonic to decrypt)
@@ -447,9 +444,6 @@ export async function prepareFileForSharing(
     const fileExtension = file.name.split(".").pop() || "";
     const fileName = `encrypted_${fileId}.bin`;
 
-    // After generating fileId
-    const senderProof = `${Date.now()}:dummy-proof`;
-
     return {
       encryptedFileBlob,
       recipientHashedEmail,
@@ -462,7 +456,6 @@ export async function prepareFileForSharing(
       fileId,
       mimeType: file.type,
       fileSize: file.size,
-      senderProof,
     };
   } catch (error) {
     logger.error("Error preparing file for sharing:", error);
@@ -480,7 +473,7 @@ function arrayBufferToHex(buffer: ArrayBuffer): string {
 }
 
 /**
- * Store file sharing information in Supabase
+ * Store file sharing information in the database
  */
 export async function storeFileShare(
   shareId: string,
@@ -535,46 +528,6 @@ export async function storeFileShare(
   } catch (error) {
     logger.error("Error in storeFileShare:", error);
     throw error;
-  }
-}
-
-/**
- * Finds all files shared with a specific recipient, based on their email.
- * @param recipientEmail The email address of the recipient.
- * @returns A Promise that resolves to an array of shared file metadata.
- */
-export async function findFilesSharedWithRecipient(
-  recipientEmail: string
-): Promise<any[]> {
-  // Hash the recipient's email to look up in the database
-  const recipientEmailHash = await hashEmail(recipientEmail);
-
-  const { data, error } = await supabase
-    .from("shared_files")
-    .select("*")
-    .eq("recipient_email_hash", recipientEmailHash)
-    .eq("is_claimed", false);
-
-  if (error) {
-    throw new Error(`Failed to fetch shared files: ${error.message}`);
-  }
-
-  return data || [];
-}
-
-/**
- * Marks a shared file as claimed by the recipient.
- * @param shareId The unique identifier for the share.
- * @returns A Promise that resolves when the share is successfully marked as claimed.
- */
-export async function markFileShareAsClaimed(shareId: string): Promise<void> {
-  const { error } = await supabase
-    .from("shared_files")
-    .update({ is_claimed: true })
-    .eq("share_id", shareId);
-
-  if (error) {
-    throw new Error(`Failed to mark file as claimed: ${error.message}`);
   }
 }
 

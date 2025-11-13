@@ -219,36 +219,30 @@ done
 
 | # | Risk Name | Severity | Location | Impact | Fix | Priority |
 |---|-----------|----------|----------|--------|-----|----------|
-| 19 | Fake Sender Proof (No Digital Signatures) | 🔴 CRITICAL | `app/src/utils/fileSharing.ts:239-252` | Attacker can impersonate anyone when sharing | Implement RSA-PSS or ECDSA signatures | P0 |
+| 19 | Fake Sender Proof (No Digital Signatures) | ~~🔴 CRITICAL~~ ✅ **REMOVED** | `app/src/utils/fileSharing.ts` | ~~Attacker can impersonate anyone when sharing~~ | ✅ Sender proof feature removed entirely | ~~P0~~ **COMPLETED** |
 | 20 | No Forward Secrecy | 🟡 MEDIUM | `fileSharing.ts` (design flaw) | Private key compromise = ALL past shares decryptable | Implement ephemeral key exchange (ECDHE) | P2 |
 | 21 | Recipient Email Plaintext in DB | 🟡 MEDIUM | `app/src/utils/fileSharing.ts:517` | Database breach reveals sharing relationships | Only store hashed email | P1 |
 | 22 | Inefficient Hex Encoding | 🟢 LOW | `app/src/utils/fileSharing.ts:500-507` | 2x storage space, slower processing | Use Base64 or binary BYTEA | P3 |
 | 23 | No Rate Limiting on Sharing | 🟡 MEDIUM | Backend: `sharedFiles.ts` | Spam attack: Share malware with thousands | Implement 100 shares/hour limit | P1 |
-| 24 | Dead Supabase Code | 🟢 LOW | `app/src/utils/fileSharing.ts:549-560` | Code confusion, potential errors | Remove all Supabase code | P3 |
+| 24 | Dead Supabase Code | ~~🟢 LOW~~ ✅ **REMOVED** | `app/src/utils/` | ~~Code confusion, potential errors~~ | ✅ All Supabase code removed | ~~P3~~ **COMPLETED** |
 | 25 | Fragile Base64 Decoding | 🟢 LOW | `app/src/utils/fileSharing.ts:273-302` | Encoding inconsistency → Failures | Standardize on one format | P3 |
 
-**Current Implementation:**
-```typescript
-// FAKE SENDER PROOF - Easily forged!
-export async function generateSenderProof(senderEmail: string): Promise<string> {
-  const timestamp = Date.now().toString();
-  const data = encoder.encode(`${senderEmail}-${timestamp}`);
-  const hashBuffer = await crypto.subtle.digest("SHA-256", data);
-  return `${timestamp}:${bufferToHex(hashBuffer)}`; // ❌ Not cryptographic proof
-}
-```
+**✅ REMOVED (Risk #19):**
+The sender proof feature has been completely removed from the codebase. The insecure implementation that could be easily forged has been eliminated. Changes include:
+- Removed `senderProof` property from `FilePreparationResult` interface
+- Removed `senderProof` from `prepareFileForSharing()` function signature and return value
+- Removed `sender_proof` column from database schema
+- File sharing now relies solely on encrypted file keys and email-based authentication
 
-**Attack Vector (Risk #19):**
-```javascript
-// Attacker forges sender identity:
-const fakeProof = await generateSenderProof("ceo@company.com");
-await shareFile({
-  sender: "ceo@company.com",
-  senderProof: fakeProof, // ✅ Accepted!
-  file: malware.exe
-});
-// Victim sees: "ceo@company.com shared a file" → Downloads malware
-```
+**✅ REMOVED (Risk #24):**
+All Supabase-related code has been completely removed from the codebase. Changes include:
+- Deleted `supabaseClient.ts` (86-line compatibility wrapper)
+- Deleted `supabase-schema.sql` (old SQL schema file)
+- Deleted `fileShareExample.ts` (demo file using dead Supabase functions)
+- Removed `findFilesSharedWithRecipient()` function (used undefined `supabase` variable)
+- Removed `markFileShareAsClaimed()` function (used undefined `supabase` variable)
+- Updated all JSDoc comments and error messages to remove Supabase references
+- Application now uses self-hosted backend API exclusively
 
 ---
 
@@ -447,10 +441,10 @@ MAILGUN_API_KEY=key-123  # ❌ No encryption
 **Exploit Chain:**
 1. Attacker uploads `ransomware.exe` (no file validation - Risk #14)
 2. Shares with 10,000 users in 1 hour (no rate limit - Risk #23)
-3. Forges sender identity as "IT Department" (no signatures - Risk #19)
+3. ~~Forges sender identity as "IT Department" (no signatures - Risk #19)~~ ✅ **MITIGATED:** Sender proof feature removed
 4. Victims trust sender → Download → Execute → Infected
 
-**Affected Risks:** #14, #19, #23
+**Affected Risks:** #14, ~~#19~~ ✅ **REMOVED**, #23
 **Severity:** CRITICAL
 **Mitigation:** File validation + Digital signatures + Rate limiting + Malware scanning
 
@@ -540,11 +534,12 @@ MAILGUN_API_KEY=key-123  # ❌ No encryption
   - ✅ Uses mnemonic-derived wrapping key (no master password needed)
   - **Effort:** 1 day | **Impact:** Prevents complete crypto compromise from XSS attacks
 
-- [ ] **Risk #19:** Implement digital signatures for file sharing
-  - Generate signing key pair (RSA-PSS)
-  - Sign all share operations
-  - Verify signatures on receipt
-  - **Effort:** 2 days | **Impact:** Prevents identity spoofing
+- [x] **Risk #19:** ✅ Removed insecure sender proof feature **COMPLETED**
+  - ✅ Removed `senderProof` from fileSharing.ts interface and return types
+  - ✅ Removed sender proof variable creation and usage
+  - ✅ Removed `sender_proof` column from database schema
+  - ✅ Updated security documentation
+  - **Effort:** 1 hour | **Impact:** Eliminated insecure cryptographic proof implementation
 
 - [x] **Risk #1:** ✅ Move Google tokens out of localStorage **COMPLETED**
   - ✅ Removed from localStorage (no longer accessible to XSS)
