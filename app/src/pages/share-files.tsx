@@ -314,7 +314,7 @@ const ShareFilesPage: React.FC = () => {
         errorMessage.includes("API key") ||
         errorMessage.includes("connect")
       ) {
-        description = "Network or Supabase connection issue.";
+        description = "Network connection issue.";
       }
       toast.error("Failed to generate sharing keys", {
         description: description || errorMessage,

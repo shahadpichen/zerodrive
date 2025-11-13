@@ -1,6 +1,6 @@
 /**
  * API Client for ZeroDrive Backend
- * Replaces Supabase client with self-hosted backend
+ * Handles all backend API communication
  */
 
 import { getCsrfToken, refreshToken, logout as authLogout } from './authService';
