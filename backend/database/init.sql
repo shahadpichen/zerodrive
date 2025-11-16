@@ -21,7 +21,6 @@ CREATE TABLE IF NOT EXISTS public_keys (
 CREATE TABLE IF NOT EXISTS shared_files (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     file_id VARCHAR(255) NOT NULL,
-    owner_user_id VARCHAR(255) NOT NULL,
     recipient_user_id VARCHAR(255) NOT NULL,
     encrypted_file_key TEXT NOT NULL,
     file_name VARCHAR(500) NOT NULL,
@@ -36,7 +35,6 @@ CREATE TABLE IF NOT EXISTS shared_files (
 
 -- Create indexes for better query performance
 CREATE INDEX IF NOT EXISTS idx_public_keys_user_id ON public_keys(user_id);
-CREATE INDEX IF NOT EXISTS idx_shared_files_owner ON shared_files(owner_user_id);
 CREATE INDEX IF NOT EXISTS idx_shared_files_recipient ON shared_files(recipient_user_id);
 CREATE INDEX IF NOT EXISTS idx_shared_files_file_id ON shared_files(file_id);
 CREATE INDEX IF NOT EXISTS idx_shared_files_expires_at ON shared_files(expires_at);

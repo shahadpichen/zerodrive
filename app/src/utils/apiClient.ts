@@ -40,7 +40,6 @@ interface PublicKeyData {
 interface SharedFileData {
   id?: string;
   file_id: string;
-  owner_user_id: string;
   recipient_user_id: string;
   encrypted_file_key: string;
   file_name: string;
@@ -295,7 +294,6 @@ export const sharedFilesApi = {
    */
   async create(shareData: {
     file_id: string;
-    owner_user_id: string;
     recipient_user_id: string;
     encrypted_file_key: string;
     file_name: string;
@@ -309,12 +307,11 @@ export const sharedFilesApi = {
   },
 
   /**
-   * Get shared files for a user (as owner or recipient)
+   * Get shared files for a recipient
    */
   async getForUser(
     userId: string,
     options: {
-      owner_user_id?: string;
       recipient_user_id?: string;
       limit?: number;
       offset?: number;

@@ -23,7 +23,6 @@ const router = Router();
 // Validation schemas
 const createSharedFileSchema = Joi.object({
   file_id: Joi.string().required(),
-  owner_user_id: Joi.string().required(),
   recipient_user_id: Joi.string().required(),
   recipient_email: Joi.string().email().optional(), // For email notifications
   custom_message: Joi.string().max(500).optional(), // Optional custom message from sender
@@ -45,8 +44,7 @@ const getSharedFileSchema = Joi.object({
 });
 
 const getSharedFilesQuerySchema = Joi.object({
-  owner_user_id: Joi.string().optional(),
-  recipient_user_id: Joi.string().optional(),
+  recipient_user_id: Joi.string().required(), // Must specify recipient
   limit: Joi.number().integer().min(1).max(100).default(50),
   offset: Joi.number().integer().min(0).default(0)
 });
@@ -67,7 +65,6 @@ router.post('/', asyncHandler(async (
 
   const {
     file_id,
-    owner_user_id,
     recipient_user_id,
     recipient_email,
     custom_message,
@@ -79,16 +76,11 @@ router.post('/', asyncHandler(async (
     access_type
   } = value;
 
-  // Validate that owner and recipient are different
-  if (owner_user_id === recipient_user_id) {
-    throw ApiErrors.BadRequest('Cannot share file with yourself');
-  }
-
   try {
     // Check if file is already shared with this recipient
     const existingShare = await query<SharedFile>(
-      'SELECT id FROM shared_files WHERE file_id = $1 AND owner_user_id = $2 AND recipient_user_id = $3',
-      [file_id, owner_user_id, recipient_user_id]
+      'SELECT id FROM shared_files WHERE file_id = $1 AND recipient_user_id = $2',
+      [file_id, recipient_user_id]
     );
 
     if (existingShare.rows.length > 0) {
@@ -98,13 +90,12 @@ router.post('/', asyncHandler(async (
     // Create new shared file record
     const result = await query<SharedFile>(
       `INSERT INTO shared_files (
-        file_id, owner_user_id, recipient_user_id, encrypted_file_key,
+        file_id, recipient_user_id, encrypted_file_key,
         file_name, file_size, mime_type, expires_at, access_type
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
       RETURNING *`,
       [
         file_id,
-        owner_user_id,
         recipient_user_id,
         encrypted_file_key,
         file_name,
@@ -134,7 +125,7 @@ router.post('/', asyncHandler(async (
 
     res.apiSuccess(result.rows[0], 'File shared successfully', 201);
   } catch (error) {
-    if (error instanceof Error && (error.message.includes('already shared') || error.message.includes('yourself'))) {
+    if (error instanceof Error && error.message.includes('already shared')) {
       throw error;
     }
     throw ApiErrors.InternalServer('Failed to share file');
@@ -143,7 +134,7 @@ router.post('/', asyncHandler(async (
 
 /**
  * GET /api/shared-files
- * Get shared files (as owner or recipient)
+ * Get shared files for a recipient
  */
 router.get('/', asyncHandler(async (
   req: Request,
@@ -155,43 +146,24 @@ router.get('/', asyncHandler(async (
     throw ApiErrors.ValidationError(error.details[0].message);
   }
 
-  const { owner_user_id, recipient_user_id, limit, offset } = value;
-
-  // At least one user ID must be provided
-  if (!owner_user_id && !recipient_user_id) {
-    throw ApiErrors.BadRequest('Either owner_user_id or recipient_user_id must be provided');
-  }
+  const { recipient_user_id, limit, offset } = value;
 
   try {
-    let whereClause = '';
-    let params: any[] = [];
-    
-    if (owner_user_id && recipient_user_id) {
-      whereClause = 'WHERE (owner_user_id = $1 OR recipient_user_id = $2)';
-      params = [owner_user_id, recipient_user_id];
-    } else if (owner_user_id) {
-      whereClause = 'WHERE owner_user_id = $1';
-      params = [owner_user_id];
-    } else if (recipient_user_id) {
-      whereClause = 'WHERE recipient_user_id = $1';
-      params = [recipient_user_id];
-    }
-
-    // Get total count
+    // Get total count for recipient
     const countResult = await query<{ count: string }>(
-      `SELECT COUNT(*) as count FROM shared_files ${whereClause}`,
-      params
+      `SELECT COUNT(*) as count FROM shared_files WHERE recipient_user_id = $1`,
+      [recipient_user_id]
     );
     const total = parseInt(countResult.rows[0].count);
 
-    // Get paginated results
+    // Get paginated results for recipient
     const result = await query<SharedFile>(
-      `SELECT * FROM shared_files 
-       ${whereClause}
+      `SELECT * FROM shared_files
+       WHERE recipient_user_id = $1
        AND (expires_at IS NULL OR expires_at > CURRENT_TIMESTAMP)
-       ORDER BY created_at DESC 
-       LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
-      [...params, limit, offset]
+       ORDER BY created_at DESC
+       LIMIT $2 OFFSET $3`,
+      [recipient_user_id, limit, offset]
     );
 
     const hasMore = offset + limit < total;

@@ -14,7 +14,6 @@ export interface PublicKey {
 export interface SharedFile {
   id?: string;
   file_id: string;
-  owner_user_id: string;
   recipient_user_id: string;
   encrypted_file_key: string;
   file_name: string;
@@ -39,7 +38,6 @@ export interface GetPublicKeyRequest {
 
 export interface CreateSharedFileRequest {
   file_id: string;
-  owner_user_id: string;
   recipient_user_id: string;
   encrypted_file_key: string;
   file_name: string;
@@ -59,7 +57,6 @@ export interface GetSharedFileRequest {
 }
 
 export interface GetSharedFilesQuery {
-  owner_user_id?: string;
   recipient_user_id?: string;
   limit?: number;
   offset?: number;
