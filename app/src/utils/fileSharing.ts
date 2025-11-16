@@ -15,8 +15,6 @@ export interface FilePreparationResult {
   encryptedFileBlob: Blob;
   /** SHA-256 hash of the recipient's email address. */
   recipientEmailHash: string;
-  /** SHA-256 hash of the sender's email address. */
-  senderEmailHash: string;
   /** The file's symmetric encryption key, itself encrypted for the recipient. */
   encryptedFileKeyForRecipient: ArrayBuffer;
   /** The original name of the file. */
@@ -228,28 +226,6 @@ export async function encryptFileKeyForRecipient(
 }
 
 /**
- * Generates a cryptographic proof of the sender's identity.
- * This is a simplified version that uses email verification and the current timestamp.
- * In a more sophisticated system, this could be a signed JWT or another cryptographic assertion.
- * @param senderEmail The sender's email identifier.
- * @returns A Promise that resolves to a string representing the sender proof.
- */
-export async function generateSenderProof(
-  senderEmail: string
-): Promise<string> {
-  // For a basic proof, we'll use the hash of the sender's email and timestamp
-  const encoder = new TextEncoder();
-  const timestamp = Date.now().toString();
-  const data = encoder.encode(
-    `${senderEmail.toLowerCase().trim()}-${timestamp}`
-  );
-  const hashBuffer = await crypto.subtle.digest("SHA-256", data);
-  const proof = bufferToHex(hashBuffer);
-
-  return `${timestamp}:${proof}`;
-}
-
-/**
  * Convert an ArrayBuffer to Base64 string
  * @param buffer The ArrayBuffer to convert
  * @returns Base64 string
@@ -324,7 +300,6 @@ export async function prepareFileForSharing(
 ): Promise<{
   encryptedFileBlob: Blob;
   recipientHashedEmail: string;
-  senderHashedEmail: string;
   fileName: string;
   originalFileName: string;
   encryptedFileKey: string;
@@ -355,7 +330,7 @@ export async function prepareFileForSharing(
     
     if (!publicKeyResult || !publicKeyResult.public_key) {
       logger.error(
-        `[SENDER-DEBUG] Failed to fetch public key for ${recipientEmail} (hashed: ${recipientHashedEmail})`
+        `[FILE-SHARE] Failed to fetch public key for ${recipientEmail} (hashed: ${recipientHashedEmail})`
       );
       throw new Error(
         `Recipient ${recipientEmail} has not registered their public key yet, or an error occurred fetching it.`
@@ -364,7 +339,7 @@ export async function prepareFileForSharing(
 
     const recipientPublicJWKForEncryption = JSON.parse(publicKeyResult.public_key);
     logger.log(
-      `[SENDER-DEBUG] Public Key JWK of recipient (${recipientEmail}) being used for encryption:`,
+      `[FILE-SHARE] Public Key JWK of recipient (${recipientEmail}) being used for encryption:`,
       JSON.stringify(recipientPublicJWKForEncryption)
     );
 
@@ -434,9 +409,6 @@ export async function prepareFileForSharing(
       type: "application/octet-stream",
     });
 
-    // Hash the sender's email
-    const senderHashedEmail = await hashEmail(senderEmail);
-
     // Generate a random file ID
     const fileId = crypto.randomUUID();
 
@@ -449,7 +421,6 @@ export async function prepareFileForSharing(
       recipientHashedEmail,
       recipientEmail,
       customMessage,
-      senderHashedEmail,
       fileName,
       originalFileName: file.name,
       encryptedFileKey: arrayBufferToBase64(encryptedFileKey),
@@ -489,7 +460,7 @@ export async function storeFileShare(
       fileData.fileMimeType
     );
 
-    logger.log(`[SENDER-DEBUG] File uploaded to MinIO with key: ${fileKey}`);
+    logger.log(`[FILE-SHARE] File uploaded to MinIO with key: ${fileKey}`);
 
     // 2. Store metadata in database, with reference to file in storage
     const encryptedFileKeyArrayBuffer = base64ToArrayBuffer(
@@ -499,7 +470,7 @@ export async function storeFileShare(
     const encryptedFileKeyHex = arrayBufferToHex(encryptedFileKeyArrayBuffer);
 
     logger.log(
-      `[SENDER-DEBUG] Storing encryptedFileKey for share_id ${shareId}. Original base64: "${fileData.encryptedFileKey}", Hex for DB: "${encryptedFileKeyHex}" (length: ${encryptedFileKeyHex.length})`
+      `[FILE-SHARE] Storing encryptedFileKey for share_id ${shareId}. Original base64: "${fileData.encryptedFileKey}", Hex for DB: "${encryptedFileKeyHex}" (length: ${encryptedFileKeyHex.length})`
     );
 
     try {
@@ -508,7 +479,6 @@ export async function storeFileShare(
 
       const data = await apiClient.sharedFiles.create({
         file_id: fileKey, // Reference to MinIO storage location
-        owner_user_id: fileData.senderHashedEmail,
         recipient_user_id: fileData.recipientHashedEmail,
         recipient_email: fileData.recipientEmail, // For email notification
         custom_message: fileData.customMessage, // Optional custom message from sender
@@ -519,12 +489,12 @@ export async function storeFileShare(
         access_type: 'view',
         expires_at: expirationDate // Auto-delete after 7 days if not claimed
       });
-      logger.log(`[SENDER-DEBUG] Successfully stored file share:`, data);
+      logger.log(`[FILE-SHARE] Successfully stored file share:`, data);
     } catch (error) {
       logger.error("Error creating shared file:", error);
       throw error;
     }
-    logger.log(`[SENDER-DEBUG] Successfully stored share_id ${shareId}`);
+    logger.log(`[FILE-SHARE] Successfully stored share_id ${shareId}`);
   } catch (error) {
     logger.error("Error in storeFileShare:", error);
     throw error;
