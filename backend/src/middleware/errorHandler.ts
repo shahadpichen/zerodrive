@@ -38,11 +38,14 @@ export const ApiErrors = {
   Forbidden: (message: string = 'Forbidden'): ApiError => 
     new ApiError(message, 403, 'FORBIDDEN'),
   
-  NotFound: (message: string = 'Not Found'): ApiError => 
+  NotFound: (message: string = 'Not Found'): ApiError =>
     new ApiError(message, 404, 'NOT_FOUND'),
-  
-  Conflict: (message: string = 'Conflict'): ApiError => 
+
+  Conflict: (message: string = 'Conflict'): ApiError =>
     new ApiError(message, 409, 'CONFLICT'),
+
+  PaymentRequired: (message: string = 'Payment Required'): ApiError =>
+    new ApiError(message, 402, 'PAYMENT_REQUIRED'),
   
   ValidationError: (message: string = 'Validation Error'): ApiError => 
     new ApiError(message, 422, 'VALIDATION_ERROR'),

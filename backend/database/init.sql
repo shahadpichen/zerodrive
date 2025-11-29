@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS public_keys (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id VARCHAR(255) NOT NULL UNIQUE,
     public_key TEXT NOT NULL,
+    credits NUMERIC(10, 1) DEFAULT 15.0 NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
@@ -101,6 +102,42 @@ CREATE TRIGGER update_analytics_daily_summary_updated_at
 --
 -- See: app/src/utils/authService.ts for encrypted storage implementation
 -- See: app/src/utils/cryptoUtils.ts for PBKDF2 encryption functions
+
+-- Create credit_transactions table
+-- Logs all credit additions and deductions for audit trail
+CREATE TABLE IF NOT EXISTS credit_transactions (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id VARCHAR(255) NOT NULL,
+    amount NUMERIC(10, 1) NOT NULL,
+    transaction_type VARCHAR(50) NOT NULL,
+    balance_after NUMERIC(10, 1) NOT NULL,
+    metadata JSONB,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_credit_transactions_user_id ON credit_transactions(user_id);
+CREATE INDEX IF NOT EXISTS idx_credit_transactions_created_at ON credit_transactions(created_at DESC);
+
+-- Create credit_packages table
+-- Stores credit package pricing (structure only - no payment implementation yet)
+CREATE TABLE IF NOT EXISTS credit_packages (
+    id VARCHAR(50) PRIMARY KEY,
+    credits NUMERIC(10, 1) NOT NULL,
+    price_usd NUMERIC(10, 2) NOT NULL,
+    price_per_credit NUMERIC(10, 4) NOT NULL,
+    display_name VARCHAR(100) NOT NULL,
+    description TEXT,
+    is_active BOOLEAN DEFAULT true,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Create trigger for credit_packages
+DROP TRIGGER IF EXISTS update_credit_packages_updated_at ON credit_packages;
+CREATE TRIGGER update_credit_packages_updated_at
+    BEFORE UPDATE ON credit_packages
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
 
 -- Create a view for active shared files (not expired)
 CREATE OR REPLACE VIEW active_shared_files AS

@@ -33,6 +33,7 @@ interface PublicKeyData {
   id?: string;
   user_id: string;
   public_key: string;
+  credits?: number;
   created_at?: string;
   updated_at?: string;
 }
@@ -426,12 +427,54 @@ export const healthApi = {
   },
 };
 
+// Credits API
+export const creditsApi = {
+  /**
+   * Get user's credit balance
+   */
+  async getBalance(userId: string): Promise<{ user_id: string; balance: number }> {
+    const response = await httpClient.get<{ user_id: string; balance: number }>(
+      `/credits/balance/${userId}`
+    );
+    return response.data!;
+  },
+
+  /**
+   * Get user's credit transaction history
+   */
+  async getTransactions(
+    userId: string,
+    options: {
+      limit?: number;
+      offset?: number;
+    } = {}
+  ): Promise<{
+    transactions: Array<{
+      id: string;
+      user_id: string;
+      amount: number;
+      transaction_type: string;
+      balance_after: number;
+      metadata?: Record<string, any>;
+      created_at: string;
+    }>;
+    count: number;
+  }> {
+    const response = await httpClient.get<{
+      transactions: Array<any>;
+      count: number;
+    }>(`/credits/transactions/${userId}`, options);
+    return response.data!;
+  },
+};
+
 // Default export for compatibility
 const apiClient = {
   publicKeys: publicKeysApi,
   sharedFiles: sharedFilesApi,
   invitations: invitationsApi,
   health: healthApi,
+  credits: creditsApi,
   // Expose HTTP methods for custom endpoints (like pre-signed URLs)
   get: httpClient.get.bind(httpClient),
   post: httpClient.post.bind(httpClient),
