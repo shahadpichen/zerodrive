@@ -7,6 +7,7 @@ export interface PublicKey {
   id?: string;
   user_id: string;
   public_key: string;
+  credits?: number;
   created_at?: Date;
   updated_at?: Date;
 }
@@ -22,6 +23,28 @@ export interface SharedFile {
   access_type: 'view' | 'download';
   expires_at?: Date;
   last_accessed_at?: Date;
+  created_at?: Date;
+  updated_at?: Date;
+}
+
+export interface CreditTransaction {
+  id?: string;
+  user_id: string;
+  amount: number;
+  transaction_type: string;
+  balance_after: number;
+  metadata?: Record<string, any>;
+  created_at?: Date;
+}
+
+export interface CreditPackage {
+  id: string;
+  credits: number;
+  price_usd: number;
+  price_per_credit: number;
+  display_name: string;
+  description?: string;
+  is_active: boolean;
   created_at?: Date;
   updated_at?: Date;
 }
@@ -60,6 +83,15 @@ export interface GetSharedFilesQuery {
   recipient_user_id?: string;
   limit?: number;
   offset?: number;
+}
+
+export interface GetCreditBalanceRequest {
+  user_id: string;
+}
+
+export interface CreditBalanceResponse {
+  user_id: string;
+  balance: number;
 }
 
 // API Response Types

@@ -11,6 +11,7 @@ import cryptoRouter from './crypto';
 import webhooksRouter from './webhooks';
 import invitationsRouter from './invitations';
 import analyticsRouter from './analytics';
+import creditsRouter from './credits';
 import { requireAuth } from '../middleware/auth';
 
 const router = Router();
@@ -51,7 +52,9 @@ router.get('/', (req, res) => {
       'POST /api/invitations/send': 'Send invitation email to unregistered user',
       'GET /api/invitations/rate-limit/:email': 'Check rate limit status',
       'GET /api/analytics/summary': 'Get anonymous analytics summary',
-      'GET /api/analytics/daily': 'Get daily analytics stats'
+      'GET /api/analytics/daily': 'Get daily analytics stats',
+      'GET /api/credits/balance/:userId': 'Get user credit balance',
+      'GET /api/credits/transactions/:userId': 'Get credit transaction history'
     }
   }, 'ZeroDrive Backend API');
 });
@@ -72,5 +75,6 @@ router.use('/presigned-url', presignedUrlsRouter);
 router.use('/crypto', cryptoRouter);
 router.use('/invitations', invitationsRouter);
 router.use('/analytics', analyticsRouter);
+router.use('/credits', creditsRouter);
 
 export default router;

@@ -1,7 +1,11 @@
 import React from "react";
 import { gapi } from "gapi-script";
 import { clearStoredKey } from "../../utils/cryptoUtils";
-import { clearSession, getSessionUser, setSessionUser } from "../../utils/sessionManager";
+import {
+  clearSession,
+  getSessionUser,
+  setSessionUser,
+} from "../../utils/sessionManager";
 import { Avatar, AvatarImage, AvatarFallback } from "../ui/avatar";
 import { Progress } from "../ui/progress";
 import {
@@ -10,8 +14,10 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "../ui/dropdown-menu";
-import { Zap } from "lucide-react";
+import { Zap, Coins } from "lucide-react";
 import { Button } from "../ui/button";
+import apiClient from "../../utils/apiClient";
+import { hashEmail } from "../../utils/fileSharing";
 
 interface HeaderProps {
   setIsAuthenticated: (value: boolean) => void;
@@ -26,6 +32,7 @@ function Header({ setIsAuthenticated }: HeaderProps) {
     used: number;
     total: number;
   } | null>(null);
+  const [creditBalance, setCreditBalance] = React.useState<number | null>(null);
 
   const formatBytes = (bytes: number) => {
     if (bytes === 0) return "0 Bytes";
@@ -57,7 +64,9 @@ function Header({ setIsAuthenticated }: HeaderProps) {
       const sessionEmail = getSessionUser();
 
       if (sessionEmail && sessionEmail !== currentEmail) {
-        console.warn(`Account switch detected: ${sessionEmail} -> ${currentEmail}`);
+        console.warn(
+          `Account switch detected: ${sessionEmail} -> ${currentEmail}`
+        );
         console.log("Clearing previous session and reinitializing...");
 
         // Clear old session
@@ -75,6 +84,16 @@ function Header({ setIsAuthenticated }: HeaderProps) {
       if (!sessionEmail) {
         setSessionUser(currentEmail);
       }
+
+      // Get GAPI auth instance
+      const authInstance = gapi.auth2?.getAuthInstance();
+      if (!authInstance) {
+        console.error("GAPI auth instance not available");
+        return;
+      }
+
+      const currentUser = authInstance.currentUser.get();
+      const profile = currentUser.getBasicProfile();
 
       setUser({
         name: profile.getName(),
@@ -108,6 +127,16 @@ function Header({ setIsAuthenticated }: HeaderProps) {
           used: parseInt(storageQuota.usage || "0"),
           total: parseInt(storageQuota.limit || "0"),
         });
+      }
+
+      // Fetch credit balance
+      try {
+        const hashedEmail = await hashEmail(currentEmail);
+        const balanceData = await apiClient.credits.getBalance(hashedEmail);
+        setCreditBalance(balanceData.balance);
+      } catch (creditError) {
+        console.error("Error fetching credit balance:", creditError);
+        // Don't fail the whole function if credits fail to load
       }
     } catch (error: any) {
       console.error("Error loading user and storage info:", error);
@@ -148,7 +177,7 @@ function Header({ setIsAuthenticated }: HeaderProps) {
       // Use replace() to prevent back button issues
       // Longer timeout to ensure cookies are fully cleared before redirect
       setTimeout(() => {
-        console.log('[Logout Handler] Redirecting to home page');
+        console.log("[Logout Handler] Redirecting to home page");
         window.location.replace("/");
       }, 500);
     } catch (error) {
@@ -182,6 +211,36 @@ function Header({ setIsAuthenticated }: HeaderProps) {
           </a>
         </div>
         <div className="flex flex-1 items-center space-x-4 md:space-x-8 justify-end">
+          {creditBalance !== null && (
+            <div className="hidden md:flex flex-col items-end gap-1 min-w-[120px]">
+              <div className="flex justify-between items-center w-full">
+                <span className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                  <Coins
+                    className={
+                      creditBalance < 1
+                        ? "text-red-600"
+                        : creditBalance < 3
+                        ? "text-amber-600"
+                        : "text-green-600"
+                    }
+                    size={14}
+                  />
+                  Credits
+                </span>
+                <span
+                  className={`text-xs font-semibold ${
+                    creditBalance < 1
+                      ? "text-red-600"
+                      : creditBalance < 3
+                      ? "text-amber-600"
+                      : "text-green-600"
+                  }`}
+                >
+                  {creditBalance.toFixed(1)}
+                </span>
+              </div>
+            </div>
+          )}
           {storageInfo && (
             <div className="hidden md:flex flex-col items-end gap-2 min-w-[200px]">
               <div className="flex justify-between items-center w-full">

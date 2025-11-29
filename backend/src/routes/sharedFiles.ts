@@ -5,8 +5,7 @@
 import { Router } from 'express';
 import Joi from 'joi';
 import { query, transaction } from '../config/database';
-import { asyncHandler } from '../middleware/errorHandler';
-import { ApiErrors } from '../middleware/errorHandler';
+import { asyncHandler, ApiError, ApiErrors } from '../middleware/errorHandler';
 import { Request, Response } from 'express';
 import {
   SharedFile,
@@ -17,6 +16,7 @@ import {
 } from '../types';
 import { sendFileShareNotification } from '../services/emailService';
 import { trackEvent, AnalyticsEvent, AnalyticsCategory, getFileSizeBucket, getFileTypeCategory } from '../services/analytics';
+import { checkCredits, deductCredits, COST_FILE_SHARE, COST_EMAIL_NOTIFICATION, TRANSACTION_TYPE } from '../utils/creditOperations';
 
 const router = Router();
 
@@ -77,6 +77,23 @@ router.post('/', asyncHandler(async (
   } = value;
 
   try {
+    // Get sender user_id from authenticated user (emailHash from JWT)
+    const senderUserId = req.user!.emailHash;
+
+    // Calculate credit cost (1 credit for share + 0.5 for email notification)
+    // Only send email (and charge) if user provides a custom message
+    const willSendEmail = !!custom_message;
+    const creditCost = COST_FILE_SHARE + (willSendEmail ? COST_EMAIL_NOTIFICATION : 0);
+
+    // Check if sender has sufficient credits
+    const hasCredits = await checkCredits(senderUserId, creditCost);
+
+    if (!hasCredits) {
+      throw ApiErrors.PaymentRequired(
+        `Insufficient credits. Required: ${creditCost} credits (${COST_FILE_SHARE} for share${willSendEmail ? ` + ${COST_EMAIL_NOTIFICATION} for email notification` : ''})`
+      );
+    }
+
     // Check if file is already shared with this recipient
     const existingShare = await query<SharedFile>(
       'SELECT id FROM shared_files WHERE file_id = $1 AND recipient_user_id = $2',
@@ -106,9 +123,23 @@ router.post('/', asyncHandler(async (
       ]
     );
 
+    // Deduct credits from sender
+    const newBalance = await deductCredits(
+      senderUserId,
+      creditCost,
+      TRANSACTION_TYPE.FILE_SHARE,
+      {
+        file_id,
+        file_name,
+        recipient_user_id,
+        email_sent: willSendEmail
+      }
+    );
+
     // Send email notification (non-blocking)
+    // Only send email if user provided a custom message
     // Don't wait for email to complete - respond immediately to user
-    if (recipient_email) {
+    if (recipient_email && custom_message) {
       sendFileShareNotification(recipient_email, custom_message).catch(error => {
         console.error('[SharedFiles] Failed to send email notification:', error.message);
         // Don't throw - email failure should not fail the file sharing operation
@@ -125,7 +156,8 @@ router.post('/', asyncHandler(async (
 
     res.apiSuccess(result.rows[0], 'File shared successfully', 201);
   } catch (error) {
-    if (error instanceof Error && error.message.includes('already shared')) {
+    // Re-throw known error types with specific messages (PaymentRequired, Conflict, etc.)
+    if (error instanceof ApiError) {
       throw error;
     }
     throw ApiErrors.InternalServer('Failed to share file');

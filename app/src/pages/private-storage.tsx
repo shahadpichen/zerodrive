@@ -23,7 +23,7 @@ import {
   DropdownMenuTrigger,
 } from "../components/ui/dropdown-menu";
 import { Progress } from "../components/ui/progress";
-import { Zap } from "lucide-react";
+import { Zap, Coins } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { RefreshCw } from "lucide-react";
 
@@ -33,10 +33,7 @@ import {
   storeUserPublicKey,
   hashEmail,
 } from "../utils/fileSharing";
-import {
-  storeUserKeyPair,
-  deleteUserKeyPair,
-} from "../utils/keyStorage";
+import { storeUserKeyPair, deleteUserKeyPair } from "../utils/keyStorage";
 import { encryptRsaPrivateKeyWithAesKey } from "../utils/rsaKeyManager";
 import { uploadEncryptedRsaKeyToDrive } from "../utils/gdriveKeyStorage";
 import { recoverRsaKeysIfNeeded } from "../utils/rsaKeyRecovery";
@@ -60,6 +57,7 @@ function PrivateStorage() {
     total: number;
   } | null>(null);
   const [isLoadingStorage, setIsLoadingStorage] = useState<boolean>(true);
+  const [creditBalance, setCreditBalance] = useState<number | null>(null);
   const [hasEncryptionKey, setHasEncryptionKey] = useState<boolean>(true);
   const [isRefreshingFiles, setIsRefreshingFiles] = useState<boolean>(false);
 
@@ -83,7 +81,7 @@ function PrivateStorage() {
     return "hsl(0 84.2% 60.2%)";
   };
 
-  const loadStorageInfo = async () => {
+  const loadStorageInfo = async (email?: string) => {
     setIsLoadingStorage(true);
     try {
       // Get Google access token from sessionStorage
@@ -91,7 +89,9 @@ function PrivateStorage() {
       const token = await getOrFetchGoogleToken();
 
       if (!token) {
-        console.warn("[StorageInfo] No Google token available, cannot fetch storage.");
+        console.warn(
+          "[StorageInfo] No Google token available, cannot fetch storage."
+        );
         setStorageInfo(null);
         setIsLoadingStorage(false);
         return;
@@ -111,6 +111,22 @@ function PrivateStorage() {
         });
       } else {
         setStorageInfo(null);
+      }
+
+      // Fetch credit balance
+      try {
+        const emailToUse = email || userEmail;
+        if (emailToUse) {
+          const hashedEmail = await hashEmail(emailToUse);
+          const balanceData = await apiClient.credits.getBalance(hashedEmail);
+          setCreditBalance(balanceData.balance);
+        }
+      } catch (creditError) {
+        console.error(
+          "[StorageInfo] Error fetching credit balance:",
+          creditError
+        );
+        // Don't fail the whole function if credits fail to load
       }
     } catch (error) {
       console.error("[StorageInfo] Error loading storage info:", error);
@@ -164,11 +180,15 @@ function PrivateStorage() {
         setUserName(email.split("@")[0]); // Use email prefix as name for now
 
         // Check if Google tokens exist in sessionStorage before initializing GAPI
-        const { hasGoogleTokensInStorage, logout } = await import("../utils/authService");
+        const { hasGoogleTokensInStorage, logout } = await import(
+          "../utils/authService"
+        );
         const tokensExist = hasGoogleTokensInStorage();
 
         if (!tokensExist) {
-          console.warn("[Storage] Google tokens not found in sessionStorage - redirecting to re-authenticate");
+          console.warn(
+            "[Storage] Google tokens not found in sessionStorage - redirecting to re-authenticate"
+          );
           // Automatically logout and redirect to login to get fresh tokens
           await logout();
           window.location.href = "/";
@@ -205,7 +225,7 @@ function PrivateStorage() {
         await fetchAndStoreFileMetadata();
         const files = await getAllFilesForUser(email);
         setUserHasFiles(files.length > 0);
-        await loadStorageInfo();
+        await loadStorageInfo(email);
 
         // Check for sharing keys and attempt recovery if needed
         const result = await recoverRsaKeysIfNeeded(email, false);
@@ -242,7 +262,7 @@ function PrivateStorage() {
         })
         .finally(() => setIsLoadingUserFiles(false));
       // Also re-check sharing keys if userEmail changes (though less likely here)
-      recoverRsaKeysIfNeeded(userEmail, false).then(result => {
+      recoverRsaKeysIfNeeded(userEmail, false).then((result) => {
         setHasSharingKeys(result.keysExisted || result.recovered);
       });
     }
@@ -398,10 +418,10 @@ function PrivateStorage() {
       // If no AES key, redirect to key management
       if (!primaryAesKey) {
         toast.dismiss(genToastId);
-        toast.info('Encryption key required', {
-          description: 'Please enter your mnemonic first to use file sharing.',
+        toast.info("Encryption key required", {
+          description: "Please enter your mnemonic first to use file sharing.",
         });
-        navigate('/key-management');
+        navigate("/key-management");
         setIsProcessingSharingKeys(false);
         return;
       }
@@ -487,7 +507,32 @@ function PrivateStorage() {
     <div className="container mx-auto min-h-screen flex flex-col items-center bg-background text-foreground">
       <header className="flex h-[10vh] w-full border-b justify-between pt-5 items-center gap-4 px-10 lg:px-10">
         <span className="font-semibold text-base sm:text-lg">ZeroDrive</span>
-        <div className="flex items-center gap-3 sm:gap-4">
+        <div className="flex items-center gap-3 sm:gap-6">
+          {creditBalance !== null && (
+            <div className="hidden md:flex items-center gap-1.5">
+              <Coins
+                className={
+                  creditBalance < 1
+                    ? "text-red-600"
+                    : creditBalance < 3
+                    ? "text-amber-600"
+                    : "text-green-600"
+                }
+                size={16}
+              />
+              <span
+                className={`text-xs font-semibold ${
+                  creditBalance < 1
+                    ? "text-red-600"
+                    : creditBalance < 3
+                    ? "text-amber-600"
+                    : "text-green-600"
+                }`}
+              >
+                {creditBalance.toFixed(1)}
+              </span>
+            </div>
+          )}
           <input
             type="file"
             id="file-upload"
@@ -578,13 +623,14 @@ function PrivateStorage() {
                   const aesKey = await getStoredKey();
 
                   if (aesKey) {
-                    navigate('/share');  // Has key, can proceed
+                    navigate("/share"); // Has key, can proceed
                   } else {
                     // No key, redirect to key management
-                    toast.info('Encryption key required', {
-                      description: 'Please enter your mnemonic first to use file sharing.',
+                    toast.info("Encryption key required", {
+                      description:
+                        "Please enter your mnemonic first to use file sharing.",
                     });
-                    navigate('/key-management');
+                    navigate("/key-management");
                   }
                 }}
               >
@@ -599,13 +645,14 @@ function PrivateStorage() {
                   const aesKey = await getStoredKey();
 
                   if (aesKey) {
-                    navigate('/shared-with-me');  // Has key, can proceed
+                    navigate("/shared-with-me"); // Has key, can proceed
                   } else {
                     // No key, redirect to key management
-                    toast.info('Encryption key required', {
-                      description: 'Please enter your mnemonic first to use file sharing.',
+                    toast.info("Encryption key required", {
+                      description:
+                        "Please enter your mnemonic first to use file sharing.",
                     });
-                    navigate('/key-management');
+                    navigate("/key-management");
                   }
                 }}
               >
