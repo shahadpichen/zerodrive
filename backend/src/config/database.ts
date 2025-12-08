@@ -16,8 +16,8 @@ const dbConfig: DatabaseConfig = {
   max: parseInt(process.env.DB_MAX_CONNECTIONS || '20'),
   idleTimeoutMillis: parseInt(process.env.DB_IDLE_TIMEOUT || '30000'),
   connectionTimeoutMillis: parseInt(process.env.DB_CONNECTION_TIMEOUT || '2000'),
-  // SSL configuration (disable for local development)
-  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+  // SSL configuration (disabled - Postgres container doesn't have SSL configured)
+  ssl: false,
 };
 
 // Create connection pool

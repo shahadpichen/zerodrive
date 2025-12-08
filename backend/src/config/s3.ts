@@ -13,8 +13,10 @@ const MINIO_SECRET_KEY = process.env.MINIO_SECRET_KEY || 'minioadmin';
 const MINIO_USE_SSL = process.env.MINIO_USE_SSL === 'true';
 export const MINIO_BUCKET = process.env.MINIO_BUCKET || 'zerodrive-files';
 
-// Construct endpoint URL
-const endpoint = `${MINIO_USE_SSL ? 'https' : 'http'}://${MINIO_ENDPOINT}:${MINIO_PORT}`;
+// Construct endpoint URL (don't add port if it's the default for the protocol)
+const isDefaultPort = (MINIO_USE_SSL && MINIO_PORT === '443') || (!MINIO_USE_SSL && MINIO_PORT === '80');
+const portPart = isDefaultPort ? '' : `:${MINIO_PORT}`;
+const endpoint = `${MINIO_USE_SSL ? 'https' : 'http'}://${MINIO_ENDPOINT}${portPart}`;
 
 /**
  * S3 client configured for MinIO

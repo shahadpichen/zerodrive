@@ -508,20 +508,22 @@ export async function storeFileShare(
  * @param userEmail The current user's email
  * @param originalFileName The original file name
  * @param mimeType The original MIME type
+ * @param mnemonic The user's mnemonic phrase for decrypting the private key
  */
 export async function decryptSharedFile(
   encryptedFileBlob: Blob,
   encryptedFileKey: string,
   userEmail: string,
   originalFileName: string,
-  mimeType: string
+  mimeType: string,
+  mnemonic: string
 ): Promise<{
   decryptedFile: Blob;
   fileName: string;
 }> {
   try {
     // Get the user's private key
-    const userKeyPair = await getUserKeyPair(userEmail);
+    const userKeyPair = await getUserKeyPair(userEmail, mnemonic);
     if (!userKeyPair || !userKeyPair.privateKeyJwk) {
       throw new Error(
         "Private key JWK not found. Please ensure keys are generated and retrieved correctly."

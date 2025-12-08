@@ -80,14 +80,14 @@ function LandingPage({ onAuthChange }: LandingPageProps) {
         </div>
       </div>
 
-      <div className="w-full flex justify-center items-center mt-[10vh]">
+      {/* <div className="w-full flex justify-center items-center mt-[10vh]">
         <div className="w-fit border-4 pt-10">
           <img
             src={isDark ? PageContentDark : PageContentLight}
             className="w-[1100px]"
           />
         </div>
-      </div>
+      </div> */}
 
       <div className="lg:px-[12vw] text-center pb-[2vh] px-5 flex flex-col gap-6 mt-[10vh] md:mt-[15vh]">
         {content.map((section, index) => (
@@ -103,15 +103,41 @@ function LandingPage({ onAuthChange }: LandingPageProps) {
       </div>
 
       <div className="lg:px-[12vw] pb-[5vh] px-5 flex flex-col mt-[5vh] md:mt-[10vh]">
-        <h2 className="text-2xl text-center mb-[20px]">Pricing with Credits</h2>
-        <p className="md:w-[85%] mx-auto font-light text-base">
-          Every ZeroDrive account comes with <u>2 free credits</u> to start
-          sharing files securely. Each additional credit costs <u>$1.50</u>.
-          Need to send a secure invite to someone not on ZeroDrive, or simply
-          notify a user that a file was shared with them? That email
-          notification costs <u>$0.50</u>, so the <u>maximum cost per share</u>{" "}
-          is <u>$2</u>. Pay only for what you use and control your sharing.
+        <div className="flex items-center justify-center gap-3 mb-4">
+          <h2 className="text-2xl text-center">Pricing with Credits</h2>
+          <span className="bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 text-xs font-semibold px-2.5 py-0.5 rounded">
+            BETA
+          </span>
+        </div>
+        <p className="md:w-[85%] mx-auto font-light text-base text-center mb-6">
+          <span className="text-black dark:text-white font-medium">
+            ZeroDrive is currently in beta!
+          </span>{" "}
+          All users receive <u>15 free credits</u> to start sharing files
+          securely.
         </p>
+        <div className="md:w-[85%] mx-auto">
+          <h3 className="text-lg font-medium mb-3 text-center">
+            How Credits Work:
+          </h3>
+          <ul className="list-disc pl-6 space-y-2 font-light text-base">
+            <li>
+              <strong>File Sharing:</strong> 1 credit per file share
+            </li>
+            <li>
+              <strong>Email Notifications:</strong> 0.5 credits when you add a
+              custom message to notify the recipient
+            </li>
+            <li>
+              <strong>Total Cost:</strong> Share a file without notification (1
+              credit) or with a custom message (1.5 credits)
+            </li>
+          </ul>
+          <p className="mt-4 text-sm text-muted-foreground text-center italic">
+            During beta, enjoy free credits as we refine the platform. Paid
+            credit packages will be available after the beta period.
+          </p>
+        </div>
       </div>
 
       <Footer />
