@@ -334,7 +334,8 @@ const SharedWithMePage: FC = () => {
         finalEncryptedFileKey,
         userEmail,
         file.originalFileName,
-        file.mimeType || "application/octet-stream"
+        file.mimeType || "application/octet-stream",
+        mnemonic
       );
 
       const downloadUrl = URL.createObjectURL(decryptedData.decryptedFile);
