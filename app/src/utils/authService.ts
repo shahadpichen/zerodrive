@@ -124,6 +124,44 @@ export async function getUserEmail(): Promise<string | null> {
 }
 
 /**
+ * Get user profile info from Google (including profile picture)
+ */
+export async function getUserProfile(): Promise<{
+  email: string;
+  name: string;
+  picture: string;
+} | null> {
+  try {
+    const token = await getOrFetchGoogleToken();
+    if (!token) {
+      console.error('No Google token available to fetch user profile');
+      return null;
+    }
+
+    const response = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+
+    if (!response.ok) {
+      console.error('Failed to fetch user profile:', response.status);
+      return null;
+    }
+
+    const data = await response.json();
+    return {
+      email: data.email,
+      name: data.name || data.email.split('@')[0],
+      picture: data.picture || '',
+    };
+  } catch (error) {
+    console.error('Error fetching user profile:', error);
+    return null;
+  }
+}
+
+/**
  * Refresh access token using refresh token cookie
  */
 export async function refreshToken(): Promise<boolean> {

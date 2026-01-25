@@ -45,6 +45,9 @@ module.exports = {
           foreground: "hsl(var(--card-foreground))",
         },
       },
+      borderColor: {
+        "accent-border": "hsl(var(--accent-border))",
+      },
       borderRadius: {
         lg: "var(--radius)",
         md: "calc(var(--radius) - 2px)",
