@@ -1,15 +1,11 @@
 import React, { useState, useEffect, FC } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "../components/ui/button";
-import { ArrowLeft, FileIcon, Download, RefreshCw } from "lucide-react";
-import { gapi } from "gapi-script";
+import { FileIcon, Download, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import {
   Card,
   CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
 } from "../components/ui/card";
 import { Separator } from "../components/ui/separator";
 import {
@@ -29,7 +25,7 @@ import {
   TableHeader,
   TableRow,
 } from "../components/ui/table";
-import { getUserKeyPair, storeUserKeyPair } from "../utils/keyStorage";
+import { getUserKeyPair } from "../utils/keyStorage";
 import apiClient from "../utils/apiClient";
 import { getStoredKey } from "../utils/cryptoUtils";
 import { uploadAndSyncFile } from "../utils/fileOperations";
@@ -488,39 +484,29 @@ const SharedWithMePage: FC = () => {
   };
 
   return (
-    <div className="flex justify-center items-center min-h-screen bg-background py-8">
-      <Card className="w-full max-w-4xl">
-        <CardHeader>
-          <div className="flex items-center justify-between mb-2">
-            <CardTitle>Files Shared With Me</CardTitle>
-            <div className="flex gap-2">
-              <Button
-                variant="outline"
-                size="icon"
-                onClick={handleRefresh}
-                disabled={isLoading}
-                aria-label="Refresh"
-              >
-                <RefreshCw
-                  className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`}
-                />
-              </Button>
-              <Button
-                variant="outline"
-                size="icon"
-                onClick={() => navigate("/storage")}
-                aria-label="Back to Storage"
-              >
-                <ArrowLeft className="h-4 w-4" />
-              </Button>
-            </div>
-          </div>
-          <CardDescription>
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Shared With Me</h1>
+          <p className="text-muted-foreground mt-1">
             View and access files that have been shared with you
-          </CardDescription>
-        </CardHeader>
+          </p>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleRefresh}
+          disabled={isLoading}
+        >
+          <RefreshCw
+            className={`h-4 w-4 mr-2 ${isLoading ? "animate-spin" : ""}`}
+          />
+          Refresh
+        </Button>
+      </div>
 
-        <CardContent className="space-y-6">
+      <Card>
+        <CardContent className="pt-6 space-y-6">
           {isCheckingKeys ? (
             <div className="flex justify-center py-4">
               <p className="text-sm text-muted-foreground">

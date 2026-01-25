@@ -24,7 +24,7 @@ import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
 import { toast } from "sonner";
 import { Textarea } from "../components/ui/textarea";
-import { ArrowLeft, AlertCircle } from "lucide-react";
+import { AlertCircle } from "lucide-react";
 import { Checkbox } from "../components/ui/checkbox";
 import { DeviceManagement } from "../components/key-management/DeviceManagement";
 import {
@@ -438,25 +438,24 @@ export const KeyManagementPage: React.FC = () => {
         </DialogContent>
       </Dialog>
 
-      <div className="flex justify-center items-center min-h-screen bg-background py-8">
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Key Management</h1>
+          <p className="text-muted-foreground mt-1">
+            {viewMode === "recover"
+              ? "Recover your encryption key using your mnemonic phrase"
+              : "Create a new encryption key for securing your files"}
+          </p>
+        </div>
+
         <div className="flex gap-5">
           <Card className="sm:max-w-lg w-full h-fit">
             <CardHeader>
-              <div className="flex items-center justify-between mb-2">
-                <CardTitle>
-                  {viewMode === "recover"
-                    ? "Recover Your Key"
-                    : "Create New Key"}
-                </CardTitle>
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={() => navigate("/storage")}
-                  aria-label="Back to Storage"
-                >
-                  <ArrowLeft className="h-4 w-4" />
-                </Button>
-              </div>
+              <CardTitle>
+                {viewMode === "recover"
+                  ? "Recover Your Key"
+                  : "Create New Key"}
+              </CardTitle>
               <CardDescription>
                 {viewMode === "recover"
                   ? "Enter your mnemonic phrase to load your encryption key."

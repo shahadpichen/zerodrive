@@ -19,6 +19,7 @@ import SharedWithMePage from "./pages/shared-with-me";
 import KeyTestPage from "./pages/KeyTestPage";
 import { isAuthenticated as checkAuth } from "./utils/authService";
 import { useRsaKeyRecovery } from "./hooks/useRsaKeyRecovery";
+import { AuthenticatedLayout } from "./components/layout/authenticated-layout";
 
 // Polyfill global Buffer for libraries that expect it (e.g., bip39)
 window.Buffer = Buffer as any;
@@ -71,7 +72,9 @@ function App() {
           path="/storage"
           element={
             <ProtectedRoute>
-              <PrivateStorage />
+              <AuthenticatedLayout>
+                <PrivateStorage />
+              </AuthenticatedLayout>
             </ProtectedRoute>
           }
         />
@@ -79,7 +82,9 @@ function App() {
           path="/key-management"
           element={
             <ProtectedRoute>
-              <KeyManagementPage />
+              <AuthenticatedLayout>
+                <KeyManagementPage />
+              </AuthenticatedLayout>
             </ProtectedRoute>
           }
         />
@@ -87,7 +92,9 @@ function App() {
           path="/share"
           element={
             <ProtectedRoute>
-              <ShareFilesPage />
+              <AuthenticatedLayout>
+                <ShareFilesPage />
+              </AuthenticatedLayout>
             </ProtectedRoute>
           }
         />
@@ -95,7 +102,9 @@ function App() {
           path="/shared-with-me"
           element={
             <ProtectedRoute>
-              <SharedWithMePage />
+              <AuthenticatedLayout>
+                <SharedWithMePage />
+              </AuthenticatedLayout>
             </ProtectedRoute>
           }
         />
@@ -103,7 +112,9 @@ function App() {
           path="/key-test"
           element={
             <ProtectedRoute>
-              <KeyTestPage />
+              <AuthenticatedLayout>
+                <KeyTestPage />
+              </AuthenticatedLayout>
             </ProtectedRoute>
           }
         />

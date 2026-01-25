@@ -3,9 +3,9 @@ import { useNavigate } from "react-router-dom";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
-import { ArrowLeft } from "lucide-react";
 import { gapi } from "gapi-script";
 import { toast } from "sonner";
+import { useApp } from "../contexts/app-context";
 import {
   Card,
   CardContent,
@@ -36,6 +36,7 @@ import { recoverRsaKeysIfNeeded } from "../utils/rsaKeyRecovery";
 
 const ShareFilesPage: React.FC = () => {
   const navigate = useNavigate();
+  const { creditBalance, isLoadingCredits, refreshCredits } = useApp();
 
   const [file, setFile] = useState<File | null>(null);
   const [recipientEmail, setRecipientEmail] = useState<string>("");
@@ -54,8 +55,6 @@ const ShareFilesPage: React.FC = () => {
   const [isVerifyingMnemonic, setIsVerifyingMnemonic] =
     useState<boolean>(false);
   const [mnemonicVerified, setMnemonicVerified] = useState<boolean>(false);
-  const [creditBalance, setCreditBalance] = useState<number | null>(null);
-  const [isLoadingCredits, setIsLoadingCredits] = useState<boolean>(false);
 
   // Rollback function to clean up keys if backup fails
   const rollbackKeyGeneration = async (email: string) => {
@@ -168,27 +167,7 @@ const ShareFilesPage: React.FC = () => {
     }
   }, [hasGeneratedKeys]);
 
-  // Fetch credit balance
-  useEffect(() => {
-    const fetchCreditBalance = async () => {
-      if (!senderEmail) return;
-
-      setIsLoadingCredits(true);
-      try {
-        const hashedEmail = await hashEmail(senderEmail);
-        const balanceData = await apiClient.credits.getBalance(hashedEmail);
-        setCreditBalance(balanceData.balance);
-      } catch (error) {
-        console.error("Error fetching credit balance:", error);
-        // Don't show error toast - just log it
-        // User might not have keys generated yet
-      } finally {
-        setIsLoadingCredits(false);
-      }
-    };
-
-    fetchCreditBalance();
-  }, [senderEmail, hasGeneratedKeys]); // Re-fetch when keys are generated
+  // Credit balance is now managed by AppContext - no need to fetch locally
 
   // Verify mnemonic function - only for decryption, NOT stored in memory
   const verifyMnemonic = async () => {
@@ -395,13 +374,7 @@ const ShareFilesPage: React.FC = () => {
       );
 
       // Refresh credit balance after successful share
-      try {
-        const hashedEmail = await hashEmail(senderEmail);
-        const balanceData = await apiClient.credits.getBalance(hashedEmail);
-        setCreditBalance(balanceData.balance);
-      } catch (error) {
-        console.error("Error refreshing credit balance:", error);
-      }
+      await refreshCredits();
 
       // Keep mnemonic available for multiple shares in the same session
       // User can close/refresh page to clear it
@@ -486,20 +459,15 @@ const ShareFilesPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-[80vh] flex justify-center items-center bg-background py-8 px-4">
-      <div className="max-w-6xl mx-auto">
-        {/* Header */}
-        <div className="flex items-center justify-between mb-6">
-          <Button
-            variant="outline"
-            size="icon"
-            onClick={() => navigate("/storage")}
-            aria-label="Back to Storage"
-          >
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
-        </div>
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight">Share Files</h1>
+        <p className="text-muted-foreground mt-1">
+          Securely share your encrypted files with other ZeroDrive users
+        </p>
+      </div>
 
+      <div className="max-w-6xl">
         {/* Two-Column Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Left Card: Main File Sharing */}

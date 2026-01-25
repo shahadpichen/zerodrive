@@ -215,8 +215,10 @@ const fetchAndStoreFileMetadata = async () => {
         fileContent = await decryptMetadata(encryptedBlob);
       } catch (e) {
         logger.error("Failed to decrypt db-list.json content", e);
-        toast.error("Failed to decrypt metadata file. Please ensure you have the correct encryption key.");
-        return; // Stop processing if decryption fails
+        // Throw a specific error type so the calling code can handle it
+        const decryptError = new Error("DECRYPTION_FAILED");
+        decryptError.name = "DecryptionError";
+        throw decryptError;
       }
 
       // Clear existing records before adding new ones
