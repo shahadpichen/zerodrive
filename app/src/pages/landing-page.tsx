@@ -117,9 +117,7 @@ function LandingPage({ onAuthChange }: LandingPageProps) {
           securely.
         </p>
         <div className="md:w-[85%] mx-auto">
-          <h3 className="text-lg font-medium mb-3 text-center">
-            How Credits Work:
-          </h3>
+          <h3 className="text-base font-medium mb-3">How Credits Work:</h3>
           <ul className="list-disc pl-6 space-y-2 font-light text-base">
             <li>
               <strong>File Sharing:</strong> 1 credit per file share
