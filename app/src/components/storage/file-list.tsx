@@ -9,7 +9,7 @@ import {
 import { gapi } from "gapi-script";
 
 import { decryptFile } from "../../utils/decryptFile";
-import { Trash2 } from "lucide-react";
+import { Trash2, Eye } from "lucide-react";
 import {
   MimeTypeCategory,
   iconMap,
@@ -19,6 +19,8 @@ import { getStoredKey } from "../../utils/cryptoUtils";
 import { toast } from "sonner";
 import { ConfirmationDialog } from "./confirmation-dialog";
 import { Button } from "../ui/button";
+import { FilePreviewDialog } from "./file-preview-dialog";
+import { isPreviewable } from "../../utils/filePreview";
 
 interface FileListProps {
   view?: "compact" | "recent" | "full";
@@ -53,6 +55,11 @@ export const FileList: React.FC<FileListProps> = ({
   const [hasEncryptionKey, setHasEncryptionKey] = useState<boolean>(false);
   const [isOn, setIsOn] = useState(true);
   const [refreshFileListKey, setRefreshFileListKey] = useState(0);
+  const [previewFile, setPreviewFile] = useState<{
+    id: string;
+    name: string;
+    mimeType: string;
+  } | null>(null);
 
   useEffect(() => {
     const checkKey = async () => {
@@ -332,6 +339,18 @@ export const FileList: React.FC<FileListProps> = ({
     setShowDeleteConfirm(true);
   };
 
+  const handlePreview = (
+    fileId: string,
+    fileName: string,
+    mimeType: string,
+    e: React.MouseEvent
+  ) => {
+    e.stopPropagation();
+    if (isPreviewable(mimeType)) {
+      setPreviewFile({ id: fileId, name: fileName, mimeType });
+    }
+  };
+
   if (view === "compact" || view === "recent") {
     return (
       <div className="p-1">
@@ -341,44 +360,72 @@ export const FileList: React.FC<FileListProps> = ({
           </p>
         ) : filteredFiles.length > 0 ? (
           <div className="flex flex-wrap gap-2">
-            {filteredFiles.map((file) => (
-              <Button
-                key={file.id}
-                onClick={() => downloadAndDecryptFile(file.id, file.name)}
-                title={`Download ${file.name}`}
-                className="w-fit group pr-3"
-              >
-                <div className="flex items-center gap-1.5 overflow-hidden flex-grow min-w-0 max-w-full">
-                  <span className="truncate flex-grow">{file.name}</span>
-                </div>
-                <div className="flex items-center gap-1.5 flex-shrink-0 pl-2">
-                  {downloadingFileId === file.id ? (
-                    <span className="text-xs animate-pulse">
-                      Downloading...
-                    </span>
-                  ) : (
-                    <>
-                      {view === "recent" ? (
-                        <span className="text-xs text-muted-foreground">
-                          {new Date(file.uploadedDate).toLocaleDateString()}
-                        </span>
-                      ) : (
-                        <button
-                          onClick={(e) =>
-                            deleteFileHandler(file.id, file.name, e)
-                          }
-                          className="text-red-500 hover:text-destructive focus:outline-none p-0.5 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity"
-                          aria-label="Delete file"
-                          title="Delete file"
-                        >
-                          <Trash2 size={12} strokeWidth={1.5} />
-                        </button>
-                      )}
-                    </>
-                  )}
-                </div>
-              </Button>
-            ))}
+            {filteredFiles.map((file) => {
+              const canPreview = isPreviewable(file.mimeType);
+              return (
+                <Button
+                  key={file.id}
+                  onClick={() =>
+                    canPreview
+                      ? setPreviewFile({
+                          id: file.id,
+                          name: file.name,
+                          mimeType: file.mimeType,
+                        })
+                      : downloadAndDecryptFile(file.id, file.name)
+                  }
+                  title={canPreview ? `Preview ${file.name}` : `Download ${file.name}`}
+                  className="w-fit group pr-3"
+                >
+                  <div className="flex items-center gap-1.5 overflow-hidden flex-grow min-w-0 max-w-full">
+                    <span className="truncate flex-grow">{file.name}</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 flex-shrink-0 pl-2">
+                    {downloadingFileId === file.id ? (
+                      <span className="text-xs animate-pulse">
+                        Downloading...
+                      </span>
+                    ) : (
+                      <>
+                        {canPreview && (
+                          <button
+                            onClick={(e) =>
+                              handlePreview(
+                                file.id,
+                                file.name,
+                                file.mimeType,
+                                e
+                              )
+                            }
+                            className="text-primary hover:text-primary/80 focus:outline-none p-0.5 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity"
+                            aria-label="Preview file"
+                            title="Preview file"
+                          >
+                            <Eye size={14} strokeWidth={1.5} />
+                          </button>
+                        )}
+                        {view === "recent" ? (
+                          <span className="text-xs text-muted-foreground">
+                            {new Date(file.uploadedDate).toLocaleDateString()}
+                          </span>
+                        ) : (
+                          <button
+                            onClick={(e) =>
+                              deleteFileHandler(file.id, file.name, e)
+                            }
+                            className="text-red-500 hover:text-destructive focus:outline-none p-0.5 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity"
+                            aria-label="Delete file"
+                            title="Delete file"
+                          >
+                            <Trash2 size={12} strokeWidth={1.5} />
+                          </button>
+                        )}
+                      </>
+                    )}
+                  </div>
+                </Button>
+              );
+            })}
           </div>
         ) : (
           <p className="text-left text-xs text-muted-foreground py-4">
@@ -394,6 +441,20 @@ export const FileList: React.FC<FileListProps> = ({
           onConfirm={performDelete}
           confirmText="Delete"
         />
+
+        {previewFile && (
+          <FilePreviewDialog
+            fileId={previewFile.id}
+            fileName={previewFile.name}
+            mimeType={previewFile.mimeType}
+            open={!!previewFile}
+            onOpenChange={(open) => !open && setPreviewFile(null)}
+            onDownload={() => {
+              downloadAndDecryptFile(previewFile.id, previewFile.name);
+              setPreviewFile(null);
+            }}
+          />
+        )}
       </div>
     );
   }
