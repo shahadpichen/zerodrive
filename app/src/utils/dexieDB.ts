@@ -11,13 +11,39 @@ export interface FileMeta {
   mimeType: string;
   userEmail: string;
   uploadedDate: Date;
+  folderId: string | null; // null = root level
+}
+
+export interface FolderMeta {
+  id: string; // Google Drive folder ID
+  name: string; // Folder name
+  parentId: string | null; // null = root level (for nested folders)
+  userEmail: string; // Owner
+  createdDate: Date; // Creation timestamp
 }
 
 const db = new Dexie("ZeroDriveDB");
 
+// Version 1: Original schema
 db.version(1).stores({
   files: "id, name, mimeType, userEmail, uploadedDate",
 });
+
+// Version 2: Add folder support
+db.version(2)
+  .stores({
+    files: "id, name, mimeType, userEmail, uploadedDate, folderId",
+    folders: "id, name, parentId, userEmail, createdDate",
+  })
+  .upgrade((tx) => {
+    // Add folderId to all existing files (set to null = root)
+    return tx
+      .table("files")
+      .toCollection()
+      .modify((file) => {
+        file.folderId = null; // Existing files go to root
+      });
+  });
 
 const addFile = async (file: FileMeta) => {
   return await db.table<FileMeta>("files").add(file);
@@ -47,11 +73,63 @@ const clearUserFilesFromDB = async (userEmail: string): Promise<number> => {
   return await db.table("files").where("userEmail").equals(userEmail).delete();
 };
 
-const sendToGoogleDrive = async (filesToSync: FileMeta[]) => {
+// Folder CRUD operations
+const addFolder = async (folder: FolderMeta): Promise<string> => {
+  return await db.table<FolderMeta>("folders").add(folder);
+};
+
+const getFoldersForUser = async (userEmail: string): Promise<FolderMeta[]> => {
+  return await db
+    .table<FolderMeta>("folders")
+    .where("userEmail")
+    .equals(userEmail)
+    .toArray();
+};
+
+const getFilesInFolder = async (
+  userEmail: string,
+  folderId: string | null
+): Promise<FileMeta[]> => {
+  // Get all files for user, then filter by folderId
+  // This avoids issues with null values in compound indexes
+  const allUserFiles = await db
+    .table<FileMeta>("files")
+    .where("userEmail")
+    .equals(userEmail)
+    .toArray();
+
+  return allUserFiles.filter((file) => {
+    // Handle both null and undefined as root folder
+    const fileFolderId = file.folderId === undefined ? null : file.folderId;
+    const targetFolderId = folderId === undefined ? null : folderId;
+    return fileFolderId === targetFolderId;
+  });
+};
+
+const deleteFolder = async (folderId: string): Promise<number> => {
+  return await db.table("folders").where("id").equals(folderId).delete();
+};
+
+const moveFileToFolder = async (
+  fileId: string,
+  newFolderId: string | null
+): Promise<void> => {
+  await db
+    .table("files")
+    .where("id")
+    .equals(fileId)
+    .modify({ folderId: newFolderId });
+};
+
+const sendToGoogleDrive = async (
+  filesToSync: FileMeta[],
+  foldersToSync: FolderMeta[] = []
+) => {
   let driveUpdateToastId: string | number | undefined;
   logger.log(
     "[Sync] Starting metadata sync with Google Drive for:",
-    filesToSync
+    filesToSync,
+    foldersToSync
   );
   try {
     driveUpdateToastId = toast.loading("Syncing metadata with Google Drive...");
@@ -62,9 +140,14 @@ const sendToGoogleDrive = async (filesToSync: FileMeta[]) => {
       throw new Error("User not authenticated for Google Drive update.");
     }
 
-    // Encrypt metadata before uploading
+    // Encrypt metadata before uploading (v2 format)
     logger.log("[Sync] Encrypting metadata...");
-    const encryptedBlob = await encryptMetadata({ files: filesToSync });
+    const metadataContent = {
+      version: 2,
+      files: filesToSync,
+      folders: foldersToSync,
+    };
+    const encryptedBlob = await encryptMetadata(metadataContent);
 
     const metadata = {
       name: "db-list.json",
@@ -170,7 +253,9 @@ const sendToGoogleDrive = async (filesToSync: FileMeta[]) => {
   }
 };
 
-const fetchAndStoreFileMetadata = async () => {
+const fetchAndStoreFileMetadata = async (retryCount: number = 0): Promise<void> => {
+  const MAX_RETRIES = 1; // Only retry once to prevent infinite loops
+
   try {
     await initializeGapi();
 
@@ -221,16 +306,40 @@ const fetchAndStoreFileMetadata = async () => {
         throw decryptError;
       }
 
+      // Handle both old (v1) and new (v2) formats
+      let files: FileMeta[] = [];
+      let folders: FolderMeta[] = [];
+
+      if (fileContent.version === 2) {
+        // New format with folders
+        logger.log("[Sync] Detected v2 metadata format");
+        files = fileContent.files || [];
+        folders = fileContent.folders || [];
+      } else {
+        // Old format (v1) - backward compatibility
+        logger.log("[Sync] Detected v1 metadata format, applying migration");
+        if (fileContent.files && Array.isArray(fileContent.files)) {
+          files = fileContent.files;
+        } else if (Array.isArray(fileContent)) {
+          // Very old format - array directly
+          files = fileContent;
+        }
+        folders = [];
+
+        // Add folderId: null to old files
+        files = files.map((f) => ({
+          ...f,
+          folderId: f.folderId !== undefined ? f.folderId : null,
+        }));
+      }
+
       // Clear existing records before adding new ones
       await db.table("files").clear();
+      await db.table("folders").clear();
 
-      if (
-        fileContent &&
-        fileContent.files &&
-        Array.isArray(fileContent.files)
-      ) {
+      if (files && Array.isArray(files)) {
         await Promise.all(
-          fileContent.files.map(async (file: any) => {
+          files.map(async (file: any) => {
             // Add type any temporarily or define a better interface
             // Add checks for essential properties
             if (
@@ -254,6 +363,7 @@ const fetchAndStoreFileMetadata = async () => {
                 mimeType: file.mimeType,
                 userEmail: file.userEmail,
                 uploadedDate: new Date(file.uploadedDate),
+                folderId: file.folderId !== undefined ? file.folderId : null,
               });
             } catch (error) {
               logger.error("Error adding file to IndexedDB:", error, file);
@@ -261,9 +371,42 @@ const fetchAndStoreFileMetadata = async () => {
           })
         );
         logger.log("Files stored successfully in IndexedDB.");
-      } else {
+      }
+
+      if (folders && Array.isArray(folders)) {
+        await Promise.all(
+          folders.map(async (folder: any) => {
+            if (
+              !folder ||
+              !folder.id ||
+              !folder.name ||
+              !folder.userEmail ||
+              !folder.createdDate
+            ) {
+              logger.warn(
+                "Skipping invalid folder entry from db-list.json:",
+                folder
+              );
+              return;
+            }
+            try {
+              await addFolder({
+                id: folder.id,
+                name: folder.name,
+                parentId: folder.parentId !== undefined ? folder.parentId : null,
+                userEmail: folder.userEmail,
+                createdDate: new Date(folder.createdDate),
+              });
+            } catch (error) {
+              logger.error("Error adding folder to IndexedDB:", error, folder);
+            }
+          })
+        );
+        logger.log("Folders stored successfully in IndexedDB.");
+      }
+
+      if ((!files || files.length === 0) && (!folders || folders.length === 0)) {
         logger.log("db-list.json file content is empty or invalid.");
-        // Even if the file is empty, the local DB is cleared, which is correct.
       }
     } else {
       logger.log("No db-list.json file found in Google Drive.");
@@ -273,10 +416,17 @@ const fetchAndStoreFileMetadata = async () => {
     }
   } catch (error: any) {
     if (error?.status === 401) {
+      if (retryCount >= MAX_RETRIES) {
+        logger.error("Max retries reached for token refresh. Redirecting to login.");
+        window.location.href = "/";
+        return;
+      }
+
       try {
+        logger.warn(`Token expired (retry ${retryCount + 1}/${MAX_RETRIES}). Refreshing...`);
         await refreshGapiToken();
-        // Retry the request after token refresh
-        await fetchAndStoreFileMetadata(); // Recursive call after token refresh
+        // Retry the request after token refresh with incremented retry count
+        await fetchAndStoreFileMetadata(retryCount + 1);
       } catch (refreshError) {
         logger.error("Error after token refresh:", refreshError);
         window.location.href = "/";
@@ -297,4 +447,10 @@ export {
   fetchAndStoreFileMetadata,
   deleteFileFromDB,
   clearUserFilesFromDB,
+  // Folder operations
+  addFolder,
+  getFoldersForUser,
+  getFilesInFolder,
+  deleteFolder,
+  moveFileToFolder,
 };

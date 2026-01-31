@@ -7,6 +7,7 @@ import {
   getAllFilesForUser,
   sendToGoogleDrive, // The function that updates db-list.json
   clearUserFilesFromDB, // Function to clear DB for a user
+  getFoldersForUser, // Get folders for sync
 } from "./dexieDB";
 import { encryptFile } from "./encryptFile";
 import { getStoredKey } from "./cryptoUtils";
@@ -20,11 +21,13 @@ import { trackFileAddedToDrive } from "./analyticsTracker";
  * and triggers a sync of the full metadata list back to Google Drive.
  * @param file The file object to upload.
  * @param userEmail The email of the logged-in user.
+ * @param folderId Optional folder ID to upload to (null = root).
  * @returns The FileMeta object if successful, null otherwise.
  */
 export const uploadAndSyncFile = async (
   file: File,
-  userEmail: string
+  userEmail: string,
+  folderId?: string | null
 ): Promise<FileMeta | null> => {
   const uploadToastId = toast.loading(`Preparing ${file.name}...`);
 
@@ -59,6 +62,7 @@ export const uploadAndSyncFile = async (
     const metadata = {
       name: file.name, // Drive uses this name
       mimeType: "application/octet-stream", // Store as generic binary
+      parents: folderId ? [folderId] : undefined, // Upload to folder if specified
       // Optional: Use original mimeType if needed elsewhere, but store generically
       // properties: { originalMimeType: file.type }
     };
@@ -101,14 +105,16 @@ export const uploadAndSyncFile = async (
       mimeType: file.type, // Store original mimeType
       userEmail: userEmail,
       uploadedDate: new Date(),
+      folderId: folderId || null, // Store folder (null = root)
     };
     await addFile(newFileMeta);
 
     // 8. Get updated full list from IndexedDB
     const updatedList = await getAllFilesForUser(userEmail);
+    const updatedFolders = await getFoldersForUser(userEmail);
 
     // 9. Sync updated list to db-list.json on Google Drive
-    await sendToGoogleDrive(updatedList); // This handles its own toasts
+    await sendToGoogleDrive(updatedList, updatedFolders); // This handles its own toasts
 
     toast.success(`Successfully uploaded and synced ${file.name}`, {
       id: uploadToastId,
@@ -188,9 +194,10 @@ export const deleteAndSyncFile = async (
 
     // 4. Get updated full list from IndexedDB
     const updatedList = await getAllFilesForUser(userEmail);
+    const updatedFolders = await getFoldersForUser(userEmail);
 
     // 5. Sync updated list to db-list.json on Google Drive
-    await sendToGoogleDrive(updatedList); // This handles its own success/error toast for sync
+    await sendToGoogleDrive(updatedList, updatedFolders); // This handles its own success/error toast for sync
 
     toast.success(`Successfully processed deletion for ${fileName}.`, {
       id: deleteToastId,
@@ -280,7 +287,8 @@ export const deleteAllAndSyncFiles = async (
     await clearUserFilesFromDB(userEmail);
 
     // 5. Sync the (now empty) list to db-list.json on Google Drive
-    await sendToGoogleDrive([]); // Send empty array
+    const updatedFolders = await getFoldersForUser(userEmail);
+    await sendToGoogleDrive([], updatedFolders); // Send empty file array
 
     toast.success(
       `Successfully deleted all ${fileIds.length} files and synced metadata.`,

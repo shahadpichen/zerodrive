@@ -1,10 +1,13 @@
 import React, { useState, useEffect } from "react";
 import {
   FileMeta,
+  FolderMeta,
   getAllFilesForUser,
   addFile,
   deleteFileFromDB,
   sendToGoogleDrive,
+  getFilesInFolder,
+  getFoldersForUser,
 } from "../../utils/dexieDB";
 import { gapi } from "gapi-script";
 
@@ -21,6 +24,8 @@ import { ConfirmationDialog } from "./confirmation-dialog";
 import { Button } from "../ui/button";
 import { FilePreviewDialog } from "./file-preview-dialog";
 import { isPreviewable } from "../../utils/filePreview";
+import { useFolderContext } from "./folder-context";
+import { FolderItem } from "./folder-item";
 
 interface FileListProps {
   view?: "compact" | "recent" | "full";
@@ -28,13 +33,24 @@ interface FileListProps {
   userEmail?: string;
 }
 
+// Helper hook to safely get folder context
+function useSafeFolderContext() {
+  try {
+    return useFolderContext();
+  } catch {
+    return { currentFolderId: null };
+  }
+}
+
 export const FileList: React.FC<FileListProps> = ({
   view = "full",
   refreshKey,
   userEmail: userEmailProp,
 }) => {
+  const { currentFolderId } = useSafeFolderContext();
   const [allUserFiles, setAllUserFiles] = useState<FileMeta[]>([]);
   const [filteredFiles, setFilteredFiles] = useState<FileMeta[]>([]);
+  const [folders, setFolders] = useState<FolderMeta[]>([]);
   const userEmail = userEmailProp || null;
   const [isLoadingFiles, setIsLoadingFiles] = useState<boolean>(true);
   const [filter, setFilter] = useState<MimeTypeCategory | "All Files">(
@@ -77,16 +93,34 @@ export const FileList: React.FC<FileListProps> = ({
         );
         setAllUserFiles([]);
         setFilteredFiles([]);
+        setFolders([]);
         setIsLoadingFiles(false);
         return;
       }
 
       console.log(
-        `[FileList - ${view}] Fetching files for ${userEmail}, Key: ${refreshKey}`
+        `[FileList - ${view}] Fetching files for ${userEmail}, Key: ${refreshKey}, FolderId: ${currentFolderId}`
       );
       setIsLoadingFiles(true);
       try {
-        const userFiles = await getAllFilesForUser(userEmail);
+        let userFiles: FileMeta[];
+
+        // Get files based on view and folder
+        if (view === "full") {
+          // In full view, filter by current folder
+          userFiles = await getFilesInFolder(userEmail, currentFolderId);
+
+          // Also get folders in current directory
+          const allFolders = await getFoldersForUser(userEmail);
+          const currentFolders = allFolders.filter(
+            (f) => (f.parentId || null) === currentFolderId
+          );
+          setFolders(currentFolders);
+        } else {
+          // For compact/recent views, get all files (no folder filtering)
+          userFiles = await getAllFilesForUser(userEmail);
+        }
+
         console.log(
           `[FileList - ${view}] Found ${userFiles.length} files in DB for ${userEmail}.`
         );
@@ -115,13 +149,14 @@ export const FileList: React.FC<FileListProps> = ({
         toast.error("Failed to load files");
         setAllUserFiles([]);
         setFilteredFiles([]);
+        setFolders([]);
       } finally {
         setIsLoadingFiles(false);
       }
     };
 
     fetchFiles();
-  }, [userEmail, view, refreshKey]);
+  }, [userEmail, view, refreshKey, currentFolderId, refreshFileListKey]);
 
   useEffect(() => {
     console.log(
@@ -303,11 +338,12 @@ export const FileList: React.FC<FileListProps> = ({
       toast.info(`Removed ${fileName} locally.`, { id: deleteToastId });
 
       const updatedFiles = await getAllFilesForUser(userEmail);
+      const updatedFolders = await getFoldersForUser(userEmail);
       setAllUserFiles(updatedFiles);
       setFilteredFiles(updatedFiles);
 
       console.log("[FileList] Deletion complete, syncing metadata...");
-      await sendToGoogleDrive(updatedFiles);
+      await sendToGoogleDrive(updatedFiles, updatedFolders);
 
       toast.success(`Deleted ${fileName} and synced metadata.`, {
         id: deleteToastId,
@@ -358,9 +394,26 @@ export const FileList: React.FC<FileListProps> = ({
           <p className="text-center text-xs text-muted-foreground py-4">
             Loading...
           </p>
-        ) : filteredFiles.length > 0 ? (
-          <div className="flex flex-wrap gap-2">
-            {filteredFiles.map((file) => {
+        ) : (filteredFiles.length > 0 || folders.length > 0) ? (
+          <div className="space-y-3">
+            {/* Folders first (only in full view) */}
+            {view === "full" && folders.length > 0 && (
+              <div className="space-y-2">
+                {folders.map((folder) => (
+                  <FolderItem
+                    key={folder.id}
+                    folder={folder}
+                    userEmail={userEmail!}
+                    onDeleted={() => setRefreshFileListKey(prev => prev + 1)}
+                  />
+                ))}
+              </div>
+            )}
+
+            {/* Files */}
+            {filteredFiles.length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {filteredFiles.map((file) => {
               const canPreview = isPreviewable(file.mimeType);
               return (
                 <Button
@@ -426,10 +479,12 @@ export const FileList: React.FC<FileListProps> = ({
                 </Button>
               );
             })}
+              </div>
+            )}
           </div>
         ) : (
           <p className="text-left text-xs text-muted-foreground py-4">
-            No recent uploads
+            {view === "recent" ? "No recent uploads" : "No files or folders"}
           </p>
         )}
 
@@ -458,4 +513,127 @@ export const FileList: React.FC<FileListProps> = ({
       </div>
     );
   }
+
+  // Full view - show folders and files in a list
+  return (
+    <div className="space-y-4">
+      {isLoadingFiles ? (
+        <p className="text-center text-muted-foreground py-8">Loading...</p>
+      ) : (
+        <>
+          {/* Folders */}
+          {folders.length > 0 && (
+            <div className="space-y-2">
+              {folders.map((folder) => (
+                <FolderItem
+                  key={folder.id}
+                  folder={folder}
+                  userEmail={userEmail!}
+                  onDeleted={() => setRefreshFileListKey((prev) => prev + 1)}
+                />
+              ))}
+            </div>
+          )}
+
+          {/* Files */}
+          {filteredFiles.length > 0 && (
+            <div className="space-y-2">
+              {filteredFiles.map((file) => {
+                const canPreview = isPreviewable(file.mimeType);
+                return (
+                  <div
+                    key={file.id}
+                    className="flex items-center gap-3 p-3 rounded-lg border hover:bg-accent transition-colors group"
+                  >
+                    {/* File name */}
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium truncate">{file.name}</p>
+                      <p className="text-sm text-muted-foreground">
+                        {new Date(file.uploadedDate).toLocaleDateString()}
+                      </p>
+                    </div>
+
+                    {/* Actions */}
+                    <div className="flex items-center gap-2">
+                      {canPreview && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() =>
+                            setPreviewFile({
+                              id: file.id,
+                              name: file.name,
+                              mimeType: file.mimeType,
+                            })
+                          }
+                          className="opacity-0 group-hover:opacity-100 transition-opacity"
+                          title="Preview file"
+                        >
+                          <Eye className="h-4 w-4" />
+                        </Button>
+                      )}
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => downloadAndDecryptFile(file.id, file.name)}
+                        disabled={downloadingFileId === file.id}
+                        title="Download file"
+                      >
+                        {downloadingFileId === file.id ? (
+                          <span className="text-xs">...</span>
+                        ) : (
+                          <span>📥</span>
+                        )}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={(e) => deleteFileHandler(file.id, file.name, e)}
+                        className="opacity-0 group-hover:opacity-100 transition-opacity text-destructive hover:text-destructive"
+                        title="Delete file"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Empty state */}
+          {folders.length === 0 && filteredFiles.length === 0 && (
+            <p className="text-center text-muted-foreground py-8">
+              No files or folders. Upload a file or create a folder to get started.
+            </p>
+          )}
+        </>
+      )}
+
+      {/* Delete Confirmation Dialog */}
+      <ConfirmationDialog
+        open={showDeleteConfirm}
+        onOpenChange={setShowDeleteConfirm}
+        title={`Delete "${fileToDelete?.name || "this file"}"?`}
+        description="Are you sure you want to delete this file? This action cannot be undone."
+        onConfirm={performDelete}
+        confirmText="Delete"
+      />
+
+      {/* Preview Dialog */}
+      {previewFile && (
+        <FilePreviewDialog
+          fileId={previewFile.id}
+          fileName={previewFile.name}
+          mimeType={previewFile.mimeType}
+          open={!!previewFile}
+          onOpenChange={(open) => !open && setPreviewFile(null)}
+          onDownload={() => {
+            downloadAndDecryptFile(previewFile.id, previewFile.name);
+            setPreviewFile(null);
+          }}
+        />
+      )}
+    </div>
+  );
 };
