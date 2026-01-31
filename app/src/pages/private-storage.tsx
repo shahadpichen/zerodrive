@@ -15,12 +15,16 @@ import {
 } from "../utils/fileOperations";
 import { ConfirmationDialog } from "../components/storage/confirmation-dialog";
 import { Separator } from "../components/ui/separator";
-import { RefreshCw } from "lucide-react";
+import { RefreshCw, FolderPlus } from "lucide-react";
+import { FolderProvider, useFolderContext } from "../components/storage/folder-context";
+import { FolderBreadcrumb } from "../components/storage/folder-breadcrumb";
+import { CreateFolderDialog } from "../components/storage/create-folder-dialog";
 
 // Imports for sharing key functionality (kept for potential future use)
 import { recoverRsaKeysIfNeeded } from "../utils/rsaKeyRecovery";
 
-function PrivateStorage() {
+function PrivateStorageContent() {
+  const { currentFolderId } = useFolderContext();
   const { userEmail, setUserInfo, refreshAll, setDecryptionError } = useApp();
   const [uploading, setUploading] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -29,6 +33,7 @@ function PrivateStorage() {
   const [userHasFiles, setUserHasFiles] = useState<boolean>(false);
   const [isLoadingUserFiles, setIsLoadingUserFiles] = useState<boolean>(true);
   const [isRefreshingFiles, setIsRefreshingFiles] = useState<boolean>(false);
+  const [showCreateFolder, setShowCreateFolder] = useState(false);
 
   useEffect(() => {
     const loadInitialData = async () => {
@@ -261,7 +266,7 @@ function PrivateStorage() {
     let successCount = 0;
 
     for (const file of filesToUpload) {
-      const result = await uploadAndSyncFile(file, userEmail);
+      const result = await uploadAndSyncFile(file, userEmail, currentFolderId);
       if (result) successCount++;
     }
 
@@ -324,29 +329,57 @@ function PrivateStorage() {
                   : "Loading your files..."}
             </p>
           </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleRefreshFiles}
-            disabled={isRefreshingFiles || isLoadingUserFiles}
-          >
-            <RefreshCw
-              className={`h-4 w-4 mr-2 ${
-                isRefreshingFiles ? "animate-spin" : ""
-              }`}
-            />
-            Refresh
-          </Button>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowCreateFolder(true)}
+              disabled={isLoadingUserFiles}
+            >
+              <FolderPlus className="h-4 w-4 mr-2" />
+              New Folder
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleRefreshFiles}
+              disabled={isRefreshingFiles || isLoadingUserFiles}
+            >
+              <RefreshCw
+                className={`h-4 w-4 mr-2 ${
+                  isRefreshingFiles ? "animate-spin" : ""
+                }`}
+              />
+              Refresh
+            </Button>
+          </div>
         </div>
 
         <Separator />
 
+        {/* Breadcrumb Navigation */}
+        <FolderBreadcrumb />
+
         {/* File List */}
         <FileList
-          view="compact"
+          view="full"
           refreshKey={refreshFileListKey}
           userEmail={userEmail}
         />
+
+        {/* Create Folder Dialog */}
+        {userEmail && (
+          <CreateFolderDialog
+            open={showCreateFolder}
+            onOpenChange={setShowCreateFolder}
+            parentFolderId={currentFolderId}
+            userEmail={userEmail}
+            onSuccess={() => {
+              setRefreshFileListKey((prev) => prev + 1);
+              setUserHasFiles(true);
+            }}
+          />
+        )}
 
         {/* Delete Confirmation Dialog */}
         <ConfirmationDialog
@@ -359,6 +392,14 @@ function PrivateStorage() {
         />
       </div>
     </>
+  );
+}
+
+function PrivateStorage() {
+  return (
+    <FolderProvider>
+      <PrivateStorageContent />
+    </FolderProvider>
   );
 }
 
