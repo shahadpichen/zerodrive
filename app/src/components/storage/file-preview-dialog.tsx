@@ -11,9 +11,17 @@ import { Button } from "../ui/button";
 import {
   decryptFileForPreview,
   getPreviewType,
+  isPreviewable,
   readTextFromBlob,
 } from "../../utils/filePreview";
-import { Loader2, Download, AlertCircle, ChevronLeft, ChevronRight } from "lucide-react";
+import { getFileIconPath } from "../../lib/mime-types";
+import {
+  Loader2,
+  Download,
+  AlertCircle,
+  ChevronLeft,
+  ChevronRight,
+} from "lucide-react";
 import { Document, Page, pdfjs } from "react-pdf";
 import "react-pdf/dist/Page/AnnotationLayer.css";
 import "react-pdf/dist/Page/TextLayer.css";
@@ -100,14 +108,25 @@ export const FilePreviewDialog: React.FC<FilePreviewDialogProps> = ({
 
       const errorMessage = err.message || "Unknown error";
 
-      if (errorMessage.includes("HTTP error: 404") || errorMessage.includes("404")) {
-        setError("File not found on Google Drive. It may have been deleted outside the app. Try re-uploading the file.");
+      if (
+        errorMessage.includes("HTTP error: 404") ||
+        errorMessage.includes("404")
+      ) {
+        setError(
+          "File not found on Google Drive. It may have been deleted outside the app. Try re-uploading the file.",
+        );
       } else if (errorMessage.includes("key doesn't match")) {
-        setError("Wrong encryption key. The key you're using doesn't match the one used to encrypt this file.");
+        setError(
+          "Wrong encryption key. The key you're using doesn't match the one used to encrypt this file.",
+        );
       } else if (errorMessage.includes("No encryption key found")) {
-        setError("Encryption key missing. Please upload your encryption key first.");
+        setError(
+          "Encryption key missing. Please upload your encryption key first.",
+        );
       } else if (errorMessage.includes("Invalid encryption key format")) {
-        setError("Invalid encryption key. Your stored encryption key appears to be corrupted.");
+        setError(
+          "Invalid encryption key. Your stored encryption key appears to be corrupted.",
+        );
       } else if (errorMessage.includes("Authentication error")) {
         setError("Authentication error. Please sign in again.");
       } else {
@@ -250,7 +269,9 @@ export const FilePreviewDialog: React.FC<FilePreviewDialogProps> = ({
                   <Button
                     size="sm"
                     variant="outline"
-                    onClick={() => setPageNumber((p) => Math.min(numPages, p + 1))}
+                    onClick={() =>
+                      setPageNumber((p) => Math.min(numPages, p + 1))
+                    }
                     disabled={pageNumber >= numPages}
                   >
                     Next
@@ -292,11 +313,13 @@ export const FilePreviewDialog: React.FC<FilePreviewDialogProps> = ({
       default:
         return (
           <div className="flex flex-col items-center justify-center py-12 space-y-4">
-            <AlertCircle className="h-12 w-12 text-muted-foreground" />
+            <img src={getFileIconPath(mimeType)} alt="" className="w-16 h-16" />
             <div className="text-center space-y-2">
-              <p className="font-medium">Preview Not Available</p>
+              <p className="font-medium">
+                Preview not available for this file type
+              </p>
               <p className="text-sm text-muted-foreground">
-                This file type cannot be previewed. You can download it to view.
+                Download the file to open it on your device.
               </p>
             </div>
           </div>
@@ -311,9 +334,7 @@ export const FilePreviewDialog: React.FC<FilePreviewDialogProps> = ({
           <DialogTitle className="truncate pr-8">{fileName}</DialogTitle>
         </DialogHeader>
 
-        <div className="flex-1 overflow-auto">
-          {renderPreviewContent()}
-        </div>
+        <div className="flex-1 overflow-auto">{renderPreviewContent()}</div>
 
         <DialogFooter className="flex-shrink-0">
           <Button
@@ -324,9 +345,6 @@ export const FilePreviewDialog: React.FC<FilePreviewDialogProps> = ({
             <Download className="h-4 w-4 mr-2" />
             Download
           </Button>
-          <DialogClose asChild>
-            <Button variant="outline">Close</Button>
-          </DialogClose>
         </DialogFooter>
       </DialogContent>
     </Dialog>
