@@ -159,7 +159,7 @@ function PrivateStorageContent() {
     };
 
     loadInitialData();
-  }, [setUserInfo]);
+  }, [setUserInfo, setDecryptionError]);
 
   useEffect(() => {
     if (userEmail) {
@@ -358,7 +358,7 @@ function PrivateStorageContent() {
         <Separator />
 
         {/* Breadcrumb Navigation */}
-        <FolderBreadcrumb />
+        <FolderBreadcrumb userEmail={userEmail} onFileMoved={() => setRefreshFileListKey(prev => prev + 1)} />
 
         {/* File List */}
         <FileList

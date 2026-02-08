@@ -3,19 +3,16 @@ import {
   FileMeta,
   FolderMeta,
   getAllFilesForUser,
-  addFile,
   deleteFileFromDB,
   sendToGoogleDrive,
   getFilesInFolder,
   getFoldersForUser,
 } from "../../utils/dexieDB";
-import { gapi } from "gapi-script";
 
 import { decryptFile } from "../../utils/decryptFile";
 import { Trash2, Eye } from "lucide-react";
 import {
   MimeTypeCategory,
-  iconMap,
   mimeTypeCategories,
   getFileIconPath,
 } from "../../lib/mime-types";
@@ -54,13 +51,10 @@ export const FileList: React.FC<FileListProps> = ({
   const [folders, setFolders] = useState<FolderMeta[]>([]);
   const userEmail = userEmailProp || null;
   const [isLoadingFiles, setIsLoadingFiles] = useState<boolean>(true);
-  const [filter, setFilter] = useState<MimeTypeCategory | "All Files">(
+  const [filter] = useState<MimeTypeCategory | "All Files">(
     "All Files",
   );
-  const [availableFilters, setAvailableFilters] = useState<
-    (MimeTypeCategory | "All Files")[]
-  >(["All Files"]);
-  const [searchQuery, setSearchQuery] = useState<string>("");
+  const [searchQuery] = useState<string>("");
   const [downloadingFileId, setDownloadingFileId] = useState<string | null>(
     null,
   );
@@ -69,22 +63,13 @@ export const FileList: React.FC<FileListProps> = ({
     id: string;
     name: string;
   } | null>(null);
-  const [hasEncryptionKey, setHasEncryptionKey] = useState<boolean>(false);
-  const [isOn, setIsOn] = useState(true);
   const [refreshFileListKey, setRefreshFileListKey] = useState(0);
   const [previewFile, setPreviewFile] = useState<{
     id: string;
     name: string;
     mimeType: string;
   } | null>(null);
-
-  useEffect(() => {
-    const checkKey = async () => {
-      const key = await getStoredKey();
-      setHasEncryptionKey(!!key);
-    };
-    checkKey();
-  }, []);
+  const [draggingFileId, setDraggingFileId] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchFiles = async () => {
@@ -139,12 +124,6 @@ export const FileList: React.FC<FileListProps> = ({
 
         setAllUserFiles(displayFiles);
         setFilteredFiles(displayFiles);
-
-        const available = Object.keys(mimeTypeCategories).filter((category) => {
-          const mimeTypes = mimeTypeCategories[category as MimeTypeCategory];
-          return userFiles.some((file) => mimeTypes.includes(file.mimeType));
-        }) as (MimeTypeCategory | "All Files")[];
-        setAvailableFilters(["All Files", ...available]);
       } catch (error) {
         console.error(`[FileList - ${view}] Error fetching files:`, error);
         toast.error("Failed to load files");
@@ -191,14 +170,6 @@ export const FileList: React.FC<FileListProps> = ({
       `[FileList - ${view}] Filtering applied, ${results.length} files shown.`,
     );
   }, [filter, searchQuery, allUserFiles, view]);
-
-  useEffect(() => {
-    if (view !== "full") {
-      setIsOn(false);
-    } else {
-      setIsOn(true);
-    }
-  }, [view]);
 
   const downloadAndDecryptFile = async (fileId: string, fileName: string) => {
     setDownloadingFileId(fileId);
@@ -261,11 +232,11 @@ export const FileList: React.FC<FileListProps> = ({
           document.body.removeChild(a);
           URL.revokeObjectURL(url);
         }, 1000);
-      } catch (decryptionError) {
+      } catch (decryptionError: unknown) {
         console.error("Decryption error:", decryptionError);
 
         const errorMessage =
-          decryptionError.message || "Unknown decryption error";
+          decryptionError instanceof Error ? decryptionError.message : "Unknown decryption error";
 
         if (errorMessage.includes("key doesn't match")) {
           toast.error("Wrong encryption key", {
@@ -287,10 +258,10 @@ export const FileList: React.FC<FileListProps> = ({
           });
         }
       }
-    } catch (error) {
+    } catch (error: unknown) {
       console.error("Error during file download or decryption:", error);
       toast.error("Error during file download", {
-        description: error.message || "An unknown error occurred",
+        description: error instanceof Error ? error.message : "An unknown error occurred",
       });
     } finally {
       setDownloadingFileId(null);
@@ -351,10 +322,10 @@ export const FileList: React.FC<FileListProps> = ({
         id: deleteToastId,
       });
       deleteSuccess = true;
-    } catch (error) {
+    } catch (error: unknown) {
       console.error("Error during delete process:", error);
       toast.error(`Failed to delete ${fileName}`, {
-        description: error.message || "An unknown error occurred",
+        description: error instanceof Error ? error.message : "An unknown error occurred",
         id: deleteToastId,
       });
       deleteSuccess = false;
@@ -394,22 +365,8 @@ export const FileList: React.FC<FileListProps> = ({
           <p className="text-center text-xs text-muted-foreground py-4">
             Loading...
           </p>
-        ) : filteredFiles.length > 0 || folders.length > 0 ? (
+        ) : filteredFiles.length > 0 ? (
           <div className="space-y-3">
-            {/* Folders first (only in full view) */}
-            {view === "full" && folders.length > 0 && (
-              <div className="space-y-2">
-                {folders.map((folder) => (
-                  <FolderItem
-                    key={folder.id}
-                    folder={folder}
-                    userEmail={userEmail!}
-                    onDeleted={() => setRefreshFileListKey((prev) => prev + 1)}
-                  />
-                ))}
-              </div>
-            )}
-
             {/* Files */}
             {filteredFiles.length > 0 && (
               <div className="flex flex-wrap gap-2">
@@ -541,6 +498,7 @@ export const FileList: React.FC<FileListProps> = ({
                   folder={folder}
                   userEmail={userEmail!}
                   onDeleted={() => setRefreshFileListKey((prev) => prev + 1)}
+                  onFileMoved={() => setRefreshFileListKey((prev) => prev + 1)}
                 />
               ))}
 
@@ -548,7 +506,17 @@ export const FileList: React.FC<FileListProps> = ({
               {filteredFiles.map((file) => (
                 <div
                   key={file.id}
-                  className="relative flex flex-col items-center gap-2 p-4 cursor-pointer group"
+                  className={`relative flex flex-col items-center gap-2 p-4 cursor-pointer group ${
+                    draggingFileId === file.id ? "opacity-50" : ""
+                  }`}
+                  draggable
+                  onDragStart={(e) => {
+                    e.dataTransfer.setData("text/x-file-id", file.id);
+                    e.dataTransfer.setData("text/x-file-name", file.name);
+                    e.dataTransfer.effectAllowed = "move";
+                    setDraggingFileId(file.id);
+                  }}
+                  onDragEnd={() => setDraggingFileId(null)}
                   onClick={() =>
                     handlePreview(file.id, file.name, file.mimeType)
                   }
