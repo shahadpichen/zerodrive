@@ -37,6 +37,7 @@ describe('FileList Component', () => {
       mimeType: 'text/plain',
       userEmail: testUser,
       uploadedDate: new Date('2024-01-01'),
+      folderId: null,
     },
     {
       id: 'file-2',
@@ -44,6 +45,7 @@ describe('FileList Component', () => {
       mimeType: 'application/pdf',
       userEmail: testUser,
       uploadedDate: new Date('2024-01-02'),
+      folderId: null,
     },
   ];
 

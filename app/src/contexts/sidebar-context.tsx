@@ -64,7 +64,7 @@ export function SidebarProvider({ children }: { children: React.ReactNode }) {
     }
   }, [isOpen, isMobile]);
 
-  const toggle = () => setIsOpen(prev => !prev);
+  const toggle = () => setIsOpen((prev: boolean) => !prev);
   const open = () => setIsOpen(true);
   const close = () => setIsOpen(false);
 

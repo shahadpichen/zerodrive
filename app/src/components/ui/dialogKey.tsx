@@ -21,7 +21,7 @@ const Dialog: React.FC<{ children: React.ReactNode }> = ({ children }) => {
         })
         .then(async () => {
           const { isAuthenticated: checkAuth } = await import("../../utils/authService");
-          const authenticated = checkAuth();
+          const authenticated = await checkAuth();
           setIsAuthenticated(authenticated);
 
           // After initialization, check if dialog should open

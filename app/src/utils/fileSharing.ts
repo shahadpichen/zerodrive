@@ -38,6 +38,7 @@ export interface UserKeyPair {
  * @param buffer The ArrayBuffer to convert.
  * @returns A hex string.
  */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function bufferToHex(buffer: ArrayBuffer): string {
   return Array.from(new Uint8Array(buffer))
     .map((b) => b.toString(16).padStart(2, "0"))
@@ -58,8 +59,8 @@ export async function hashEmail(email: string): Promise<string> {
       email: email.toLowerCase().trim()
     });
 
-    if (response.success && response.data?.hashedEmail) {
-      return response.data.hashedEmail;
+    if (response.success && response.data && typeof response.data === 'object' && 'hashedEmail' in response.data) {
+      return (response.data as { hashedEmail: string }).hashedEmail;
     }
 
     throw new Error('Failed to hash email: Invalid response from server');
@@ -76,6 +77,7 @@ export async function hashEmail(email: string): Promise<string> {
  * @param key The AES-GCM CryptoKey to use for encryption.
  * @returns A Promise that resolves to a Blob containing the IV prepended to the ciphertext.
  */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 async function encryptFileContentWithKey(
   file: File,
   key: CryptoKey
@@ -205,12 +207,21 @@ export async function encryptFileKeyForRecipient(
   const hashedRecipientEmail = await hashEmail(recipientEmail);
 
   // 2. Fetch the recipient's public key
-  const recipientPublicKey = await fetchUserPublicKey(hashedRecipientEmail);
-  if (!recipientPublicKey) {
+  const recipientPublicKeyJwk = await fetchUserPublicKey(hashedRecipientEmail);
+  if (!recipientPublicKeyJwk) {
     throw new Error(
       `Recipient ${recipientEmail} has not registered a public key.`
     );
   }
+
+  // Import the JWK as a CryptoKey
+  const recipientPublicKey = await crypto.subtle.importKey(
+    "jwk",
+    recipientPublicKeyJwk,
+    { name: "RSA-OAEP", hash: "SHA-256" },
+    true,
+    ["encrypt"]
+  );
 
   // 3. Export the file key to raw bytes
   const exportedFileKeyBuffer = await crypto.subtle.exportKey("raw", fileKey);
@@ -300,6 +311,8 @@ export async function prepareFileForSharing(
 ): Promise<{
   encryptedFileBlob: Blob;
   recipientHashedEmail: string;
+  recipientEmail: string;
+  customMessage?: string;
   fileName: string;
   originalFileName: string;
   encryptedFileKey: string;
@@ -413,7 +426,6 @@ export async function prepareFileForSharing(
     const fileId = crypto.randomUUID();
 
     // Create a unique encrypted file name
-    const fileExtension = file.name.split(".").pop() || "";
     const fileName = `encrypted_${fileId}.bin`;
 
     return {
@@ -658,7 +670,7 @@ export async function uploadEncryptedFile(
     mimeType: mimeType || 'application/octet-stream',
   });
 
-  const { uploadUrl, fileKey } = response.data;
+  const { uploadUrl, fileKey } = response.data as { uploadUrl: string; fileKey: string };
 
   // Step 2: Upload encrypted file directly to MinIO using pre-signed URL
   const uploadResponse = await fetch(uploadUrl, {
@@ -688,7 +700,7 @@ export async function downloadEncryptedFile(fileKey: string): Promise<Blob> {
     fileKey,
   });
 
-  const { downloadUrl } = response.data;
+  const { downloadUrl } = response.data as { downloadUrl: string };
 
   // Step 2: Download encrypted file from MinIO using pre-signed URL
   const downloadResponse = await fetch(downloadUrl);

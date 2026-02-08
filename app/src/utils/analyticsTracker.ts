@@ -30,6 +30,8 @@ export enum AnalyticsCategory {
   AUTH = 'auth',
   FILES = 'files',
   SHARING = 'sharing',
+  KEYS = 'keys',
+  ERRORS = 'errors',
 }
 
 /**
@@ -119,8 +121,10 @@ export async function trackFileAddedToDrive(
   );
 }
 
-export default {
+const analyticsTracker = {
   trackEvent,
   trackLogin,
   trackFileAddedToDrive,
 };
+
+export default analyticsTracker;

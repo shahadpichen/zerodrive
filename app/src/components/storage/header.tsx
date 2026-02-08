@@ -21,8 +21,6 @@ function Header() {
   const {
     creditBalance,
     storageInfo,
-    isLoadingCredits,
-    isLoadingStorage,
     userEmail,
     userName,
     userImage,

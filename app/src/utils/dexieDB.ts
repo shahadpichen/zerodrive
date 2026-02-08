@@ -75,7 +75,8 @@ const clearUserFilesFromDB = async (userEmail: string): Promise<number> => {
 
 // Folder CRUD operations
 const addFolder = async (folder: FolderMeta): Promise<string> => {
-  return await db.table<FolderMeta>("folders").add(folder);
+  const result = await db.table<FolderMeta>("folders").add(folder);
+  return result as string;
 };
 
 const getFoldersForUser = async (userEmail: string): Promise<FolderMeta[]> => {
