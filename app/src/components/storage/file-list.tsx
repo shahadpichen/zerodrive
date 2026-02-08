@@ -17,6 +17,7 @@ import {
   MimeTypeCategory,
   iconMap,
   mimeTypeCategories,
+  getFileIconPath,
 } from "../../lib/mime-types";
 import { getStoredKey } from "../../utils/cryptoUtils";
 import { toast } from "sonner";
@@ -54,14 +55,14 @@ export const FileList: React.FC<FileListProps> = ({
   const userEmail = userEmailProp || null;
   const [isLoadingFiles, setIsLoadingFiles] = useState<boolean>(true);
   const [filter, setFilter] = useState<MimeTypeCategory | "All Files">(
-    "All Files"
+    "All Files",
   );
   const [availableFilters, setAvailableFilters] = useState<
     (MimeTypeCategory | "All Files")[]
   >(["All Files"]);
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [downloadingFileId, setDownloadingFileId] = useState<string | null>(
-    null
+    null,
   );
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [fileToDelete, setFileToDelete] = useState<{
@@ -89,7 +90,7 @@ export const FileList: React.FC<FileListProps> = ({
     const fetchFiles = async () => {
       if (!userEmail) {
         console.log(
-          `[FileList - ${view}] Waiting for user email to fetch files.`
+          `[FileList - ${view}] Waiting for user email to fetch files.`,
         );
         setAllUserFiles([]);
         setFilteredFiles([]);
@@ -99,7 +100,7 @@ export const FileList: React.FC<FileListProps> = ({
       }
 
       console.log(
-        `[FileList - ${view}] Fetching files for ${userEmail}, Key: ${refreshKey}, FolderId: ${currentFolderId}`
+        `[FileList - ${view}] Fetching files for ${userEmail}, Key: ${refreshKey}, FolderId: ${currentFolderId}`,
       );
       setIsLoadingFiles(true);
       try {
@@ -113,7 +114,7 @@ export const FileList: React.FC<FileListProps> = ({
           // Also get folders in current directory
           const allFolders = await getFoldersForUser(userEmail);
           const currentFolders = allFolders.filter(
-            (f) => (f.parentId || null) === currentFolderId
+            (f) => (f.parentId || null) === currentFolderId,
           );
           setFolders(currentFolders);
         } else {
@@ -122,7 +123,7 @@ export const FileList: React.FC<FileListProps> = ({
         }
 
         console.log(
-          `[FileList - ${view}] Found ${userFiles.length} files in DB for ${userEmail}.`
+          `[FileList - ${view}] Found ${userFiles.length} files in DB for ${userEmail}.`,
         );
 
         let displayFiles = userFiles;
@@ -131,7 +132,7 @@ export const FileList: React.FC<FileListProps> = ({
             .sort(
               (a, b) =>
                 new Date(b.uploadedDate).getTime() -
-                new Date(a.uploadedDate).getTime()
+                new Date(a.uploadedDate).getTime(),
             )
             .slice(0, 5);
         }
@@ -160,7 +161,7 @@ export const FileList: React.FC<FileListProps> = ({
 
   useEffect(() => {
     console.log(
-      `[FileList - ${view}] Applying filters. Current filter: ${filter}, Query: ${searchQuery}`
+      `[FileList - ${view}] Applying filters. Current filter: ${filter}, Query: ${searchQuery}`,
     );
     let results = allUserFiles;
 
@@ -168,26 +169,26 @@ export const FileList: React.FC<FileListProps> = ({
       if (filter === "Others") {
         results = results.filter(
           (file) =>
-            !Object.values(mimeTypeCategories).flat().includes(file.mimeType)
+            !Object.values(mimeTypeCategories).flat().includes(file.mimeType),
         );
       } else {
         results = results.filter((file) =>
           mimeTypeCategories[filter as MimeTypeCategory]?.includes(
-            file.mimeType
-          )
+            file.mimeType,
+          ),
         );
       }
     }
 
     if (searchQuery) {
       results = results.filter((file) =>
-        file.name.toLowerCase().includes(searchQuery.toLowerCase())
+        file.name.toLowerCase().includes(searchQuery.toLowerCase()),
       );
     }
 
     setFilteredFiles(results);
     console.log(
-      `[FileList - ${view}] Filtering applied, ${results.length} files shown.`
+      `[FileList - ${view}] Filtering applied, ${results.length} files shown.`,
     );
   }, [filter, searchQuery, allUserFiles, view]);
 
@@ -229,7 +230,7 @@ export const FileList: React.FC<FileListProps> = ({
         {
           method: "GET",
           headers: new Headers({ Authorization: `Bearer ${token}` }),
-        }
+        },
       );
 
       if (!response.ok) {
@@ -304,7 +305,8 @@ export const FileList: React.FC<FileListProps> = ({
     const key = await getStoredKey();
     if (!key) {
       toast.error("Encryption key required", {
-        description: "You need your encryption key to delete files. Please upload it first.",
+        description:
+          "You need your encryption key to delete files. Please upload it first.",
       });
       setShowDeleteConfirm(false);
       setFileToDelete(null);
@@ -328,7 +330,7 @@ export const FileList: React.FC<FileListProps> = ({
         {
           method: "DELETE",
           headers: new Headers({ Authorization: `Bearer ${token}` }),
-        }
+        },
       );
       if (!response.ok && response.status !== 404) {
         console.warn(`Drive delete failed: ${response.statusText}`);
@@ -368,7 +370,7 @@ export const FileList: React.FC<FileListProps> = ({
   const deleteFileHandler = (
     fileId: string,
     fileName: string,
-    e: React.MouseEvent
+    e: React.MouseEvent,
   ) => {
     e.stopPropagation();
     setFileToDelete({ id: fileId, name: fileName });
@@ -379,12 +381,10 @@ export const FileList: React.FC<FileListProps> = ({
     fileId: string,
     fileName: string,
     mimeType: string,
-    e: React.MouseEvent
+    e?: React.MouseEvent,
   ) => {
-    e.stopPropagation();
-    if (isPreviewable(mimeType)) {
-      setPreviewFile({ id: fileId, name: fileName, mimeType });
-    }
+    if (e) e.stopPropagation();
+    setPreviewFile({ id: fileId, name: fileName, mimeType });
   };
 
   if (view === "compact" || view === "recent") {
@@ -394,7 +394,7 @@ export const FileList: React.FC<FileListProps> = ({
           <p className="text-center text-xs text-muted-foreground py-4">
             Loading...
           </p>
-        ) : (filteredFiles.length > 0 || folders.length > 0) ? (
+        ) : filteredFiles.length > 0 || folders.length > 0 ? (
           <div className="space-y-3">
             {/* Folders first (only in full view) */}
             {view === "full" && folders.length > 0 && (
@@ -404,7 +404,7 @@ export const FileList: React.FC<FileListProps> = ({
                     key={folder.id}
                     folder={folder}
                     userEmail={userEmail!}
-                    onDeleted={() => setRefreshFileListKey(prev => prev + 1)}
+                    onDeleted={() => setRefreshFileListKey((prev) => prev + 1)}
                   />
                 ))}
               </div>
@@ -414,71 +414,82 @@ export const FileList: React.FC<FileListProps> = ({
             {filteredFiles.length > 0 && (
               <div className="flex flex-wrap gap-2">
                 {filteredFiles.map((file) => {
-              const canPreview = isPreviewable(file.mimeType, file.name);
-              return (
-                <Button
-                  key={file.id}
-                  onClick={() =>
-                    canPreview
-                      ? setPreviewFile({
-                          id: file.id,
-                          name: file.name,
-                          mimeType: file.mimeType,
-                        })
-                      : downloadAndDecryptFile(file.id, file.name)
-                  }
-                  title={canPreview ? `Preview ${file.name}` : `Download ${file.name}`}
-                  className="w-fit group pr-3"
-                >
-                  <div className="flex items-center gap-1.5 overflow-hidden flex-grow min-w-0 max-w-full">
-                    <span className="truncate flex-grow">{file.name}</span>
-                  </div>
-                  <div className="flex items-center gap-1.5 flex-shrink-0 pl-2">
-                    {downloadingFileId === file.id ? (
-                      <span className="text-xs animate-pulse">
-                        Downloading...
-                      </span>
-                    ) : (
-                      <>
-                        {canPreview && (
-                          <button
-                            onClick={(e) =>
-                              handlePreview(
-                                file.id,
-                                file.name,
-                                file.mimeType,
-                                e
-                              )
-                            }
-                            className="text-primary hover:text-primary/80 focus:outline-none p-0.5 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity"
-                            aria-label="Preview file"
-                            title="Preview file"
-                          >
-                            <Eye size={14} strokeWidth={1.5} />
-                          </button>
-                        )}
-                        {view === "recent" ? (
-                          <span className="text-xs text-muted-foreground">
-                            {new Date(file.uploadedDate).toLocaleDateString()}
+                  const canPreview = isPreviewable(file.mimeType, file.name);
+                  return (
+                    <Button
+                      key={file.id}
+                      onClick={() =>
+                        canPreview
+                          ? setPreviewFile({
+                              id: file.id,
+                              name: file.name,
+                              mimeType: file.mimeType,
+                            })
+                          : downloadAndDecryptFile(file.id, file.name)
+                      }
+                      title={
+                        canPreview
+                          ? `Preview ${file.name}`
+                          : `Download ${file.name}`
+                      }
+                      className="w-fit group pr-3"
+                    >
+                      <div className="flex items-center gap-1.5 overflow-hidden flex-grow min-w-0 max-w-full">
+                        <img
+                          src={getFileIconPath(file.mimeType)}
+                          alt=""
+                          className="w-5 h-5 flex-shrink-0"
+                        />
+                        <span className="truncate flex-grow">{file.name}</span>
+                      </div>
+                      <div className="flex items-center gap-1.5 flex-shrink-0 pl-2">
+                        {downloadingFileId === file.id ? (
+                          <span className="text-xs animate-pulse">
+                            Downloading...
                           </span>
                         ) : (
-                          <button
-                            onClick={(e) =>
-                              deleteFileHandler(file.id, file.name, e)
-                            }
-                            className="text-red-500 hover:text-destructive focus:outline-none p-0.5 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity"
-                            aria-label="Delete file"
-                            title="Delete file"
-                          >
-                            <Trash2 size={12} strokeWidth={1.5} />
-                          </button>
+                          <>
+                            {canPreview && (
+                              <button
+                                onClick={(e) =>
+                                  handlePreview(
+                                    file.id,
+                                    file.name,
+                                    file.mimeType,
+                                    e,
+                                  )
+                                }
+                                className="text-primary hover:text-primary/80 focus:outline-none p-0.5 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity"
+                                aria-label="Preview file"
+                                title="Preview file"
+                              >
+                                <Eye size={14} strokeWidth={1.5} />
+                              </button>
+                            )}
+                            {view === "recent" ? (
+                              <span className="text-xs text-muted-foreground">
+                                {new Date(
+                                  file.uploadedDate,
+                                ).toLocaleDateString()}
+                              </span>
+                            ) : (
+                              <button
+                                onClick={(e) =>
+                                  deleteFileHandler(file.id, file.name, e)
+                                }
+                                className="text-red-500 hover:text-destructive focus:outline-none p-0.5 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity"
+                                aria-label="Delete file"
+                                title="Delete file"
+                              >
+                                <Trash2 size={12} strokeWidth={1.5} />
+                              </button>
+                            )}
+                          </>
                         )}
-                      </>
-                    )}
-                  </div>
-                </Button>
-              );
-            })}
+                      </div>
+                    </Button>
+                  );
+                })}
               </div>
             )}
           </div>
@@ -514,16 +525,16 @@ export const FileList: React.FC<FileListProps> = ({
     );
   }
 
-  // Full view - show folders and files in a list
+  // Full view - show folders and files in a grid of cards
   return (
     <div className="space-y-4">
       {isLoadingFiles ? (
         <p className="text-center text-muted-foreground py-8">Loading...</p>
       ) : (
         <>
-          {/* Folders */}
-          {folders.length > 0 && (
-            <div className="space-y-2">
+          {folders.length > 0 || filteredFiles.length > 0 ? (
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
+              {/* Folders */}
               {folders.map((folder) => (
                 <FolderItem
                   key={folder.id}
@@ -532,79 +543,50 @@ export const FileList: React.FC<FileListProps> = ({
                   onDeleted={() => setRefreshFileListKey((prev) => prev + 1)}
                 />
               ))}
-            </div>
-          )}
 
-          {/* Files */}
-          {filteredFiles.length > 0 && (
-            <div className="space-y-2">
-              {filteredFiles.map((file) => {
-                const canPreview = isPreviewable(file.mimeType, file.name);
-                return (
-                  <div
-                    key={file.id}
-                    className="flex items-center gap-3 p-3 rounded-lg border hover:bg-accent transition-colors group"
+              {/* File cards */}
+              {filteredFiles.map((file) => (
+                <div
+                  key={file.id}
+                  className="relative flex flex-col items-center gap-2 p-4 cursor-pointer group"
+                  onClick={() =>
+                    handlePreview(file.id, file.name, file.mimeType)
+                  }
+                  title={file.name}
+                >
+                  {/* Delete button - top right, visible on hover */}
+                  <button
+                    onClick={(e) => deleteFileHandler(file.id, file.name, e)}
+                    className="absolute top-2 right-2 p-1 rounded-md opacity-0 group-hover:opacity-100 transition-opacity text-destructive hover:bg-destructive/10"
+                    aria-label="Delete file"
+                    title="Delete file"
                   >
-                    {/* File name */}
-                    <div className="flex-1 min-w-0">
-                      <p className="font-medium truncate">{file.name}</p>
-                      <p className="text-sm text-muted-foreground">
-                        {new Date(file.uploadedDate).toLocaleDateString()}
-                      </p>
-                    </div>
+                    <Trash2 className="h-4 w-4" />
+                  </button>
 
-                    {/* Actions */}
-                    <div className="flex items-center gap-2">
-                      {canPreview && (
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() =>
-                            setPreviewFile({
-                              id: file.id,
-                              name: file.name,
-                              mimeType: file.mimeType,
-                            })
-                          }
-                          className="opacity-0 group-hover:opacity-100 transition-opacity"
-                          title="Preview file"
-                        >
-                          <Eye className="h-4 w-4" />
-                        </Button>
-                      )}
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => downloadAndDecryptFile(file.id, file.name)}
-                        disabled={downloadingFileId === file.id}
-                        title="Download file"
-                      >
-                        {downloadingFileId === file.id ? (
-                          <span className="text-xs">...</span>
-                        ) : (
-                          <span>📥</span>
-                        )}
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={(e) => deleteFileHandler(file.id, file.name, e)}
-                        className="opacity-0 group-hover:opacity-100 transition-opacity text-destructive hover:text-destructive"
-                        title="Delete file"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-                );
-              })}
+                  {/* Large file type icon */}
+                  <img
+                    src={getFileIconPath(file.mimeType)}
+                    alt=""
+                    className="w-12 h-12"
+                  />
+
+                  {/* Filename */}
+                  <p className="text-sm font-medium text-center w-full truncate">
+                    {file.name}
+                  </p>
+
+                  {/* Date */}
+                  <p className="text-xs text-muted-foreground">
+                    {new Date(file.uploadedDate).toLocaleDateString()}
+                  </p>
+                </div>
+              ))}
             </div>
-          )}
-
-          {/* Empty state */}
-          {folders.length === 0 && filteredFiles.length === 0 && (
+          ) : (
             <p className="text-center text-muted-foreground py-8">
-              No files or folders. Upload a file or create a folder to get started.
+              No files or folders. Upload a file or create a folder to get
+              started.
             </p>
           )}
         </>

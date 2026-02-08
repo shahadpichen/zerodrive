@@ -42,6 +42,43 @@ export const iconMap: Record<string, JSX.Element> = {
   ),
 };
 
+const fileIconPathMap: Record<string, string> = {
+  "application/pdf": "/006-pdf.png",
+  "text/plain": "/005-txt-file.png",
+  "text/xml": "/007-source-code.png",
+  "application/xml": "/007-source-code.png",
+  "application/json": "/007-source-code.png",
+  "application/zip": "/004-zip-file.png",
+  "application/x-7z-compressed": "/004-zip-file.png",
+  "application/x-rar-compressed": "/004-zip-file.png",
+  "video/mp4": "/008-video.png",
+  "video/webm": "/008-video.png",
+  "video/quicktime": "/008-video.png",
+  "audio/mpeg": "/003-audio.png",
+  "audio/wav": "/003-audio.png",
+  "audio/ogg": "/003-audio.png",
+  "image/jpeg": "/009-img.png",
+  "image/png": "/002-png.png",
+  "image/gif": "/010-gif.png",
+  "image/webp": "/009-img.png",
+  "image/svg+xml": "/009-img.png",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "/001-excel.png",
+  "application/vnd.ms-excel": "/001-excel.png",
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation": "/ppt.png",
+  "application/vnd.ms-powerpoint": "/ppt.png",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "/005-txt-file.png",
+  "application/msword": "/005-txt-file.png",
+};
+
+export function getFileIconPath(mimeType: string): string {
+  if (fileIconPathMap[mimeType]) return fileIconPathMap[mimeType];
+  if (mimeType.startsWith("image/")) return "/009-img.png";
+  if (mimeType.startsWith("video/")) return "/008-video.png";
+  if (mimeType.startsWith("audio/")) return "/003-audio.png";
+  if (mimeType.startsWith("text/")) return "/005-txt-file.png";
+  return "/005-txt-file.png";
+}
+
 export const mimeTypeCategories: Record<MimeTypeCategory, string[]> = {
   Images: [
     "image/jpeg",

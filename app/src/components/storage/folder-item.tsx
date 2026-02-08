@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Folder, MoreVertical, Trash2 } from "lucide-react";
+import { MoreVertical, Trash2 } from "lucide-react";
 import { Button } from "../ui/button";
 import {
   DropdownMenu,
@@ -35,7 +35,7 @@ export function FolderItem({ folder, userEmail, onDeleted }: FolderItemProps) {
       folder.id,
       folder.name,
       userEmail,
-      true // Force delete - files will be moved to root
+      true, // Force delete - files will be moved to root
     );
     setIsDeleting(false);
 
@@ -46,39 +46,46 @@ export function FolderItem({ folder, userEmail, onDeleted }: FolderItemProps) {
 
   return (
     <>
-      <div className="flex items-center gap-3 p-3 rounded-lg border hover:bg-accent transition-colors group">
-        <div
-          className="flex items-center gap-3 flex-1 cursor-pointer"
-          onClick={handleNavigate}
-        >
-          <Folder className="h-5 w-5 text-blue-500 flex-shrink-0" />
-          <span className="font-medium">{folder.name}</span>
+      <div
+        className="relative flex flex-col items-center gap-2 p-4 cursor-pointer group"
+        onClick={handleNavigate}
+        title={folder.name}
+      >
+        {/* Delete menu - top right, visible on hover */}
+        <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <MoreVertical className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowDeleteConfirm(true);
+                }}
+                className="text-destructive focus:text-destructive"
+              >
+                <Trash2 className="h-4 w-4 mr-2" />
+                Delete Folder
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
 
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="opacity-0 group-hover:opacity-100 transition-opacity"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <MoreVertical className="h-4 w-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem
-              onClick={(e) => {
-                e.stopPropagation();
-                setShowDeleteConfirm(true);
-              }}
-              className="text-destructive focus:text-destructive"
-            >
-              <Trash2 className="h-4 w-4 mr-2" />
-              Delete Folder
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        {/* Large folder icon */}
+        <img src="/folder.png" alt="" className="w-12 h-12" />
+
+        {/* Folder name */}
+        <p className="text-sm font-medium text-center w-full truncate">
+          {folder.name}
+        </p>
       </div>
 
       <ConfirmationDialog
