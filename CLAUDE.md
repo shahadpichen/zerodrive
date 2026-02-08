@@ -35,9 +35,8 @@ Custom agents in `.claude/agents/` — use via the Task tool with matching `suba
 
 ## Key Documentation
 
-- `DEVELOPMENT.md` — full setup guide, project structure, troubleshooting
-- `SECURITY-RISKS.md` — security risk assessment and known issues
 - `backend/database/init.sql` — database schema (source of truth)
+- `docker-compose.yml` — PostgreSQL, MinIO, pgAdmin, MinIO setup services
 
 ## Architecture
 
