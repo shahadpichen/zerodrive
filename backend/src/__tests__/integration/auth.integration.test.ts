@@ -308,4 +308,276 @@ describe('Auth Routes Integration', () => {
   // describe('GET /api/auth/google-token', () => {
   //   // Tests removed - endpoint no longer exists
   // });
+
+  describe('POST /api/auth/google/refresh', () => {
+    const mockGoogleRefreshToken = 'mock-google-refresh-token';
+    const mockNewAccessToken = 'mock-new-google-access-token';
+
+    beforeEach(() => {
+      mockRefreshAccessToken.mockResolvedValue({
+        accessToken: mockNewAccessToken,
+      });
+    });
+
+    it('should refresh Google access token with valid refresh token', async () => {
+      const response = await request(app)
+        .post('/api/auth/google/refresh')
+        .send({ refreshToken: mockGoogleRefreshToken });
+
+      expect(response.status).toBe(200);
+      expect(response.body.success).toBe(true);
+      expect(response.body.data.accessToken).toBe(mockNewAccessToken);
+      expect(response.body.data.expiresAt).toBeDefined();
+      expect(response.body.message).toBe('Google access token refreshed');
+
+      expect(mockRefreshAccessToken).toHaveBeenCalledWith(mockGoogleRefreshToken);
+    });
+
+    it('should return valid ISO timestamp for expiry', async () => {
+      const beforeRequest = new Date();
+      const response = await request(app)
+        .post('/api/auth/google/refresh')
+        .send({ refreshToken: mockGoogleRefreshToken });
+      const afterRequest = new Date(Date.now() + 3600 * 1000); // +1 hour
+
+      expect(response.status).toBe(200);
+      expect(response.body.data.expiresAt).toBeDefined();
+
+      const expiresAt = new Date(response.body.data.expiresAt);
+      expect(expiresAt.toISOString()).toBe(response.body.data.expiresAt);
+      expect(expiresAt.getTime()).toBeGreaterThan(beforeRequest.getTime());
+      expect(expiresAt.getTime()).toBeLessThanOrEqual(afterRequest.getTime());
+    });
+
+    it('should calculate expiry approximately 1 hour from now', async () => {
+      const response = await request(app)
+        .post('/api/auth/google/refresh')
+        .send({ refreshToken: mockGoogleRefreshToken });
+
+      const expiresAt = new Date(response.body.data.expiresAt);
+      const now = new Date();
+      const oneHourFromNow = new Date(now.getTime() + 3600 * 1000);
+
+      // Allow 1 second tolerance for test execution time
+      expect(expiresAt.getTime()).toBeGreaterThanOrEqual(oneHourFromNow.getTime() - 1000);
+      expect(expiresAt.getTime()).toBeLessThanOrEqual(oneHourFromNow.getTime() + 1000);
+    });
+
+    it('should return 400 when refresh token is missing', async () => {
+      const response = await request(app)
+        .post('/api/auth/google/refresh')
+        .send({});
+
+      expect(response.status).toBe(400);
+      expect(response.body.success).toBe(false);
+      expect(response.body.error.message).toContain('Refresh token is required');
+    });
+
+    it('should return 400 when refresh token is null', async () => {
+      const response = await request(app)
+        .post('/api/auth/google/refresh')
+        .send({ refreshToken: null });
+
+      expect(response.status).toBe(400);
+      expect(response.body.error.message).toContain('Refresh token is required');
+    });
+
+    it('should return 400 when refresh token is not a string', async () => {
+      const response = await request(app)
+        .post('/api/auth/google/refresh')
+        .send({ refreshToken: 12345 });
+
+      expect(response.status).toBe(400);
+      expect(response.body.error.message).toContain('Refresh token is required');
+    });
+
+    it('should return 400 when refresh token is an empty string', async () => {
+      const response = await request(app)
+        .post('/api/auth/google/refresh')
+        .send({ refreshToken: '' });
+
+      expect(response.status).toBe(400);
+      expect(response.body.error.message).toContain('Refresh token is required');
+    });
+
+    it('should return 401 when Google refresh fails', async () => {
+      mockRefreshAccessToken.mockRejectedValue(new Error('Invalid refresh token'));
+
+      const response = await request(app)
+        .post('/api/auth/google/refresh')
+        .send({ refreshToken: mockGoogleRefreshToken });
+
+      expect(response.status).toBe(401);
+      expect(response.body.success).toBe(false);
+      expect(response.body.error.message).toContain('Failed to refresh Google access token');
+    });
+
+    it('should return 401 when refresh token is expired', async () => {
+      mockRefreshAccessToken.mockRejectedValue(new Error('Token has been expired or revoked'));
+
+      const response = await request(app)
+        .post('/api/auth/google/refresh')
+        .send({ refreshToken: mockGoogleRefreshToken });
+
+      expect(response.status).toBe(401);
+      expect(response.body.success).toBe(false);
+    });
+
+    it('should return 401 when refresh token is revoked', async () => {
+      mockRefreshAccessToken.mockRejectedValue(new Error('Token has been revoked'));
+
+      const response = await request(app)
+        .post('/api/auth/google/refresh')
+        .send({ refreshToken: mockGoogleRefreshToken });
+
+      expect(response.status).toBe(401);
+      expect(response.body.success).toBe(false);
+    });
+
+    it('should not require JWT authentication cookie', async () => {
+      // No zerodrive_token cookie provided
+      const response = await request(app)
+        .post('/api/auth/google/refresh')
+        .send({ refreshToken: mockGoogleRefreshToken });
+
+      expect(response.status).toBe(200);
+      expect(response.body.success).toBe(true);
+    });
+
+    it('should handle whitespace-only refresh token', async () => {
+      // Whitespace-only string passes validation but fails at Google OAuth level
+      mockRefreshAccessToken.mockRejectedValue(new Error('Invalid refresh token'));
+
+      const response = await request(app)
+        .post('/api/auth/google/refresh')
+        .send({ refreshToken: '   ' });
+
+      expect(response.status).toBe(401);
+      expect(response.body.success).toBe(false);
+    });
+
+    it('should handle request with extra fields', async () => {
+      const response = await request(app)
+        .post('/api/auth/google/refresh')
+        .send({
+          refreshToken: mockGoogleRefreshToken,
+          extraField: 'should-be-ignored',
+          anotherField: 123,
+        });
+
+      expect(response.status).toBe(200);
+      expect(response.body.success).toBe(true);
+      expect(mockRefreshAccessToken).toHaveBeenCalledWith(mockGoogleRefreshToken);
+    });
+
+    it('should handle special characters in refresh token', async () => {
+      const specialToken = 'token-with-special-chars-!@#$%^&*()';
+      mockRefreshAccessToken.mockResolvedValue({
+        accessToken: mockNewAccessToken,
+      });
+
+      const response = await request(app)
+        .post('/api/auth/google/refresh')
+        .send({ refreshToken: specialToken });
+
+      expect(response.status).toBe(200);
+      expect(mockRefreshAccessToken).toHaveBeenCalledWith(specialToken);
+    });
+
+    it('should handle very long refresh token', async () => {
+      const longToken = 'a'.repeat(1000);
+      mockRefreshAccessToken.mockResolvedValue({
+        accessToken: mockNewAccessToken,
+      });
+
+      const response = await request(app)
+        .post('/api/auth/google/refresh')
+        .send({ refreshToken: longToken });
+
+      expect(response.status).toBe(200);
+      expect(mockRefreshAccessToken).toHaveBeenCalledWith(longToken);
+    });
+
+    it('should handle Google API rate limit error', async () => {
+      mockRefreshAccessToken.mockRejectedValue(new Error('Rate limit exceeded'));
+
+      const response = await request(app)
+        .post('/api/auth/google/refresh')
+        .send({ refreshToken: mockGoogleRefreshToken });
+
+      expect(response.status).toBe(401);
+      expect(response.body.success).toBe(false);
+    });
+
+    it('should handle network error during refresh', async () => {
+      mockRefreshAccessToken.mockRejectedValue(new Error('Network error'));
+
+      const response = await request(app)
+        .post('/api/auth/google/refresh')
+        .send({ refreshToken: mockGoogleRefreshToken });
+
+      expect(response.status).toBe(401);
+      expect(response.body.success).toBe(false);
+    });
+
+    it('should handle malformed JSON body gracefully', async () => {
+      const response = await request(app)
+        .post('/api/auth/google/refresh')
+        .set('Content-Type', 'application/json')
+        .send('{"refreshToken": invalid}');
+
+      expect(response.status).toBe(400);
+    });
+
+    it('should handle array instead of object', async () => {
+      const response = await request(app)
+        .post('/api/auth/google/refresh')
+        .send([mockGoogleRefreshToken]);
+
+      expect(response.status).toBe(400);
+    });
+
+    it('should return different access tokens on repeated calls', async () => {
+      mockRefreshAccessToken
+        .mockResolvedValueOnce({ accessToken: 'token-1' })
+        .mockResolvedValueOnce({ accessToken: 'token-2' });
+
+      const response1 = await request(app)
+        .post('/api/auth/google/refresh')
+        .send({ refreshToken: mockGoogleRefreshToken });
+
+      const response2 = await request(app)
+        .post('/api/auth/google/refresh')
+        .send({ refreshToken: mockGoogleRefreshToken });
+
+      expect(response1.body.data.accessToken).toBe('token-1');
+      expect(response2.body.data.accessToken).toBe('token-2');
+    });
+
+    it('should handle Google OAuth service throwing non-Error object', async () => {
+      mockRefreshAccessToken.mockRejectedValue('string error');
+
+      const response = await request(app)
+        .post('/api/auth/google/refresh')
+        .send({ refreshToken: mockGoogleRefreshToken });
+
+      expect(response.status).toBe(401);
+    });
+
+    it('should handle undefined refreshToken field', async () => {
+      const response = await request(app)
+        .post('/api/auth/google/refresh')
+        .send({ refreshToken: undefined });
+
+      expect(response.status).toBe(400);
+    });
+
+    it('should handle empty request body', async () => {
+      const response = await request(app)
+        .post('/api/auth/google/refresh')
+        .send();
+
+      expect(response.status).toBe(400);
+    });
+  });
 });

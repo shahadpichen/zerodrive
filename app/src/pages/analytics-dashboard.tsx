@@ -34,30 +34,30 @@ const AnalyticsDashboard: React.FC = () => {
   const [days, setDays] = useState(30);
 
   useEffect(() => {
+    const loadAnalytics = async () => {
+      setIsLoading(true);
+      try {
+        // Load summary
+        const summaryResponse = await apiClient.get<AnalyticsSummary>(`/analytics/summary?days=${days}`);
+        if (summaryResponse.success && summaryResponse.data) {
+          setSummary(summaryResponse.data);
+        }
+
+        // Load daily stats
+        const dailyResponse = await apiClient.get<DailyStat[]>(`/analytics/daily?days=${days}`);
+        if (dailyResponse.success && dailyResponse.data) {
+          setDailyStats(dailyResponse.data);
+        }
+      } catch (error) {
+        console.error("Error loading analytics:", error);
+        toast.error("Failed to load analytics");
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
     loadAnalytics();
   }, [days]);
-
-  const loadAnalytics = async () => {
-    setIsLoading(true);
-    try {
-      // Load summary
-      const summaryResponse = await apiClient.get<AnalyticsSummary>(`/analytics/summary?days=${days}`);
-      if (summaryResponse.success && summaryResponse.data) {
-        setSummary(summaryResponse.data);
-      }
-
-      // Load daily stats
-      const dailyResponse = await apiClient.get<DailyStat[]>(`/analytics/daily?days=${days}`);
-      if (dailyResponse.success && dailyResponse.data) {
-        setDailyStats(dailyResponse.data);
-      }
-    } catch (error) {
-      console.error("Error loading analytics:", error);
-      toast.error("Failed to load analytics");
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
   if (isLoading) {
     return (

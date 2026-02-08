@@ -1,29 +1,15 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import Markdown from "markdown-to-jsx";
 import { content } from "../components/landing-page/content";
 import { GoogleAuth } from "../components/landing-page/google-auth";
 import Footer from "../components/landing-page/footer";
 import Header from "../components/landing-page/header";
-import PageContentLight from "../assets/page-content-light.png";
-import PageContentDark from "../assets/page-content-dark.png";
-import { useTheme } from "../components/theme-provider";
 
 interface LandingPageProps {
   onAuthChange?: (authenticated: boolean) => void;
 }
 
 function LandingPage({ onAuthChange }: LandingPageProps) {
-  const { theme } = useTheme();
-  const [isDark, setIsDark] = useState(false);
-
-  useEffect(() => {
-    const isDarkMode =
-      theme === "dark" ||
-      (theme === "system" &&
-        window.matchMedia("(prefers-color-scheme: dark)").matches);
-    setIsDark(isDarkMode);
-  }, [theme]);
-
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
     return sessionStorage.getItem("isAuthenticated") === "true";
   });
