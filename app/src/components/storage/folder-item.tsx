@@ -9,19 +9,21 @@ import {
 } from "../ui/dropdown-menu";
 import { ConfirmationDialog } from "./confirmation-dialog";
 import type { FolderMeta } from "../../utils/dexieDB";
-import { deleteFolder } from "../../utils/folderOperations";
+import { deleteFolder, moveFile } from "../../utils/folderOperations";
 import { useFolderContext } from "./folder-context";
 
 interface FolderItemProps {
   folder: FolderMeta;
   userEmail: string;
   onDeleted: () => void;
+  onFileMoved?: () => void;
 }
 
-export function FolderItem({ folder, userEmail, onDeleted }: FolderItemProps) {
+export function FolderItem({ folder, userEmail, onDeleted, onFileMoved }: FolderItemProps) {
   const { navigateToFolder, setCurrentPath, currentPath } = useFolderContext();
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
 
   const handleNavigate = () => {
     // Add this folder to the path
@@ -47,9 +49,27 @@ export function FolderItem({ folder, userEmail, onDeleted }: FolderItemProps) {
   return (
     <>
       <div
-        className="relative flex flex-col items-center gap-2 p-4 cursor-pointer group"
+        className={`relative flex flex-col items-center gap-2 p-4 cursor-pointer group transition-all ${
+          dragOver ? "ring-2 ring-primary bg-primary/10 scale-105" : ""
+        }`}
         onClick={handleNavigate}
         title={folder.name}
+        onDragOver={(e) => {
+          e.preventDefault();
+          setDragOver(true);
+        }}
+        onDragLeave={() => setDragOver(false)}
+        onDrop={async (e) => {
+          e.preventDefault();
+          setDragOver(false);
+          const fileId = e.dataTransfer.getData("text/x-file-id");
+          const fileName = e.dataTransfer.getData("text/x-file-name");
+          if (!fileId || !fileName) return;
+          const success = await moveFile(fileId, fileName, folder.id, userEmail);
+          if (success) {
+            onFileMoved?.();
+          }
+        }}
       >
         {/* Delete menu - top right, visible on hover */}
         <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">

@@ -7,6 +7,14 @@
  */
 
 // Mock Dexie before any imports
+import { gapi } from 'gapi-script';
+import { toast } from 'sonner';
+import {
+  sendToGoogleDrive,
+  fetchAndStoreFileMetadata,
+  FileMeta,
+} from '../../utils/dexieDB';
+
 jest.mock('dexie', () => {
   const mockTable = {
     add: jest.fn().mockResolvedValue(1),
@@ -40,14 +48,6 @@ jest.mock('dexie', () => {
     default: MockDexie,
   };
 });
-
-import { gapi } from 'gapi-script';
-import { toast } from 'sonner';
-import {
-  sendToGoogleDrive,
-  fetchAndStoreFileMetadata,
-  FileMeta,
-} from '../../utils/dexieDB';
 
 // Mock modules
 jest.mock('../../utils/gapiInit');
