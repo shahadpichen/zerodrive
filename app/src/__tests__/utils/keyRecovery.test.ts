@@ -24,7 +24,7 @@ describe('Key Recovery Flow - CRITICAL', () => {
       // 1. Generate mnemonic and derive key
       const mnemonic = generateMnemonic();
       const originalKey = await deriveKeyFromMnemonic(mnemonic);
-      await storeKey(originalKey, mnemonic);
+      await storeKey(originalKey);
 
       // 2. Encrypt test data with original key
       const testData = 'Secret file content that must be recoverable';
@@ -40,12 +40,12 @@ describe('Key Recovery Flow - CRITICAL', () => {
 
       // 3. Simulate browser close - clear storage
       clearStoredKey();
-      const keyAfterClear = await getStoredKey(mnemonic);
+      const keyAfterClear = await getStoredKey();
       expect(keyAfterClear).toBeNull();
 
       // 4. Simulate user reopening browser and recovering key from mnemonic
       const recoveredKey = await deriveKeyFromMnemonic(mnemonic);
-      await storeKey(recoveredKey, mnemonic);
+      await storeKey(recoveredKey);
 
       // 5. Decrypt with recovered key - MUST WORK!
       const decrypted = await crypto.subtle.decrypt(
@@ -122,7 +122,7 @@ describe('Key Recovery Flow - CRITICAL', () => {
       // Clear and recover multiple times
       for (let i = 0; i < 3; i++) {
         clearStoredKey();
-        expect(await getStoredKey(mnemonic)).toBeNull();
+        expect(await getStoredKey()).toBeNull();
 
         const recoveredKey = await deriveKeyFromMnemonic(mnemonic);
         const decrypted = await crypto.subtle.decrypt(

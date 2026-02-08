@@ -5,7 +5,6 @@
  */
 
 import { openDB, IDBPDatabase } from "idb";
-import { UserKeyPair } from "./fileSharing";
 import logger from "./logger";
 
 const DB_NAME = "zerodrive-keys";

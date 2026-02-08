@@ -82,7 +82,7 @@ export function DataTable<TData, TValue>({
       );
 
       const { getUserEmail } = await import("../../utils/authService");
-      const userEmail = getUserEmail();
+      const userEmail = await getUserEmail();
 
       if (!userEmail) {
         throw new Error("Cannot fetch user email - not signed in.");

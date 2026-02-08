@@ -43,6 +43,7 @@ interface SharedFile {
   encryptedFileKey: string;
   fileSize?: number;
   mimeType?: string;
+  encrypted_file_blob_id: string;
 }
 
 const SharedWithMePage: FC = () => {
@@ -168,6 +169,7 @@ const SharedWithMePage: FC = () => {
               encryptedFileKey: finalEncryptedFileKey,
               fileSize: dbRow.file_size,
               mimeType: dbRow.file_mime_type,
+              encrypted_file_blob_id: dbRow.encrypted_file_blob_id,
             };
           });
           setSharedFiles(mappedFiles);

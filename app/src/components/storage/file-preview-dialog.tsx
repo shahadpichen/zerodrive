@@ -5,13 +5,11 @@ import {
   DialogHeader,
   DialogTitle,
   DialogFooter,
-  DialogClose,
 } from "../ui/dialog";
 import { Button } from "../ui/button";
 import {
   decryptFileForPreview,
   getPreviewType,
-  isPreviewable,
   readTextFromBlob,
 } from "../../utils/filePreview";
 import { getFileIconPath } from "../../lib/mime-types";
@@ -56,22 +54,6 @@ export const FilePreviewDialog: React.FC<FilePreviewDialogProps> = ({
   const [numPages, setNumPages] = useState<number>(0);
   const [pageNumber, setPageNumber] = useState<number>(1);
   const previewType = getPreviewType(mimeType, fileName);
-
-  // Decrypt file when dialog opens
-  useEffect(() => {
-    if (open && !blobUrl && !error && !isDecrypting) {
-      decryptAndPreview();
-    }
-  }, [open, fileId]);
-
-  // Cleanup blob URL when dialog closes
-  useEffect(() => {
-    return () => {
-      if (blobUrl) {
-        URL.revokeObjectURL(blobUrl);
-      }
-    };
-  }, [blobUrl]);
 
   const decryptAndPreview = async () => {
     setIsDecrypting(true);
@@ -136,6 +118,23 @@ export const FilePreviewDialog: React.FC<FilePreviewDialogProps> = ({
       setIsDecrypting(false);
     }
   };
+
+  // Decrypt file when dialog opens
+  useEffect(() => {
+    if (open && !blobUrl && !error && !isDecrypting) {
+      decryptAndPreview();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, fileId]);
+
+  // Cleanup blob URL when dialog closes
+  useEffect(() => {
+    return () => {
+      if (blobUrl) {
+        URL.revokeObjectURL(blobUrl);
+      }
+    };
+  }, [blobUrl]);
 
   const handleClose = () => {
     if (blobUrl) {

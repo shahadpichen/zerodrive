@@ -4,6 +4,7 @@
  */
 
 // Mock modules at the very top with inline functions
+export {}; // Make this a module to satisfy --isolatedModules
 jest.mock('gapi-script', () => ({
   gapi: {
     load: jest.fn((api: string, callback: () => void) => {

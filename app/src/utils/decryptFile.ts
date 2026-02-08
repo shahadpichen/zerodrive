@@ -32,16 +32,16 @@ export const decryptFile = async (fileBlob: Blob): Promise<Blob> => {
       );
 
       return new Blob([decryptedBuffer]);
-    } catch (decryptError) {
+    } catch (decryptError: unknown) {
       logger.error("Decryption operation error:", decryptError);
 
       // Check for specific error types
-      if (decryptError.name === "OperationError") {
+      if (decryptError instanceof Error && decryptError.name === "OperationError") {
         throw new Error(
           "Decryption failed: the encryption key doesn't match the one used to encrypt this file"
         );
       } else {
-        throw new Error("Decryption failed: " + decryptError.message);
+        throw new Error("Decryption failed: " + (decryptError instanceof Error ? decryptError.message : String(decryptError)));
       }
     }
   } catch (error) {

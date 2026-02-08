@@ -88,11 +88,11 @@ export async function decryptMetadata(encryptedBlob: Blob): Promise<any> {
     // Convert decrypted buffer to string and parse JSON
     const metadataString = new TextDecoder().decode(decryptedBuffer);
     return JSON.parse(metadataString);
-  } catch (error) {
+  } catch (error: unknown) {
     logger.error("Error decrypting metadata:", error);
 
     // Check for specific error types
-    if (error.name === "OperationError") {
+    if (error instanceof Error && error.name === "OperationError") {
       throw new Error(
         "Metadata decryption failed: The encryption key doesn't match"
       );

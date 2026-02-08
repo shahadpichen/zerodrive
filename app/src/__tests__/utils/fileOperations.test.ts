@@ -285,6 +285,7 @@ describe('FileOperations', () => {
         mimeType: 'text/plain',
         userEmail: testUser,
         uploadedDate: new Date(),
+        folderId: null,
       },
       {
         id: 'file-2',
@@ -292,6 +293,7 @@ describe('FileOperations', () => {
         mimeType: 'text/plain',
         userEmail: testUser,
         uploadedDate: new Date(),
+        folderId: null,
       },
     ];
 

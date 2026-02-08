@@ -111,7 +111,7 @@ class HttpClient {
       if (['POST', 'PUT', 'DELETE', 'PATCH'].includes(options.method?.toUpperCase() || 'GET')) {
         const csrfToken = getCsrfToken();
         if (csrfToken) {
-          headers['X-CSRF-Token'] = csrfToken;
+          (headers as Record<string, string>)['X-CSRF-Token'] = csrfToken;
         }
       }
 
@@ -187,10 +187,10 @@ class HttpClient {
 
       return responseData;
 
-    } catch (error) {
+    } catch (error: unknown) {
       clearTimeout(timeoutId);
 
-      if (error.name === 'AbortError') {
+      if (error instanceof Error && error.name === 'AbortError') {
         throw new TimeoutError(`Request to ${endpoint} timed out after ${this.timeout}ms`);
       }
 
@@ -202,7 +202,7 @@ class HttpClient {
         throw new NetworkError(`Network error: ${error.message}`);
       }
 
-      throw new NetworkError(`Request failed: ${error.message}`);
+      throw new NetworkError(`Request failed: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 
@@ -296,6 +296,8 @@ export const sharedFilesApi = {
   async create(shareData: {
     file_id: string;
     recipient_user_id: string;
+    recipient_email?: string;
+    custom_message?: string;
     encrypted_file_key: string;
     file_name: string;
     file_size: number;

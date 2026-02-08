@@ -1,4 +1,3 @@
-import { deriveKeyFromMnemonic } from "./cryptoUtils";
 import logger from "./logger";
 
 /**

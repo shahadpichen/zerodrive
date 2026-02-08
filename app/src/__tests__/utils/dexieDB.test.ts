@@ -99,6 +99,7 @@ describe('DexieDB - Google Drive Sync', () => {
     mimeType: 'text/plain',
     userEmail: testUser,
     uploadedDate: new Date('2024-01-01'),
+    folderId: null,
   };
 
   beforeEach(() => {
