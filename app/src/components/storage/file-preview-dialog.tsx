@@ -42,10 +42,12 @@ export const FilePreviewDialog: React.FC<FilePreviewDialogProps> = ({
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
   const [blob, setBlob] = useState<Blob | null>(null);
   const [textContent, setTextContent] = useState<string | null>(null);
+  const [docxHtml, setDocxHtml] = useState<string | null>(null);
+  const [spreadsheetHtml, setSpreadsheetHtml] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [numPages, setNumPages] = useState<number>(0);
   const [pageNumber, setPageNumber] = useState<number>(1);
-  const previewType = getPreviewType(mimeType);
+  const previewType = getPreviewType(mimeType, fileName);
 
   // Decrypt file when dialog opens
   useEffect(() => {
@@ -77,12 +79,30 @@ export const FilePreviewDialog: React.FC<FilePreviewDialogProps> = ({
         const content = await readTextFromBlob(result.blob);
         setTextContent(content);
       }
+
+      if (previewType === "docx") {
+        const mammoth = await import("mammoth");
+        const arrayBuffer = await result.blob.arrayBuffer();
+        const { value } = await mammoth.convertToHtml({ arrayBuffer });
+        setDocxHtml(value);
+      }
+
+      if (previewType === "spreadsheet") {
+        const XLSX = await import("xlsx");
+        const arrayBuffer = await result.blob.arrayBuffer();
+        const workbook = XLSX.read(arrayBuffer, { type: "array" });
+        const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+        const html = XLSX.utils.sheet_to_html(firstSheet);
+        setSpreadsheetHtml(html);
+      }
     } catch (err: any) {
       console.error("Preview error:", err);
 
       const errorMessage = err.message || "Unknown error";
 
-      if (errorMessage.includes("key doesn't match")) {
+      if (errorMessage.includes("HTTP error: 404") || errorMessage.includes("404")) {
+        setError("File not found on Google Drive. It may have been deleted outside the app. Try re-uploading the file.");
+      } else if (errorMessage.includes("key doesn't match")) {
         setError("Wrong encryption key. The key you're using doesn't match the one used to encrypt this file.");
       } else if (errorMessage.includes("No encryption key found")) {
         setError("Encryption key missing. Please upload your encryption key first.");
@@ -105,6 +125,8 @@ export const FilePreviewDialog: React.FC<FilePreviewDialogProps> = ({
     setBlobUrl(null);
     setBlob(null);
     setTextContent(null);
+    setDocxHtml(null);
+    setSpreadsheetHtml(null);
     setError(null);
     setIsDecrypting(false);
     setNumPages(0);
@@ -246,6 +268,23 @@ export const FilePreviewDialog: React.FC<FilePreviewDialogProps> = ({
             <pre className="p-4 text-sm overflow-auto max-h-[70vh] whitespace-pre-wrap break-words">
               {textContent}
             </pre>
+          </div>
+        );
+
+      case "docx":
+        return (
+          <div className="bg-white rounded-lg p-6 overflow-auto max-h-[70vh] prose prose-sm max-w-none">
+            <div dangerouslySetInnerHTML={{ __html: docxHtml || "" }} />
+          </div>
+        );
+
+      case "spreadsheet":
+        return (
+          <div className="bg-white rounded-lg overflow-auto max-h-[70vh]">
+            <div
+              dangerouslySetInnerHTML={{ __html: spreadsheetHtml || "" }}
+              className="[&_table]:w-full [&_table]:border-collapse [&_td]:border [&_td]:border-gray-300 [&_td]:px-2 [&_td]:py-1 [&_td]:text-sm [&_th]:border [&_th]:border-gray-300 [&_th]:px-2 [&_th]:py-1 [&_th]:text-sm [&_th]:bg-gray-100 [&_th]:font-medium"
+            />
           </div>
         );
 

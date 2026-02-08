@@ -84,6 +84,7 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
       const { uploadEncryptedRsaKeyToDrive } =
         await import("../../utils/gdriveKeyStorage");
       const { getStoredKey } = await import("../../utils/cryptoUtils");
+      const { getMnemonic } = await import("../../utils/mnemonicManager");
 
       if (!userEmail) {
         toast.error("User email not found");
@@ -92,14 +93,18 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
       }
 
       // Generate RSA key pair
-      const { publicKey, privateKey } = await generateUserKeyPair();
+      const keyPair = await generateUserKeyPair();
 
       // Store keys in IndexedDB
-      await storeUserKeyPair(publicKey, privateKey);
+      const mnemonic = getMnemonic();
+      if (!mnemonic) {
+        throw new Error("Mnemonic not found - cannot encrypt RSA private key");
+      }
+      await storeUserKeyPair(userEmail, keyPair, mnemonic);
 
       // Upload public key to backend
       const hashedEmail = await hashEmail(userEmail);
-      await storeUserPublicKey(hashedEmail, publicKey);
+      await storeUserPublicKey(hashedEmail, keyPair.publicKeyJwk);
 
       // Encrypt and backup private key to Google Drive
       const aesKey = await getStoredKey();
@@ -108,7 +113,7 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
       }
 
       const encryptedPrivateKey = await encryptRsaPrivateKeyWithAesKey(
-        privateKey,
+        keyPair.privateKeyJwk,
         aesKey,
       );
       await uploadEncryptedRsaKeyToDrive(encryptedPrivateKey);

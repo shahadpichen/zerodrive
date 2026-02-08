@@ -1,67 +1,90 @@
 import { decryptFile } from "./decryptFile";
 import { getStoredKey } from "./cryptoUtils";
 
-// Previewable MIME types
-const PREVIEWABLE_MIME_TYPES = [
-  // Images
-  "image/jpeg",
-  "image/png",
-  "image/gif",
-  "image/webp",
-  "image/svg+xml",
-  "image/bmp",
-  // Videos
-  "video/mp4",
-  "video/webm",
-  "video/quicktime",
-  "video/ogg",
-  // Audio
-  "audio/mpeg",
-  "audio/wav",
-  "audio/ogg",
-  "audio/mp3",
-  "audio/webm",
-  // PDFs
-  "application/pdf",
-  // Text
-  "text/plain",
-  "application/json",
-  "text/markdown",
-  "text/html",
-  "text/css",
-  "text/javascript",
-  "application/javascript",
-];
+// Extension-to-MIME fallback for files with missing/incorrect MIME types
+const EXTENSION_MIME_MAP: Record<string, string> = {
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".png": "image/png",
+  ".gif": "image/gif",
+  ".webp": "image/webp",
+  ".svg": "image/svg+xml",
+  ".bmp": "image/bmp",
+  ".mp4": "video/mp4",
+  ".webm": "video/webm",
+  ".mov": "video/quicktime",
+  ".ogg": "video/ogg",
+  ".mp3": "audio/mpeg",
+  ".wav": "audio/wav",
+  ".pdf": "application/pdf",
+  ".txt": "text/plain",
+  ".json": "application/json",
+  ".md": "text/markdown",
+  ".html": "text/html",
+  ".css": "text/css",
+  ".js": "text/javascript",
+  ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  ".doc": "application/msword",
+  ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  ".xls": "application/vnd.ms-excel",
+  ".xml": "text/xml",
+};
+
+function getMimeFromExtension(fileName: string): string | undefined {
+  const dotIndex = fileName.lastIndexOf(".");
+  if (dotIndex === -1) return undefined;
+  const ext = fileName.substring(dotIndex).toLowerCase();
+  return EXTENSION_MIME_MAP[ext];
+}
 
 /**
  * Check if a file type is previewable
  */
-export function isPreviewable(mimeType: string): boolean {
-  return PREVIEWABLE_MIME_TYPES.includes(mimeType);
+export function isPreviewable(mimeType: string, fileName?: string): boolean {
+  return getPreviewType(mimeType, fileName) !== "unsupported";
 }
 
 /**
  * Get the preview type for a given MIME type
  */
 export function getPreviewType(
-  mimeType: string
+  mimeType: string,
+  fileName?: string
 ):
   | "image"
   | "video"
   | "audio"
   | "pdf"
   | "text"
+  | "docx"
+  | "spreadsheet"
   | "unsupported" {
-  if (mimeType.startsWith("image/")) return "image";
-  if (mimeType.startsWith("video/")) return "video";
-  if (mimeType.startsWith("audio/")) return "audio";
-  if (mimeType === "application/pdf") return "pdf";
+  // Use extension-based fallback if mimeType is empty or generic
+  const effective =
+    !mimeType || mimeType === "application/octet-stream"
+      ? (fileName && getMimeFromExtension(fileName)) || mimeType
+      : mimeType;
+  if (effective.startsWith("image/")) return "image";
+  if (effective.startsWith("video/")) return "video";
+  if (effective.startsWith("audio/")) return "audio";
+  if (effective === "application/pdf") return "pdf";
   if (
-    mimeType.startsWith("text/") ||
-    mimeType === "application/json" ||
-    mimeType === "application/javascript"
+    effective.startsWith("text/") ||
+    effective === "application/json" ||
+    effective === "application/javascript" ||
+    effective === "application/xml"
   )
     return "text";
+  if (
+    effective === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
+    effective === "application/msword"
+  )
+    return "docx";
+  if (
+    effective === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" ||
+    effective === "application/vnd.ms-excel"
+  )
+    return "spreadsheet";
   return "unsupported";
 }
 

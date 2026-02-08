@@ -414,7 +414,7 @@ export const FileList: React.FC<FileListProps> = ({
             {filteredFiles.length > 0 && (
               <div className="flex flex-wrap gap-2">
                 {filteredFiles.map((file) => {
-              const canPreview = isPreviewable(file.mimeType);
+              const canPreview = isPreviewable(file.mimeType, file.name);
               return (
                 <Button
                   key={file.id}
@@ -539,7 +539,7 @@ export const FileList: React.FC<FileListProps> = ({
           {filteredFiles.length > 0 && (
             <div className="space-y-2">
               {filteredFiles.map((file) => {
-                const canPreview = isPreviewable(file.mimeType);
+                const canPreview = isPreviewable(file.mimeType, file.name);
                 return (
                   <div
                     key={file.id}
