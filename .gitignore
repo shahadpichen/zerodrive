@@ -16,6 +16,9 @@ backend/dist/
 backend/.env
 app/.env
 
+# build artifacts
+*.tsbuildinfo
+
 # misc
 .DS_Store
 .env.local
