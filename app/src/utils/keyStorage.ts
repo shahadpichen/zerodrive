@@ -161,9 +161,10 @@ export async function listUsersWithKeys(): Promise<string[]> {
  * @returns Promise resolving to the private key as a string or null if not found
  */
 export const exportPrivateKeyAsString = async (
-  email: string
+  email: string,
+  mnemonic: string
 ): Promise<string | null> => {
-  const keyPair = await getUserKeyPair(email);
+  const keyPair = await getUserKeyPair(email, mnemonic);
   if (!keyPair) return null;
 
   return JSON.stringify(keyPair.privateKeyJwk);
