@@ -7,7 +7,6 @@
  */
 
 // Mock Dexie before any imports
-import { gapi } from 'gapi-script';
 import { toast } from 'sonner';
 import {
   sendToGoogleDrive,

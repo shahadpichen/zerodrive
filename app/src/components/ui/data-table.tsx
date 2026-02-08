@@ -30,7 +30,6 @@ import {
 import { getAllFilesForUser, sendToGoogleDrive } from "../../utils/dexieDB";
 import { deleteAndSyncFile } from "../../utils/fileOperations";
 import { toast } from "sonner";
-import { gapi } from "gapi-script";
 
 interface DataTableProps<TData, TValue> {
   columns: ColumnDef<TData, TValue>[];
