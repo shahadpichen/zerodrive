@@ -5,7 +5,7 @@
   "dependencies": {
     "@aws-sdk/client-s3": "^3.804.0",
     "@noble/ed25519": "^2.2.3",
-    "@noble/hashes": "^1.7.1",
+    "@noble/hashes": "^2.2.0",
     "@radix-ui/react-avatar": "^1.1.1",
     "@radix-ui/react-checkbox": "^1.1.2",
     "@radix-ui/react-dialog": "^1.1.15",
