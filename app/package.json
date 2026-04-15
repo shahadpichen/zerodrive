@@ -38,7 +38,7 @@
     "mammoth": "^1.11.0",
     "markdown-to-jsx": "^7.5.0",
     "next-themes": "^0.3.0",
-    "pdfjs-dist": "^5.4.530",
+    "pdfjs-dist": "^5.6.205",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-icons": "^5.5.0",
