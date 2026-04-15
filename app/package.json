@@ -30,7 +30,7 @@
     "buffer": "^6.0.3",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.1",
-    "dexie": "^4.0.8",
+    "dexie": "^4.4.2",
     "dexie-cloud-addon": "^4.0.8",
     "gapi-script": "^1.2.0",
     "idb": "^8.0.3",
