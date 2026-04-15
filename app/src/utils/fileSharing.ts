@@ -1,16 +1,11 @@
 /**
  * @file fileSharing.ts
- * Implements secure file sharing functionality using asymmetric cryptography and Supabase.
+ * Implements secure file sharing functionality using asymmetric cryptography.
  */
 
-import supabase from "./supabaseClient";
+import apiClient from "./apiClient";
+import logger from "./logger";
 import { getUserKeyPair } from "./keyStorage";
-import {
-  S3Client,
-  PutObjectCommand,
-  GetObjectCommand,
-  DeleteObjectCommand,
-} from "@aws-sdk/client-s3";
 
 /**
  * Represents the result of preparing a file for sharing (Step 1).
@@ -22,8 +17,6 @@ export interface FilePreparationResult {
   recipientEmailHash: string;
   /** The file's symmetric encryption key, itself encrypted for the recipient. */
   encryptedFileKeyForRecipient: ArrayBuffer;
-  /** A cryptographic proof of the sender's identity. */
-  senderProof: string;
   /** The original name of the file. */
   fileName: string;
   /** The original MIME type of the file. */
@@ -45,6 +38,7 @@ export interface UserKeyPair {
  * @param buffer The ArrayBuffer to convert.
  * @returns A hex string.
  */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function bufferToHex(buffer: ArrayBuffer): string {
   return Array.from(new Uint8Array(buffer))
     .map((b) => b.toString(16).padStart(2, "0"))
@@ -52,16 +46,28 @@ function bufferToHex(buffer: ArrayBuffer): string {
 }
 
 /**
- * Hashes an email address using SHA-256.
- * Emails are converted to lowercase and trimmed before hashing.
+ * Hashes an email address using server-side salted SHA-256.
+ * This uses the backend API to hash with a server-side salt,
+ * preventing rainbow table attacks.
  * @param email The email address to hash.
- * @returns A Promise that resolves to the SHA-256 hash as a hex string.
+ * @returns A Promise that resolves to the salted SHA-256 hash as a hex string.
  */
 export async function hashEmail(email: string): Promise<string> {
-  const encoder = new TextEncoder();
-  const data = encoder.encode(email.toLowerCase().trim());
-  const hashBuffer = await crypto.subtle.digest("SHA-256", data);
-  return bufferToHex(hashBuffer);
+  try {
+    // Use backend API for salted hash
+    const response = await apiClient.post('/crypto/hash-email', {
+      email: email.toLowerCase().trim()
+    });
+
+    if (response.success && response.data && typeof response.data === 'object' && 'hashedEmail' in response.data) {
+      return (response.data as { hashedEmail: string }).hashedEmail;
+    }
+
+    throw new Error('Failed to hash email: Invalid response from server');
+  } catch (error) {
+    logger.error('Error hashing email:', error);
+    throw new Error('Failed to hash email address');
+  }
 }
 
 /**
@@ -71,6 +77,7 @@ export async function hashEmail(email: string): Promise<string> {
  * @param key The AES-GCM CryptoKey to use for encryption.
  * @returns A Promise that resolves to a Blob containing the IV prepended to the ciphertext.
  */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 async function encryptFileContentWithKey(
   file: File,
   key: CryptoKey
@@ -127,7 +134,7 @@ export async function generateUserKeyPair(): Promise<UserKeyPair> {
 }
 
 /**
- * Stores a user's public key in Supabase, associated with their hashed email.
+ * Stores a user's public key in the database, associated with their hashed email.
  * @param hashedEmail The SHA-256 hash of the user's email.
  * @param publicKeyJwk The user's public key in JWK format.
  * @returns A Promise that resolves when the key is stored.
@@ -137,32 +144,26 @@ export async function storeUserPublicKey(
   publicKeyJwk: JsonWebKey
 ): Promise<void> {
   try {
-    console.log("Attempting to store public key in Supabase...");
-    console.log("Target table: user_public_keys");
-    console.log("Hashed email:", hashedEmail);
+    logger.log("Attempting to store public key");
+    logger.log("Target table: user_public_keys");
+    // Email hashed for user identification
 
-    const { error, data } = await supabase.from("user_public_keys").upsert(
-      {
-        hashed_email_identifier: hashedEmail,
-        public_key_jwk: publicKeyJwk,
-      },
-      {
-        onConflict: "hashed_email_identifier",
-      }
-    );
-
-    if (error) {
-      console.error("Supabase error details:", error);
-      throw new Error(
-        `Failed to store public key: ${error.message} (Code: ${error.code})`
+    try {
+      const data = await apiClient.publicKeys.upsert(
+        hashedEmail,
+        JSON.stringify(publicKeyJwk)
       );
+      logger.log("Public key stored successfully:", data);
+    } catch (error) {
+      logger.error("API client error:", error);
+      throw new Error(`Failed to store public key: ${error}`);
     }
 
-    console.log("Public key stored successfully");
+    logger.log("Public key stored successfully");
   } catch (error) {
-    console.error("Error in storeUserPublicKey:", error);
+    logger.error("Error in storeUserPublicKey:", error);
 
-    // Check if it's a Supabase error or a more general error
+    // Re-throw the error
     if (error instanceof Error) {
       throw error; // Re-throw the error with its original message
     } else {
@@ -172,39 +173,23 @@ export async function storeUserPublicKey(
 }
 
 /**
- * Fetches a user's public key from Supabase using their hashed email.
+ * Fetches a user's public key from the backend using their hashed email.
  * @param hashedEmail The SHA-256 hash of the user's email.
- * @returns A Promise that resolves to the user's public key as a CryptoKey, or null if not found.
+ * @returns A Promise that resolves to the user's public key as a JsonWebKey, or null if not found.
  */
 export async function fetchUserPublicKey(
   hashedEmail: string
-): Promise<CryptoKey | null> {
-  const { data, error } = await supabase
-    .from("user_public_keys")
-    .select("public_key_jwk")
-    .eq("hashed_email_identifier", hashedEmail)
-    .single();
-
-  if (error || !data) {
-    console.warn(`Public key not found for hashed email: ${hashedEmail}`);
-    return null;
-  }
-
+): Promise<JsonWebKey | null> {
   try {
-    // Import the JWK as a CryptoKey
-    return await crypto.subtle.importKey(
-      "jwk",
-      data.public_key_jwk,
-      {
-        name: "RSA-OAEP",
-        hash: "SHA-256",
-      },
-      true, // extractable
-      ["encrypt"] // key usage
-    );
-  } catch (importError: any) {
-    console.error("Error importing public key:", importError);
-    throw new Error(`Failed to import public key: ${importError.message}`);
+    const result = await apiClient.publicKeys.get(hashedEmail);
+    if (!result || !result.public_key) {
+      logger.warn(`Public key not found for hashed email: ${hashedEmail}`);
+      return null;
+    }
+    return JSON.parse(result.public_key);
+  } catch (error) {
+    logger.warn(`Public key not found for hashed email: ${hashedEmail}`, error);
+    return null;
   }
 }
 
@@ -222,12 +207,21 @@ export async function encryptFileKeyForRecipient(
   const hashedRecipientEmail = await hashEmail(recipientEmail);
 
   // 2. Fetch the recipient's public key
-  const recipientPublicKey = await fetchUserPublicKey(hashedRecipientEmail);
-  if (!recipientPublicKey) {
+  const recipientPublicKeyJwk = await fetchUserPublicKey(hashedRecipientEmail);
+  if (!recipientPublicKeyJwk) {
     throw new Error(
       `Recipient ${recipientEmail} has not registered a public key.`
     );
   }
+
+  // Import the JWK as a CryptoKey
+  const recipientPublicKey = await crypto.subtle.importKey(
+    "jwk",
+    recipientPublicKeyJwk,
+    { name: "RSA-OAEP", hash: "SHA-256" },
+    true,
+    ["encrypt"]
+  );
 
   // 3. Export the file key to raw bytes
   const exportedFileKeyBuffer = await crypto.subtle.exportKey("raw", fileKey);
@@ -240,28 +234,6 @@ export async function encryptFileKeyForRecipient(
     recipientPublicKey,
     exportedFileKeyBuffer
   );
-}
-
-/**
- * Generates a cryptographic proof of the sender's identity.
- * This is a simplified version that uses email verification and the current timestamp.
- * In a more sophisticated system, this could be a signed JWT or another cryptographic assertion.
- * @param senderEmail The sender's email identifier.
- * @returns A Promise that resolves to a string representing the sender proof.
- */
-export async function generateSenderProof(
-  senderEmail: string
-): Promise<string> {
-  // For a basic proof, we'll use the hash of the sender's email and timestamp
-  const encoder = new TextEncoder();
-  const timestamp = Date.now().toString();
-  const data = encoder.encode(
-    `${senderEmail.toLowerCase().trim()}-${timestamp}`
-  );
-  const hashBuffer = await crypto.subtle.digest("SHA-256", data);
-  const proof = bufferToHex(hashBuffer);
-
-  return `${timestamp}:${proof}`;
 }
 
 /**
@@ -309,7 +281,7 @@ export function base64ToArrayBuffer(base64: string): ArrayBuffer {
     }
     return bytes.buffer;
   } catch (error) {
-    console.error("Base64 decode error:", error);
+    logger.error("Base64 decode error:", error);
     throw new Error("Failed to decode base64 string");
   }
 }
@@ -326,27 +298,31 @@ export function base64ToArrayBuffer(base64: string): ArrayBuffer {
  * @param file The file to be shared.
  * @param recipientEmail The email address of the intended recipient.
  * @param senderEmail The email address of the sender (used for generating sender proof).
+ * @param mnemonic The mnemonic phrase used to decrypt sender's RSA private key.
+ * @param customMessage Optional custom message to include with the shared file.
  * @returns A Promise that resolves to a FilePreparationResult object containing all necessary components.
  */
 export async function prepareFileForSharing(
   file: File,
   recipientEmail: string,
-  senderEmail: string
+  senderEmail: string,
+  mnemonic: string,
+  customMessage?: string
 ): Promise<{
   encryptedFileBlob: Blob;
   recipientHashedEmail: string;
-  senderHashedEmail: string;
+  recipientEmail: string;
+  customMessage?: string;
   fileName: string;
   originalFileName: string;
   encryptedFileKey: string;
   fileId: string;
   mimeType: string;
   fileSize: number;
-  senderProof: string;
 }> {
   try {
-    // Get the sender's private key
-    const senderKeyPair = await getUserKeyPair(senderEmail);
+    // Get the sender's private key (requires mnemonic to decrypt)
+    const senderKeyPair = await getUserKeyPair(senderEmail, mnemonic);
     if (!senderKeyPair) {
       throw new Error(
         "Sender private key not found. Please generate your keys first."
@@ -363,28 +339,20 @@ export async function prepareFileForSharing(
     // const recipientPublicKey = await fetchUserPublicKey(recipientHashedEmail);
 
     // Fetch the recipient's public key JWK directly for logging and use
-    const { data: publicKeyData, error: publicKeyFetchError } = await supabase
-      .from("user_public_keys")
-      .select("public_key_jwk")
-      .eq("hashed_email_identifier", recipientHashedEmail)
-      .single();
-
-    if (
-      publicKeyFetchError ||
-      !publicKeyData ||
-      !publicKeyData.public_key_jwk
-    ) {
-      console.error(
-        `[SENDER-DEBUG] Failed to fetch public key JWK for ${recipientEmail} (hashed: ${recipientHashedEmail}):`,
-        publicKeyFetchError
+    const publicKeyResult = await apiClient.publicKeys.get(recipientHashedEmail);
+    
+    if (!publicKeyResult || !publicKeyResult.public_key) {
+      logger.error(
+        `[FILE-SHARE] Failed to fetch public key for ${recipientEmail} (hashed: ${recipientHashedEmail})`
       );
       throw new Error(
         `Recipient ${recipientEmail} has not registered their public key yet, or an error occurred fetching it.`
       );
     }
-    const recipientPublicJWKForEncryption = publicKeyData.public_key_jwk;
-    console.log(
-      `[SENDER-DEBUG] Public Key JWK of recipient (${recipientEmail}) being used for encryption:`,
+
+    const recipientPublicJWKForEncryption = JSON.parse(publicKeyResult.public_key);
+    logger.log(
+      `[FILE-SHARE] Public Key JWK of recipient (${recipientEmail}) being used for encryption:`,
       JSON.stringify(recipientPublicJWKForEncryption)
     );
 
@@ -454,33 +422,26 @@ export async function prepareFileForSharing(
       type: "application/octet-stream",
     });
 
-    // Hash the sender's email
-    const senderHashedEmail = await hashEmail(senderEmail);
-
     // Generate a random file ID
     const fileId = crypto.randomUUID();
 
     // Create a unique encrypted file name
-    const fileExtension = file.name.split(".").pop() || "";
     const fileName = `encrypted_${fileId}.bin`;
-
-    // After generating fileId
-    const senderProof = `${Date.now()}:dummy-proof`;
 
     return {
       encryptedFileBlob,
       recipientHashedEmail,
-      senderHashedEmail,
+      recipientEmail,
+      customMessage,
       fileName,
       originalFileName: file.name,
       encryptedFileKey: arrayBufferToBase64(encryptedFileKey),
       fileId,
       mimeType: file.type,
       fileSize: file.size,
-      senderProof,
     };
   } catch (error) {
-    console.error("Error preparing file for sharing:", error);
+    logger.error("Error preparing file for sharing:", error);
     throw error;
   }
 }
@@ -495,7 +456,7 @@ function arrayBufferToHex(buffer: ArrayBuffer): string {
 }
 
 /**
- * Store file sharing information in Supabase
+ * Store file sharing information in the database
  */
 export async function storeFileShare(
   shareId: string,
@@ -503,11 +464,15 @@ export async function storeFileShare(
   fileData: any
 ): Promise<void> {
   try {
-    // 1. Upload file to Supabase Storage using S3 client
-    const filePath = `shared-files/${shareId}`;
+    // 1. Upload encrypted file to MinIO using pre-signed URL
+    // Backend generates secure temporary upload URL
+    const fileKey = await uploadEncryptedFile(
+      fileData.fileName,
+      fileData.encryptedFileBlob,
+      fileData.fileMimeType
+    );
 
-    // Use the S3 client instead of supabase.storage
-    await uploadEncryptedFile(filePath, fileData.encryptedFileBlob);
+    logger.log(`[FILE-SHARE] File uploaded to MinIO with key: ${fileKey}`);
 
     // 2. Store metadata in database, with reference to file in storage
     const encryptedFileKeyArrayBuffer = base64ToArrayBuffer(
@@ -516,69 +481,35 @@ export async function storeFileShare(
     // Convert ArrayBuffer to a hex string for BYTEA storage
     const encryptedFileKeyHex = arrayBufferToHex(encryptedFileKeyArrayBuffer);
 
-    console.log(
-      `[SENDER-DEBUG] Storing encryptedFileKey for share_id ${shareId}. Original base64: "${fileData.encryptedFileKey}", Hex for DB: "${encryptedFileKeyHex}" (length: ${encryptedFileKeyHex.length})`
+    logger.log(
+      `[FILE-SHARE] Storing encryptedFileKey for share_id ${shareId}. Original base64: "${fileData.encryptedFileKey}", Hex for DB: "${encryptedFileKeyHex}" (length: ${encryptedFileKeyHex.length})`
     );
 
-    const { data, error } = await supabase.from("shared_files").insert({
-      share_id: shareId,
-      encrypted_file_blob_id: filePath, // Reference to storage location
-      recipient_email_hash: fileData.recipientHashedEmail,
-      encrypted_file_key: encryptedFileKeyHex, // Store the hex string
-      sender_proof: fileData.senderProof,
-      file_name: fileData.originalFileName,
-      file_mime_type: fileData.mimeType,
-      file_size: fileData.fileSize,
-    });
+    try {
+      // Calculate expiration date (7 days from now)
+      const expirationDate = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
 
-    if (error) {
-      console.error("Error inserting into shared_files:", error);
+      const data = await apiClient.sharedFiles.create({
+        file_id: fileKey, // Reference to MinIO storage location
+        recipient_user_id: fileData.recipientHashedEmail,
+        recipient_email: fileData.recipientEmail, // For email notification
+        custom_message: fileData.customMessage, // Optional custom message from sender
+        encrypted_file_key: encryptedFileKeyHex, // Store the hex string
+        file_name: fileData.originalFileName, // Store original filename, not encrypted blob name
+        file_size: fileData.fileSize || 0,
+        mime_type: fileData.mimeType,
+        access_type: 'view',
+        expires_at: expirationDate // Auto-delete after 7 days if not claimed
+      });
+      logger.log(`[FILE-SHARE] Successfully stored file share:`, data);
+    } catch (error) {
+      logger.error("Error creating shared file:", error);
       throw error;
     }
-    console.log(`[SENDER-DEBUG] Successfully stored share_id ${shareId}`);
+    logger.log(`[FILE-SHARE] Successfully stored share_id ${shareId}`);
   } catch (error) {
-    console.error("Error in storeFileShare:", error);
+    logger.error("Error in storeFileShare:", error);
     throw error;
-  }
-}
-
-/**
- * Finds all files shared with a specific recipient, based on their email.
- * @param recipientEmail The email address of the recipient.
- * @returns A Promise that resolves to an array of shared file metadata.
- */
-export async function findFilesSharedWithRecipient(
-  recipientEmail: string
-): Promise<any[]> {
-  // Hash the recipient's email to look up in the database
-  const recipientEmailHash = await hashEmail(recipientEmail);
-
-  const { data, error } = await supabase
-    .from("shared_files")
-    .select("*")
-    .eq("recipient_email_hash", recipientEmailHash)
-    .eq("is_claimed", false);
-
-  if (error) {
-    throw new Error(`Failed to fetch shared files: ${error.message}`);
-  }
-
-  return data || [];
-}
-
-/**
- * Marks a shared file as claimed by the recipient.
- * @param shareId The unique identifier for the share.
- * @returns A Promise that resolves when the share is successfully marked as claimed.
- */
-export async function markFileShareAsClaimed(shareId: string): Promise<void> {
-  const { error } = await supabase
-    .from("shared_files")
-    .update({ is_claimed: true })
-    .eq("share_id", shareId);
-
-  if (error) {
-    throw new Error(`Failed to mark file as claimed: ${error.message}`);
   }
 }
 
@@ -589,29 +520,29 @@ export async function markFileShareAsClaimed(shareId: string): Promise<void> {
  * @param userEmail The current user's email
  * @param originalFileName The original file name
  * @param mimeType The original MIME type
+ * @param mnemonic The user's mnemonic phrase for decrypting the private key
  */
 export async function decryptSharedFile(
   encryptedFileBlob: Blob,
   encryptedFileKey: string,
   userEmail: string,
   originalFileName: string,
-  mimeType: string
+  mimeType: string,
+  mnemonic: string
 ): Promise<{
   decryptedFile: Blob;
   fileName: string;
 }> {
   try {
     // Get the user's private key
-    const userKeyPair = await getUserKeyPair(userEmail);
+    const userKeyPair = await getUserKeyPair(userEmail, mnemonic);
     if (!userKeyPair || !userKeyPair.privateKeyJwk) {
       throw new Error(
         "Private key JWK not found. Please ensure keys are generated and retrieved correctly."
       );
     }
 
-    console.log("Attempting decryption for user:", userEmail);
-    console.log("Encrypted File Key (base64):", encryptedFileKey);
-    console.log("Private Key JWK:", userKeyPair.privateKeyJwk);
+    // Decryption attempt - sensitive data not logged for security
 
     const jwk = userKeyPair.privateKeyJwk;
     let importParams;
@@ -622,15 +553,13 @@ export async function decryptSharedFile(
     if (jwk.alg === "RSA-OAEP-256") {
       importParams = { name: "RSA-OAEP", hash: { name: "SHA-256" } };
       decryptParams = { name: "RSA-OAEP" }; // Hash is part of the key after import
-      console.log("Using RSA-OAEP with SHA-256 based on JWK alg.");
     } else if (jwk.alg === "RSA-OAEP" || jwk.alg === "RSA-OAEP-1") {
       // Common for SHA-1
       importParams = { name: "RSA-OAEP", hash: { name: "SHA-1" } };
       decryptParams = { name: "RSA-OAEP" };
-      console.log("Using RSA-OAEP with SHA-1 based on JWK alg.");
     } else {
       // Fallback or throw error if alg is unexpected
-      console.warn("Unexpected JWK alg:", jwk.alg, "Defaulting to SHA-256.");
+      logger.warn("Unexpected JWK alg:", jwk.alg, "Defaulting to SHA-256.");
       importParams = { name: "RSA-OAEP", hash: { name: "SHA-256" } };
       decryptParams = { name: "RSA-OAEP" };
     }
@@ -642,13 +571,12 @@ export async function decryptSharedFile(
       false, // Not extractable
       ["decrypt"]
     );
-    console.log("Private key imported successfully.");
 
     const encryptedFileKeyArray = base64ToArrayBuffer(encryptedFileKey);
     if (!encryptedFileKeyArray || encryptedFileKeyArray.byteLength === 0) {
       throw new Error("Converted encryptedFileKeyArray is empty or invalid.");
     }
-    console.log(
+    logger.log(
       "Encrypted file key ArrayBuffer length:",
       encryptedFileKeyArray.byteLength
     );
@@ -658,7 +586,7 @@ export async function decryptSharedFile(
       privateKey,
       encryptedFileKeyArray
     );
-    console.log("File key decrypted successfully.");
+    logger.log("File key decrypted successfully.");
 
     // Import the file key (AES-GCM)
     const fileKey = await crypto.subtle.importKey(
@@ -671,7 +599,7 @@ export async function decryptSharedFile(
       false, // Not extractable
       ["decrypt"]
     );
-    console.log("AES-GCM symmetric key imported successfully.");
+    logger.log("AES-GCM symmetric key imported successfully.");
 
     // Read the encrypted file as ArrayBuffer
     const encryptedFileWithIV = await encryptedFileBlob.arrayBuffer();
@@ -679,7 +607,7 @@ export async function decryptSharedFile(
     // Extract the IV (first 12 bytes) and encrypted file data
     const iv = new Uint8Array(encryptedFileWithIV.slice(0, 12));
     const encryptedFile = new Uint8Array(encryptedFileWithIV.slice(12));
-    console.log(
+    logger.log(
       "IV length:",
       iv.byteLength,
       "Encrypted data length:",
@@ -695,7 +623,7 @@ export async function decryptSharedFile(
       fileKey,
       encryptedFile
     );
-    console.log("File content decrypted successfully.");
+    logger.log("File content decrypted successfully.");
 
     // Create a Blob from the decrypted file
     const decryptedBlob = new Blob([decryptedFile], {
@@ -707,7 +635,7 @@ export async function decryptSharedFile(
       fileName: originalFileName,
     };
   } catch (error: any) {
-    console.error(
+    logger.error(
       "Error decrypting shared file:",
       error.name,
       error.message,
@@ -723,71 +651,75 @@ export async function decryptSharedFile(
   }
 }
 
-// Get the user's session token
-export async function getS3Client() {
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
+/**
+ * Upload encrypted file using pre-signed URL from backend
+ * @param fileName The name of the file
+ * @param fileBlob The encrypted file blob to upload
+ * @param mimeType Optional MIME type
+ * @returns The file key for retrieving the file later
+ */
+export async function uploadEncryptedFile(
+  fileName: string,
+  fileBlob: Blob,
+  mimeType?: string
+): Promise<string> {
+  // Step 1: Request pre-signed upload URL from backend
+  const response = await apiClient.post('/presigned-url/upload', {
+    fileName,
+    fileSize: fileBlob.size,
+    mimeType: mimeType || 'application/octet-stream',
+  });
 
-  // For testing - skip session check and use anon key directly
-  return new S3Client({
-    forcePathStyle: true,
-    region: process.env.REACT_APP_AWS_REGION || "",
-    endpoint: process.env.REACT_APP_AWS_ENDPOINT_URL || "",
-    credentials: {
-      accessKeyId: process.env.REACT_APP_AWS_ACCESS_KEY_ID || "",
-      secretAccessKey: process.env.REACT_APP_AWS_SECRET_ACCESS_KEY || "",
-      // Use an empty session token to bypass authentication for now
-      sessionToken: session?.access_token || "",
+  const { uploadUrl, fileKey } = response.data as { uploadUrl: string; fileKey: string };
+
+  // Step 2: Upload encrypted file directly to MinIO using pre-signed URL
+  const uploadResponse = await fetch(uploadUrl, {
+    method: 'PUT',
+    body: fileBlob,
+    headers: {
+      'Content-Type': mimeType || 'application/octet-stream',
     },
   });
-}
 
-// Upload file
-export async function uploadEncryptedFile(filePath: string, fileBlob: Blob) {
-  // Convert Blob to ArrayBuffer
-  const arrayBuffer = await fileBlob.arrayBuffer();
-  const uint8Array = new Uint8Array(arrayBuffer); // Convert to Uint8Array
-
-  const client = await getS3Client();
-  const command = new PutObjectCommand({
-    Bucket: "secure-files",
-    Key: filePath,
-    Body: uint8Array, // Use Uint8Array
-    ContentType: "application/octet-stream",
-  });
-
-  return client.send(command);
-}
-
-// Download file
-export async function downloadEncryptedFile(filePath: string) {
-  const client = await getS3Client();
-  const command = new GetObjectCommand({
-    Bucket: "secure-files",
-    Key: filePath,
-  });
-
-  const response = await client.send(command);
-  return response.Body;
-}
-
-// Delete file from Supabase Storage (S3)
-export async function deleteFileFromSupabaseStorage(
-  filePath: string
-): Promise<void> {
-  const client = await getS3Client();
-  const command = new DeleteObjectCommand({
-    Bucket: "secure-files", // Make sure this matches your bucket name
-    Key: filePath,
-  });
-
-  try {
-    await client.send(command);
-    console.log(`Successfully deleted ${filePath} from Supabase Storage.`);
-  } catch (error: any) {
-    console.error(`Failed to delete ${filePath} from Supabase Storage:`, error);
-    // Optionally re-throw or handle as per application needs, e.g., toast notification
-    throw new Error(`Failed to delete from storage: ${error.message}`);
+  if (!uploadResponse.ok) {
+    throw new Error(`Failed to upload file: ${uploadResponse.statusText}`);
   }
+
+  logger.log(`File uploaded successfully: ${fileKey}`);
+  return fileKey;
+}
+
+/**
+ * Download encrypted file using pre-signed URL from backend
+ * @param fileKey The file key returned from upload
+ * @returns The encrypted file blob
+ */
+export async function downloadEncryptedFile(fileKey: string): Promise<Blob> {
+  // Step 1: Request pre-signed download URL from backend
+  const response = await apiClient.post('/presigned-url/download', {
+    fileKey,
+  });
+
+  const { downloadUrl } = response.data as { downloadUrl: string };
+
+  // Step 2: Download encrypted file from MinIO using pre-signed URL
+  const downloadResponse = await fetch(downloadUrl);
+
+  if (!downloadResponse.ok) {
+    throw new Error(`Failed to download file: ${downloadResponse.statusText}`);
+  }
+
+  const blob = await downloadResponse.blob();
+  logger.log(`File downloaded successfully: ${fileKey}`);
+  return blob;
+}
+
+/**
+ * Delete file from storage (future implementation)
+ * Note: For now, files are automatically cleaned up after 7 days
+ */
+export async function deleteFileFromStorage(fileKey: string): Promise<void> {
+  // TODO: Implement delete endpoint in backend if needed
+  // For now, rely on 7-day auto-deletion
+  logger.log(`File deletion not yet implemented. File will auto-delete after 7 days: ${fileKey}`);
 }

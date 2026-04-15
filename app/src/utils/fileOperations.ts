@@ -1,4 +1,3 @@
-import { gapi } from "gapi-script";
 import { toast } from "sonner";
 import {
   FileMeta,
@@ -7,9 +6,12 @@ import {
   getAllFilesForUser,
   sendToGoogleDrive, // The function that updates db-list.json
   clearUserFilesFromDB, // Function to clear DB for a user
+  getFoldersForUser, // Get folders for sync
 } from "./dexieDB";
 import { encryptFile } from "./encryptFile";
 import { getStoredKey } from "./cryptoUtils";
+import logger from "./logger";
+import { trackFileAddedToDrive } from "./analyticsTracker";
 
 // --- Upload Operation ---
 
@@ -18,11 +20,13 @@ import { getStoredKey } from "./cryptoUtils";
  * and triggers a sync of the full metadata list back to Google Drive.
  * @param file The file object to upload.
  * @param userEmail The email of the logged-in user.
+ * @param folderId Optional folder ID to upload to (null = root).
  * @returns The FileMeta object if successful, null otherwise.
  */
 export const uploadAndSyncFile = async (
   file: File,
-  userEmail: string
+  userEmail: string,
+  folderId?: string | null
 ): Promise<FileMeta | null> => {
   const uploadToastId = toast.loading(`Preparing ${file.name}...`);
 
@@ -33,21 +37,31 @@ export const uploadAndSyncFile = async (
       throw new Error("No encryption key found. Please manage keys.");
     }
 
-    // 2. Check auth and get token
-    const authInstance = gapi.auth2?.getAuthInstance();
-    if (!authInstance || !authInstance.isSignedIn.get()) {
+    // 2. Validate file size (max 100MB)
+    const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB in bytes
+    if (file.size > MAX_FILE_SIZE) {
+      const fileSizeMB = (file.size / 1024 / 1024).toFixed(2);
+      const errorMsg = `File too large. Maximum size is 100MB, your file is ${fileSizeMB}MB`;
+      toast.error(errorMsg, { id: uploadToastId });
+      throw new Error(errorMsg);
+    }
+
+    // 3. Check auth and get token
+    const { getGoogleAccessToken } = await import("./gapiInit");
+    const token = await getGoogleAccessToken();
+    if (!token) {
       throw new Error("User not authenticated.");
     }
-    const token = authInstance.currentUser.get().getAuthResponse().access_token;
 
-    // 3. Encrypt
+    // 4. Encrypt
     toast.loading(`Encrypting ${file.name}...`, { id: uploadToastId });
     const encryptedBlob = await encryptFile(file);
 
-    // 4. Prepare metadata & form data
+    // 5. Prepare metadata & form data
     const metadata = {
       name: file.name, // Drive uses this name
       mimeType: "application/octet-stream", // Store as generic binary
+      parents: folderId ? [folderId] : undefined, // Upload to folder if specified
       // Optional: Use original mimeType if needed elsewhere, but store generically
       // properties: { originalMimeType: file.type }
     };
@@ -58,7 +72,7 @@ export const uploadAndSyncFile = async (
     );
     form.append("file", encryptedBlob);
 
-    // 5. Upload to Google Drive
+    // 6. Upload to Google Drive
     toast.loading(`Uploading ${file.name} to Google Drive...`, {
       id: uploadToastId,
     });
@@ -83,28 +97,34 @@ export const uploadAndSyncFile = async (
 
     toast.loading(`Saving metadata for ${file.name}...`, { id: uploadToastId });
 
-    // 6. Add metadata to IndexedDB
+    // 7. Add metadata to IndexedDB
     const newFileMeta: FileMeta = {
       id: data.id,
       name: file.name, // Store original name
       mimeType: file.type, // Store original mimeType
       userEmail: userEmail,
       uploadedDate: new Date(),
+      folderId: folderId || null, // Store folder (null = root)
     };
     await addFile(newFileMeta);
 
-    // 7. Get updated full list from IndexedDB
+    // 8. Get updated full list from IndexedDB
     const updatedList = await getAllFilesForUser(userEmail);
+    const updatedFolders = await getFoldersForUser(userEmail);
 
-    // 8. Sync updated list to db-list.json on Google Drive
-    await sendToGoogleDrive(updatedList); // This handles its own toasts
+    // 9. Sync updated list to db-list.json on Google Drive
+    await sendToGoogleDrive(updatedList, updatedFolders); // This handles its own toasts
 
     toast.success(`Successfully uploaded and synced ${file.name}`, {
       id: uploadToastId,
     });
+
+    // Track analytics
+    await trackFileAddedToDrive('upload');
+
     return newFileMeta;
   } catch (error: any) {
-    console.error(`[Upload Error - ${file.name}]:`, error);
+    logger.error(`[Upload Error - ${file.name}]:`, error);
     toast.error(`Failed to upload ${file.name}`, {
       description: error.message,
       id: uploadToastId,
@@ -132,11 +152,11 @@ export const deleteAndSyncFile = async (
 
   try {
     // 1. Check auth and get token
-    const authInstance = gapi.auth2?.getAuthInstance();
-    if (!authInstance || !authInstance.isSignedIn.get()) {
+    const { getGoogleAccessToken } = await import("./gapiInit");
+    const token = await getGoogleAccessToken();
+    if (!token) {
       throw new Error("User not authenticated.");
     }
-    const token = authInstance.currentUser.get().getAuthResponse().access_token;
 
     // 2. Attempt to delete from Google Drive
     toast.loading(`Deleting ${fileName} from Google Drive...`, {
@@ -152,7 +172,7 @@ export const deleteAndSyncFile = async (
 
     // 2a. Check response - 404 (Not Found) is OK, means it's already gone from Drive.
     if (!response.ok && response.status !== 404) {
-      console.warn(
+      logger.warn(
         `Google Drive delete failed (Status: ${response.status}): ${response.statusText}`
       );
       // Optionally throw error or just continue to ensure local DB is cleaned up
@@ -173,16 +193,17 @@ export const deleteAndSyncFile = async (
 
     // 4. Get updated full list from IndexedDB
     const updatedList = await getAllFilesForUser(userEmail);
+    const updatedFolders = await getFoldersForUser(userEmail);
 
     // 5. Sync updated list to db-list.json on Google Drive
-    await sendToGoogleDrive(updatedList); // This handles its own success/error toast for sync
+    await sendToGoogleDrive(updatedList, updatedFolders); // This handles its own success/error toast for sync
 
     toast.success(`Successfully processed deletion for ${fileName}.`, {
       id: deleteToastId,
     });
     return true;
   } catch (error: any) {
-    console.error(`[Delete Error - ${fileName}]:`, error);
+    logger.error(`[Delete Error - ${fileName}]:`, error);
     toast.error(`Failed to process deletion for ${fileName}`, {
       description: error.message,
       id: deleteToastId,
@@ -216,11 +237,11 @@ export const deleteAllAndSyncFiles = async (
     });
 
     // 2. Check auth and get token (needed for Drive delete loop)
-    const authInstance = gapi.auth2?.getAuthInstance();
-    if (!authInstance || !authInstance.isSignedIn.get()) {
+    const { getGoogleAccessToken } = await import("./gapiInit");
+    const token = await getGoogleAccessToken();
+    if (!token) {
       throw new Error("User not authenticated.");
     }
-    const token = authInstance.currentUser.get().getAuthResponse().access_token;
 
     // 3. Delete each file from Google Drive (best effort, ignore 404s)
     let driveDeleteFailures = 0;
@@ -235,13 +256,13 @@ export const deleteAllAndSyncFiles = async (
             }
           );
           if (!response.ok && response.status !== 404) {
-            console.warn(
+            logger.warn(
               `Failed to delete file ${fileId} from Drive: ${response.statusText}`
             );
             driveDeleteFailures++;
           }
         } catch (driveError) {
-          console.error(
+          logger.error(
             `Error deleting file ${fileId} from Drive:`,
             driveError
           );
@@ -265,7 +286,8 @@ export const deleteAllAndSyncFiles = async (
     await clearUserFilesFromDB(userEmail);
 
     // 5. Sync the (now empty) list to db-list.json on Google Drive
-    await sendToGoogleDrive([]); // Send empty array
+    const updatedFolders = await getFoldersForUser(userEmail);
+    await sendToGoogleDrive([], updatedFolders); // Send empty file array
 
     toast.success(
       `Successfully deleted all ${fileIds.length} files and synced metadata.`,
@@ -273,7 +295,7 @@ export const deleteAllAndSyncFiles = async (
     );
     return true;
   } catch (error: any) {
-    console.error("[Delete All Error]:", error);
+    logger.error("[Delete All Error]:", error);
     toast.error("Failed to delete all files", {
       description: error.message,
       id: deleteToastId,

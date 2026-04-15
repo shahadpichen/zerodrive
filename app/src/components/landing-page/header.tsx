@@ -1,6 +1,4 @@
 import React from "react";
-import { FaGithub } from "react-icons/fa";
-import { AiTwotoneQuestionCircle } from "react-icons/ai";
 import { useNavigate } from "react-router-dom";
 import { ModeToggle } from "../../components/mode-toggle";
 
@@ -9,13 +7,13 @@ function Header() {
 
   return (
     <header className="flex h-[10vh] border-b justify-between pt-5 items-center gap-4 px-10 lg:px-10">
-      <a
+      <button
         onClick={() => navigate("/")}
-        className="mr-6 flex items-center space-x-1 cursor-pointer"
+        className="mr-6 flex items-center space-x-1 cursor-pointer bg-transparent border-none p-0"
       >
         {/* <img src="/logo192.png" alt="ZeroDrive Logo" className="h-10 w-10" /> */}
         <span className="font-semibold text-lg sm:inline-block">ZeroDrive</span>
-      </a>
+      </button>
       <div className="flex flex-row items-center gap-5">
         <h1
           className="flex items-center gap-1 cursor-pointer"

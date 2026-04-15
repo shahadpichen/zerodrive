@@ -30,7 +30,6 @@ import {
 import { getAllFilesForUser, sendToGoogleDrive } from "../../utils/dexieDB";
 import { deleteAndSyncFile } from "../../utils/fileOperations";
 import { toast } from "sonner";
-import { gapi } from "gapi-script";
 
 interface DataTableProps<TData, TValue> {
   columns: ColumnDef<TData, TValue>[];
@@ -81,14 +80,12 @@ export function DataTable<TData, TValue>({
         `Deleting ${filesToDelete.length} selected file(s)...`
       );
 
-      const authInstance = gapi.auth2.getAuthInstance();
-      if (!authInstance || !authInstance.isSignedIn.get()) {
+      const { getUserEmail } = await import("../../utils/authService");
+      const userEmail = await getUserEmail();
+
+      if (!userEmail) {
         throw new Error("Cannot fetch user email - not signed in.");
       }
-      const userEmail = authInstance.currentUser
-        .get()
-        .getBasicProfile()
-        .getEmail();
 
       for (const file of filesToDelete) {
         const success = await deleteAndSyncFile(file.id, file.name, userEmail);

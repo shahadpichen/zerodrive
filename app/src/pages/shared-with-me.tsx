@@ -1,25 +1,21 @@
 import React, { useState, useEffect, FC } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "../components/ui/button";
-import { ArrowLeft, FileIcon, Download, RefreshCw } from "lucide-react";
-import { gapi } from "gapi-script";
+import { FileIcon, Download, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import {
   Card,
   CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
 } from "../components/ui/card";
 import { Separator } from "../components/ui/separator";
 import {
-  findFilesSharedWithRecipient,
   decryptSharedFile,
   hashEmail,
   arrayBufferToBase64,
-  UserKeyPair,
   storeUserPublicKey,
-  deleteFileFromSupabaseStorage,
+  deleteFileFromStorage,
+  fetchUserPublicKey,
+  downloadEncryptedFile,
 } from "../utils/fileSharing";
 import {
   Table,
@@ -29,33 +25,30 @@ import {
   TableHeader,
   TableRow,
 } from "../components/ui/table";
-import {
-  userHasStoredKeys,
-  getUserKeyPair,
-  storeUserKeyPair,
-} from "../utils/keyStorage";
-import supabase from "../utils/supabaseClient";
-import { downloadEncryptedFile } from "../utils/fileSharing";
+import { getUserKeyPair } from "../utils/keyStorage";
+import apiClient from "../utils/apiClient";
 import { getStoredKey } from "../utils/cryptoUtils";
-import { downloadEncryptedRsaKeyFromDrive } from "../utils/gdriveKeyStorage";
-import { decryptRsaPrivateKeyWithAesKey } from "../utils/rsaKeyManager";
 import { uploadAndSyncFile } from "../utils/fileOperations";
+import { trackEvent, AnalyticsEvent, AnalyticsCategory } from "../utils/analyticsTracker";
+import { getMnemonic } from "../utils/mnemonicManager";
+import { recoverRsaKeysIfNeeded } from "../utils/rsaKeyRecovery";
 
 interface SharedFile {
   id: string;
-  fileId?: string;
+  fileId: string;
   driveFileId?: string;
-  encrypted_file_blob_id: string;
   originalFileName: string;
   sender: string;
   createdAt: string;
   encryptedFileKey: string;
   fileSize?: number;
   mimeType?: string;
+  encrypted_file_blob_id: string;
 }
 
 const SharedWithMePage: FC = () => {
   const navigate = useNavigate();
+
   const [userEmail, setUserEmail] = useState<string>("");
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [sharedFiles, setSharedFiles] = useState<SharedFile[]>([]);
@@ -65,24 +58,20 @@ const SharedWithMePage: FC = () => {
 
   // Get the user's email from Google auth
   useEffect(() => {
-    const getUserEmail = () => {
+    const getUserEmail = async () => {
       try {
-        const authInstance = gapi.auth2?.getAuthInstance();
-        if (authInstance && authInstance.isSignedIn.get()) {
-          const profile = authInstance.currentUser.get().getBasicProfile();
-          if (profile) {
-            const email = profile.getEmail();
-            setUserEmail(email);
-          } else {
-            console.warn("GAPI signed in but profile is null.");
-            navigate("/");
-          }
+        // Use authService to get email (more reliable than GAPI)
+        const { getUserEmail: getEmail } = await import("../utils/authService");
+        const email = await getEmail();
+
+        if (email) {
+          setUserEmail(email);
         } else {
-          console.warn("GAPI not signed in or auth instance unavailable.");
+          console.warn("User not authenticated");
           navigate("/");
         }
       } catch (error) {
-        console.error("Error getting user profile:", error);
+        console.error("Error getting user email:", error);
         navigate("/");
       }
     };
@@ -90,15 +79,41 @@ const SharedWithMePage: FC = () => {
     getUserEmail();
   }, [navigate]);
 
-  // Check if user has generated keys
+  // Check if user has generated keys and recover if needed
   useEffect(() => {
     const checkForKeys = async () => {
       if (!userEmail) return;
 
       setIsCheckingKeys(true);
       try {
-        const hasStoredKeysInDb = await userHasStoredKeys(userEmail);
-        setHasKeys(hasStoredKeysInDb);
+        // Use centralized recovery utility
+        const result = await recoverRsaKeysIfNeeded(userEmail, false);
+
+        if (result.keysExisted || result.recovered) {
+          setHasKeys(true);
+
+          // Auto-repair: Ensure public key is synced to server
+          if (result.keysExisted) {
+            const hashedEmail = await hashEmail(userEmail);
+            try {
+              const serverKey = await fetchUserPublicKey(hashedEmail);
+              if (!serverKey) {
+                const mnemonic = getMnemonic();
+                if (mnemonic) {
+                  const localKeyPair = await getUserKeyPair(userEmail, mnemonic);
+                  if (localKeyPair?.publicKeyJwk) {
+                    await storeUserPublicKey(hashedEmail, localKeyPair.publicKeyJwk);
+                    console.log('Public key synced to server');
+                  }
+                }
+              }
+            } catch (syncError) {
+              console.error('Error syncing public key to server:', syncError);
+            }
+          }
+        } else {
+          setHasKeys(false);
+        }
       } catch (error) {
         console.error("Error checking for keys:", error);
         setHasKeys(false);
@@ -120,12 +135,8 @@ const SharedWithMePage: FC = () => {
       setIsLoading(true);
       try {
         const hashedEmail = await hashEmail(userEmail);
-        const { data, error } = await supabase
-          .from("shared_files")
-          .select("*")
-          .eq("recipient_email_hash", hashedEmail);
-
-        if (error) throw error;
+        const result = await apiClient.sharedFiles.getForUser(hashedEmail);
+        const data = result.files;
 
         if (data) {
           const mappedFiles: SharedFile[] = data.map((dbRow: any) => {
@@ -152,13 +163,13 @@ const SharedWithMePage: FC = () => {
               id: dbRow.id,
               fileId: dbRow.file_id,
               driveFileId: dbRow.drive_file_id,
-              encrypted_file_blob_id: dbRow.encrypted_file_blob_id,
               originalFileName: dbRow.file_name,
               sender: dbRow.sender_hashed_email,
               createdAt: new Date(dbRow.created_at).toLocaleString(),
               encryptedFileKey: finalEncryptedFileKey,
               fileSize: dbRow.file_size,
               mimeType: dbRow.file_mime_type,
+              encrypted_file_blob_id: dbRow.encrypted_file_blob_id,
             };
           });
           setSharedFiles(mappedFiles);
@@ -184,12 +195,8 @@ const SharedWithMePage: FC = () => {
 
     try {
       const hashedEmail = await hashEmail(userEmail);
-      const { data, error } = await supabase
-        .from("shared_files")
-        .select("*")
-        .eq("recipient_email_hash", hashedEmail);
-
-      if (error) throw error;
+      const result = await apiClient.sharedFiles.getForUser(hashedEmail);
+      const data = result.files;
 
       if (data) {
         const mappedFiles: SharedFile[] = data.map((dbRow: any) => {
@@ -245,6 +252,19 @@ const SharedWithMePage: FC = () => {
       return;
     }
 
+    // Check for primary key BEFORE allowing download
+    const primaryKey = await getStoredKey();
+    if (!primaryKey) {
+      toast.error("Primary encryption key required", {
+        description: "You must set up your encryption key before downloading shared files. Redirecting to Key Management...",
+        duration: 5000,
+      });
+      setTimeout(() => {
+        navigate("/key-management");
+      }, 2000);
+      return;
+    }
+
     setIsDownloading(file.id);
     const downloadToastId = toast.loading(
       `Downloading ${file.originalFileName}...`
@@ -256,96 +276,34 @@ const SharedWithMePage: FC = () => {
     try {
       if (!currentHasKeys) {
         toast.dismiss(downloadToastId);
-        const recoveryToastId = toast.loading(
-          "Sharing keys not found locally. Checking primary key for backup recovery..."
-        );
-        const primaryAesKey = await getStoredKey();
 
-        if (!primaryAesKey) {
-          toast.error("Primary encryption key missing.", {
-            id: recoveryToastId,
-            description:
-              "Redirecting to Key Management to set up or restore your primary key.",
-            duration: 5000,
+        // Attempt recovery using centralized utility
+        const result = await recoverRsaKeysIfNeeded(userEmail, false);
+
+        if (result.recovered || result.keysExisted) {
+          setHasKeys(true);
+          currentHasKeys = true;
+          toast.loading(`Downloading ${file.originalFileName}...`, {
+            id: downloadToastId,
           });
-          navigate("/key-management");
-          setIsDownloading(null);
-          return;
-        }
-
-        toast.loading(
-          "Attempting to recover sharing keys from Google Drive backup...",
-          { id: recoveryToastId }
-        );
-        const backupBlob = await downloadEncryptedRsaKeyFromDrive();
-
-        if (backupBlob) {
-          try {
-            const privateKeyJwk = await decryptRsaPrivateKeyWithAesKey(
-              backupBlob,
-              primaryAesKey
-            );
-            const publicKeyJwk: JsonWebKey = {
-              kty: privateKeyJwk.kty,
-              n: privateKeyJwk.n,
-              e: privateKeyJwk.e,
-              alg: privateKeyJwk.alg
-                ? privateKeyJwk.alg.replace("PS", "RS")
-                : "RSA-OAEP-256",
-              key_ops: ["encrypt"],
-              ext: true,
-            };
-            if (!publicKeyJwk.n || !publicKeyJwk.e || !publicKeyJwk.kty) {
-              throw new Error(
-                "Failed to reconstruct public key from private key backup."
-              );
-            }
-            if (!privateKeyJwk.key_ops) {
-              privateKeyJwk.key_ops = ["decrypt"];
-            }
-            const recoveredKeyPair: UserKeyPair = {
-              publicKeyJwk,
-              privateKeyJwk,
-            };
-
-            await storeUserKeyPair(userEmail, recoveredKeyPair);
-            const hashedEmailForSupabase = await hashEmail(userEmail);
-            await storeUserPublicKey(
-              hashedEmailForSupabase,
-              recoveredKeyPair.publicKeyJwk
-            );
-
-            setHasKeys(true);
-            currentHasKeys = true;
-            toast.success("Sharing keys recovered from backup and loaded.", {
-              id: recoveryToastId,
-            });
-            toast.loading(`Downloading ${file.originalFileName}...`, {
-              id: downloadToastId,
-            });
-          } catch (decryptionError) {
-            toast.error("Failed to decrypt sharing key backup.", {
-              id: recoveryToastId,
-              description:
-                decryptionError instanceof Error
-                  ? decryptionError.message
-                  : "Primary key might be incorrect or backup corrupted.",
-            });
-            setIsDownloading(null);
-            return;
-          }
         } else {
-          toast.error("No sharing key backup found on Google Drive.", {
-            id: recoveryToastId,
+          // Recovery failed or no backup found
+          toast.error("Sharing keys not available", {
             description:
-              "Please generate sharing keys on the Share Files page if this is your first time or a new device.",
+              "Please enable file sharing in the storage page to generate your sharing keys.",
+            duration: 5000,
           });
           setIsDownloading(null);
           return;
         }
       }
 
-      const userKeyPair = await getUserKeyPair(userEmail);
+      const mnemonic = getMnemonic();
+      if (!mnemonic) {
+        throw new Error("Mnemonic not available. Cannot decrypt RSA private key.");
+      }
+
+      const userKeyPair = await getUserKeyPair(userEmail, mnemonic);
       if (!userKeyPair || !userKeyPair.privateKeyJwk) {
         throw new Error(
           "Private key JWK not found even after checks/recovery. Please ensure keys are generated and retrieved correctly."
@@ -362,16 +320,11 @@ const SharedWithMePage: FC = () => {
         finalEncryptedFileKey = arrayBufferToBase64(bytes.buffer);
       }
 
-      const s3Object = await downloadEncryptedFile(file.encrypted_file_blob_id);
-      if (!s3Object || !s3Object.transformToByteArray) {
-        throw new Error(
-          "Failed to retrieve file from storage or S3 object is invalid."
-        );
+      // Download encrypted file from MinIO using pre-signed URL
+      encryptedFileBlob = await downloadEncryptedFile(file.fileId);
+      if (!encryptedFileBlob) {
+        throw new Error("Failed to retrieve file from storage.");
       }
-      const fileBytes = await s3Object.transformToByteArray();
-      encryptedFileBlob = new Blob([fileBytes], {
-        type: file.mimeType || "application/octet-stream",
-      });
 
       toast.loading("Decrypting file...", { id: downloadToastId });
       const decryptedData = await decryptSharedFile(
@@ -379,7 +332,8 @@ const SharedWithMePage: FC = () => {
         finalEncryptedFileKey,
         userEmail,
         file.originalFileName,
-        file.mimeType || "application/octet-stream"
+        file.mimeType || "application/octet-stream",
+        mnemonic
       );
 
       const downloadUrl = URL.createObjectURL(decryptedData.decryptedFile);
@@ -394,6 +348,12 @@ const SharedWithMePage: FC = () => {
       toast.success(`Successfully downloaded ${decryptedData.fileName}`, {
         id: downloadToastId,
       });
+
+      // Track analytics for shared file access
+      await trackEvent(
+        AnalyticsEvent.SHARED_FILE_ACCESSED,
+        AnalyticsCategory.SHARING
+      );
 
       // ---- Add to user's own vault ----
       const saveToVaultToastId = toast.loading(
@@ -453,20 +413,11 @@ const SharedWithMePage: FC = () => {
           `Removing original share for ${file.originalFileName}...`
         );
         try {
-          // Delete from Supabase Storage (S3)
-          await deleteFileFromSupabaseStorage(file.encrypted_file_blob_id);
+          // Delete from MinIO storage (note: auto-deletion after 7 days)
+          await deleteFileFromStorage(file.encrypted_file_blob_id);
 
-          // Delete from Supabase shared_files table
-          const { error: dbDeleteError } = await supabase
-            .from("shared_files")
-            .delete()
-            .eq("id", file.id);
-
-          if (dbDeleteError) {
-            throw new Error(
-              `Failed to delete share record from database: ${dbDeleteError.message}`
-            );
-          }
+          // Delete from shared_files table via API
+          await apiClient.sharedFiles.delete(file.id);
 
           toast.success(
             `Original share for ${file.originalFileName} removed successfully.`,
@@ -535,39 +486,29 @@ const SharedWithMePage: FC = () => {
   };
 
   return (
-    <div className="flex justify-center items-center min-h-screen bg-background py-8">
-      <Card className="w-full max-w-4xl">
-        <CardHeader>
-          <div className="flex items-center justify-between mb-2">
-            <CardTitle>Files Shared With Me</CardTitle>
-            <div className="flex gap-2">
-              <Button
-                variant="outline"
-                size="icon"
-                onClick={handleRefresh}
-                disabled={isLoading}
-                aria-label="Refresh"
-              >
-                <RefreshCw
-                  className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`}
-                />
-              </Button>
-              <Button
-                variant="outline"
-                size="icon"
-                onClick={() => navigate("/storage")}
-                aria-label="Back to Storage"
-              >
-                <ArrowLeft className="h-4 w-4" />
-              </Button>
-            </div>
-          </div>
-          <CardDescription>
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Shared With Me</h1>
+          <p className="text-muted-foreground mt-1">
             View and access files that have been shared with you
-          </CardDescription>
-        </CardHeader>
+          </p>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleRefresh}
+          disabled={isLoading}
+        >
+          <RefreshCw
+            className={`h-4 w-4 mr-2 ${isLoading ? "animate-spin" : ""}`}
+          />
+          Refresh
+        </Button>
+      </div>
 
-        <CardContent className="space-y-6">
+      <Card>
+        <CardContent className="pt-6 space-y-6">
           {isCheckingKeys ? (
             <div className="flex justify-center py-4">
               <p className="text-sm text-muted-foreground">

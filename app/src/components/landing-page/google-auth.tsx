@@ -1,77 +1,40 @@
-import React, { useEffect, useState } from "react";
-import { gapi } from "gapi-script";
+import React, { useState } from "react";
 import { Button } from "../ui/button";
 import googleLogo from "../../assets/google.png";
+import { login } from "../../utils/authService";
+import { Loader2 } from "lucide-react";
 
 interface GoogleAuthProps {
   onAuthChange: (authenticated: boolean) => void;
   theme?: "dark" | "light";
 }
 
-export const GoogleAuth: React.FC<GoogleAuthProps> = ({
-  onAuthChange,
-  theme = "dark",
-}) => {
-  const [isInitialized, setIsInitialized] = useState(false);
+export const GoogleAuth: React.FC<GoogleAuthProps> = ({ theme = "dark" }) => {
+  const [isSigningIn, setIsSigningIn] = useState(false);
 
-  useEffect(() => {
-    const initClient = async () => {
-      try {
-        await new Promise<void>((resolve) => {
-          gapi.load("client:auth2", resolve);
-        });
-
-        await gapi.client.init({
-          clientId: process.env.REACT_APP_PUBLIC_CLIENT_ID,
-          scope: process.env.REACT_APP_PUBLIC_SCOPE,
-        });
-
-        const authInstance = gapi.auth2.getAuthInstance();
-
-        // Check if already signed in
-        if (authInstance.isSignedIn.get()) {
-          localStorage.setItem("isAuthenticated", "true");
-          onAuthChange(true);
-          window.location.href = "/storage";
-        }
-
-        setIsInitialized(true);
-      } catch (error) {
-        console.error("Error initializing Google Auth:", error);
-      }
-    };
-
-    initClient();
-  }, [onAuthChange]);
-
-  const handleSignIn = async () => {
-    try {
-      if (!isInitialized) return;
-
-      const authInstance = gapi.auth2.getAuthInstance();
-      const user = await authInstance.signIn();
-
-      if (user) {
-        localStorage.setItem("isAuthenticated", "true");
-        onAuthChange(true);
-        window.location.href = "/storage";
-      }
-    } catch (error) {
-      console.error("Error signing in:", error);
-      localStorage.removeItem("isAuthenticated");
-      onAuthChange(false);
-    }
+  const handleSignIn = () => {
+    setIsSigningIn(true);
+    // Redirect to backend OAuth endpoint
+    login();
   };
 
   return (
     <Button
       onClick={handleSignIn}
-      className="px-8 py-2 h-12 text-base font-medium w-64 shadow-md"
-      disabled={!isInitialized}
+      className="px-8 py-2 h-12 text-base font-medium w-fit shadow-md"
+      disabled={isSigningIn}
     >
-      {/* <FaGoogle /> */}
-      <img src={googleLogo} alt="Google Logo" className="w-4 h-4 mr-2" />
-      Sign in with Google
+      {isSigningIn ? (
+        <>
+          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+          Redirecting to Google...
+        </>
+      ) : (
+        <>
+          <img src={googleLogo} alt="Google Logo" className="w-4 h-4 mr-2" />
+          Sign in with Google
+        </>
+      )}
     </Button>
   );
 };

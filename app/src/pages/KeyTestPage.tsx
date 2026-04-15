@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from "react";
 import { Button } from "../components/ui/button";
-import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
 import { Textarea } from "../components/ui/textarea";
 import {
@@ -45,8 +44,7 @@ const KeyTestPage: React.FC = () => {
       );
       setPublicKeyJwk(pubJwk);
       setPrivateKeyJwk(privJwk);
-      console.log("Generated Public Key JWK:", pubJwk);
-      console.log("Generated Private Key JWK:", privJwk);
+      // Keys generated - not logged for security
       setErrorLog(
         "New key pair generated successfully. Alg: " + (pubJwk.alg || "N/A")
       );
@@ -58,6 +56,7 @@ const KeyTestPage: React.FC = () => {
 
   useEffect(() => {
     generateKeys();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleEncrypt = async () => {

@@ -49,10 +49,10 @@ export function Sidebar({ activeSection, setActiveSection }: SidebarProps) {
                 setIsMobileMenuOpen(false);
               }}
               className={cn(
-                "flex items-center gap-3 w-full  px-3 py-2 text-sm font-medium transition-colors",
+                "flex items-center gap-3 w-full  px-3 py-2 text-sm font-medium",
                 activeSection === item.id
                   ? "text-secondary-foreground"
-                  : "hover:text-muted-foreground"
+                  : "hover:text-muted-foreground",
               )}
             >
               {item.label}
@@ -94,15 +94,15 @@ export function Sidebar({ activeSection, setActiveSection }: SidebarProps) {
       {/* Mobile Sidebar */}
       <div
         className={cn(
-          "fixed inset-0 z-40 md:hidden bg-black bg-opacity-50 transition-opacity",
-          isMobileMenuOpen ? "opacity-100" : "opacity-0 pointer-events-none"
+          "fixed inset-0 z-40 md:hidden bg-black bg-opacity-50",
+          isMobileMenuOpen ? "opacity-100" : "opacity-0 pointer-events-none",
         )}
         onClick={() => setIsMobileMenuOpen(false)}
       >
         <div
           className={cn(
-            "fixed inset-y-0 left-0 w-64 bg-[#FAFAFA] p-6 transform transition-transform duration-300 ease-in-out flex flex-col justify-between",
-            isMobileMenuOpen ? "translate-x-0" : "-translate-x-full"
+            "fixed inset-y-0 left-0 w-64 bg-[#FAFAFA] p-6 flex flex-col justify-between",
+            isMobileMenuOpen ? "translate-x-0" : "-translate-x-full",
           )}
           onClick={(e) => e.stopPropagation()}
         >
@@ -111,7 +111,7 @@ export function Sidebar({ activeSection, setActiveSection }: SidebarProps) {
       </div>
 
       {/* Desktop Sidebar */}
-      <div className="hidden md:flex w-[20vw] border-r p-6 h-[90vh] flex-col justify-between bg-[#FAFAFA]">
+      <div className="hidden md:flex w-[20vw] border-r p-6 h-[92vh] flex-col justify-between bg-[#FAFAFA]">
         <SidebarContent />
       </div>
     </>
