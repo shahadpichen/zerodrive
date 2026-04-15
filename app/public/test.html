@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ZeroDrive - Minimal Test</title>
+    <style>
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            padding: 40px;
+            max-width: 800px;
+            margin: 0 auto;
+            line-height: 1.6;
+        }
+        h1 { color: #059669; }
+        .info-box {
+            background: #f3f4f6;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+        code {
+            background: #1f2937;
+            color: #f3f4f6;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        #counter {
+            font-size: 48px;
+            font-weight: bold;
+            color: #2563eb;
+        }
+    </style>
+</head>
+<body>
+    <h1>✅ Static HTML Test Page</h1>
+    <p>If this page stays stable and doesn't reload, the problem is in the React app.</p>
+    <p>If this page ALSO reloads infinitely, the problem is your browser, dev server, or system.</p>
+
+    <div class="info-box">
+        <p><strong>URL:</strong> <code id="url"></code></p>
+        <p><strong>Cookies:</strong> <code id="cookies"></code></p>
+        <p><strong>Page loaded at:</strong> <code id="loadTime"></code></p>
+        <p><strong>Seconds alive:</strong> <span id="counter">0</span></p>
+    </div>
+
+    <h2>🔍 What to check:</h2>
+    <ul>
+        <li>Does the counter keep increasing? → Page is stable ✅</li>
+        <li>Does the counter reset to 0? → Page is reloading ❌</li>
+        <li>Check browser console - do you see "Still alive" messages?</li>
+    </ul>
+
+    <h2>✋ If this page IS stable:</h2>
+    <p>The problem is in the React application code. Specifically likely:</p>
+    <ul>
+        <li>A useEffect hook calling window.location.reload()</li>
+        <li>React Router navigation loop</li>
+        <li>Error boundary causing remount loop</li>
+    </ul>
+
+    <h2>⚠️ If this page ALSO reloads:</h2>
+    <ul>
+        <li>Try opening in Incognito mode (disables browser extensions)</li>
+        <li>Check your dev server console for errors/warnings</li>
+        <li>Check if you have any Chrome extensions that auto-reload pages</li>
+        <li>Try a different browser entirely</li>
+    </ul>
+
+    <script>
+        // Display basic info
+        document.getElementById('url').textContent = window.location.href;
+        document.getElementById('cookies').textContent = document.cookie || '(none)';
+        document.getElementById('loadTime').textContent = new Date().toISOString();
+
+        // Counter to detect reloads
+        let counter = 0;
+        const counterEl = document.getElementById('counter');
+
+        setInterval(() => {
+            counter++;
+            counterEl.textContent = counter;
+            console.log('✅ Still alive:', counter, 'seconds');
+
+            // Log cookies every 5 seconds to monitor changes
+            if (counter % 5 === 0) {
+                console.log('📊 Cookies:', document.cookie || '(none)');
+            }
+        }, 1000);
+
+        console.log('🔴 MINIMAL TEST PAGE LOADED');
+        console.log('If you see this message multiple times rapidly, page is reloading');
+    </script>
+</body>
+</html>

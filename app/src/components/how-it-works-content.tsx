@@ -1,37 +1,37 @@
 export const HowItWorksContent = [
   {
-    heading: "How It Works",
+    heading: "Your Keys, Your Files, Your Privacy",
     content:
-      "A simple, privacy-focused solution for secure file storage on Google Drive. Our open-source tool **encrypts your files locally** on your device and stores them in your Google Account.",
+      "ZeroDrive uses a <u>12-word recovery phrase</u> (BIP39 mnemonic) to generate your master encryption key. This phrase is the <u>only way</u> to access your encrypted files, and we never store it. You can write it down, save it in a password manager, or memorize it—but keep it safe. Without it, your files are permanently inaccessible.",
   },
   {
-    heading: "Secure Your Google Drive Files",
+    heading: "Personal File Encryption",
     content:
-      "Google Drive is convenient, but it lacks the privacy many users need. Our tool provides **end-to-end encryption**, ensuring that your files are **encrypted on your device** before they even leave. This way, **only you can access them**, no matter where they are stored. Your data remains private and secure, giving you peace of mind.",
+      "When you upload a file, ZeroDrive encrypts it <u>locally in your browser</u> using <u>AES-256-GCM</u>, a military-grade encryption standard. Your 12-word phrase derives a unique encryption key that never leaves your device. The encrypted file is then uploaded to your <u>Google Drive</u>, where it appears as an unreadable binary blob. Even Google cannot decrypt your files.",
   },
   {
-    heading: "Local Encryption Process",
+    heading: "Secure File Sharing with Public-Key Cryptography",
     content:
-      "Files are encrypted directly in your browser using **AES-GCM** (Advanced Encryption Standard in Galois/Counter Mode), a **highly secure encryption algorithm** that provides both confidentiality and authenticity. This **military-grade encryption** happens before any data is uploaded to Google Drive, ensuring your files are completely secured before leaving your device.",
+      "To share files securely, ZeroDrive generates an <u>RSA-2048 key pair</u> for your account. Your <u>public key</u> is stored on our server (hashed with your email for privacy), while your <u>private key</u> stays in your browser and never leaves. When someone shares a file with you, they encrypt a unique file key with your public key. Only you can decrypt it with your private key—ensuring true end-to-end encryption.",
   },
   {
-    heading: "Data Storage & Synchronization",
+    heading: "How Sharing Works Step-by-Step",
     content:
-      "**Encrypted files** are stored on your Google Drive while file metadata is stored locally using **Dexie.js (IndexDB)**. To enable cross-browser access, this metadata is also **encrypted using the same AES-GCM encryption** and stored on Google Drive. During each login, ZeroDrive automatically fetches and syncs this encrypted metadata.",
+      "1. **Sender** generates a random AES-256 key for the file<br/>2. File is encrypted with this key and uploaded to Google Drive<br/>3. The file key is encrypted with the **recipient's RSA public key**<br/>4. Encrypted key is stored in our database along with file metadata<br/>5. **Recipient** downloads the file and uses their **RSA private key** to decrypt the file key<br/>6. File is then decrypted locally using the recovered AES key<br/>7. **Important**: Unclaimed files are automatically deleted after 7 days for security<br/><br/>At no point does our server see the plaintext file or the unencrypted file key.",
   },
   {
-    heading: "Open Source Control",
+    heading: "Automatic File Expiration",
     content:
-      "As an **open source solution**, our tool puts you in the driver's seat. You can **review the source code**, **customize the implementation**, **host on your own servers**, and ensure it meets your specific security requirements. With ZeroDrive, you're not just a user—you have **complete control** over your data security.",
+      "For security and storage management, shared files that are **not accessed by the recipient within 7 days** are automatically deleted from our servers. This ensures:<br/><br/>• **Privacy**: Unclaimed files don't linger in storage<br/>• **Security**: Reduces exposure window for sensitive data<br/>• **Clean Storage**: Prevents database bloat from abandoned shares<br/><br/>Once the recipient accepts and downloads the file, it's permanently available in their account. The 7-day timer only applies to **pending** file shares that haven't been claimed yet.",
   },
   {
-    heading: "Key Features",
+    heading: "Zero-Knowledge Architecture",
     content:
-      "• **AES-GCM encryption**: Military-grade encryption for maximum security<br/>• **Privacy through E2E encryption**: Your files are encrypted before leaving your device<br/>• **Reliability of Google**: Leverage Google Drive's robust infrastructure<br/>• **Freedom of open-source**: Full transparency and customization options<br/>• **Cross-browser synchronization**: Access your files from any browser<br/>• **Local encryption**: All encryption happens directly in your browser",
+      "ZeroDrive is built on a <u>zero-knowledge</u> principle. Our server acts only as a coordinator for public key exchange and metadata storage. We never have access to:<br/><br/>• Your 12-word recovery phrase<br/>• Your master encryption key<br/>• Your RSA private key<br/>• Plaintext files or file keys<br/>• Unencrypted file metadata<br/><br/>All encryption and decryption happens <u>client-side in your browser</u> using the Web Crypto API.",
   },
   {
-    heading: "Technical Implementation",
+    heading: "Open Source for Complete Transparency",
     content:
-      "ZeroDrive implements **AES-GCM encryption** using the **Web Crypto API**, providing a secure and standardized approach to cryptography. The encryption process, including **key generation and management**, happens entirely in your browser using JavaScript. **Each file is encrypted with a unique key**, and all encryption keys are themselves encrypted before being stored. We utilize **IndexDB** for local storage and **Google Drive's API** for cloud storage, creating a seamless and secure file management experience.",
+      "As an <u>open-source</u> project, every line of ZeroDrive's code is available for review on GitHub. Security researchers, developers, and privacy advocates can audit our implementation to verify that we do exactly what we claim. You can also <u>self-host</u> the entire stack—frontend, backend, and database—on your own infrastructure for maximum control.",
   },
 ];

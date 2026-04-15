@@ -1,4 +1,4 @@
-import { deriveKeyFromMnemonic } from "./cryptoUtils";
+import logger from "./logger";
 
 /**
  * Symmetrically encrypts an RSA Private Key JWK using a provided AES-GCM CryptoKey.
@@ -41,7 +41,7 @@ export async function encryptRsaPrivateKeyWithAesKey(
     // 6. Return as a Blob
     return new Blob([resultBuffer], { type: "application/octet-stream" });
   } catch (error) {
-    console.error("Error encrypting RSA private key with AES key:", error);
+    logger.error("Error encrypting RSA private key with AES key:", error);
     throw new Error(
       "Failed to encrypt RSA private key for backup using AES key."
     );
@@ -93,7 +93,7 @@ export async function decryptRsaPrivateKeyWithAesKey(
     const privateKeyString = new TextDecoder().decode(decryptedBuffer);
     return JSON.parse(privateKeyString) as JsonWebKey;
   } catch (error: any) {
-    console.error("Error decrypting RSA private key with AES key:", error);
+    logger.error("Error decrypting RSA private key with AES key:", error);
     if (error.name === "OperationError") {
       throw new Error(
         "Failed to decrypt RSA private key with AES key. The AES key may be incorrect or the backup data is corrupted."

@@ -1,17 +1,28 @@
 import React from "react";
 import { Navigate } from "react-router-dom";
+import { isAuthenticated as checkAuth } from "../utils/authService";
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
-  isAuthenticated: boolean;
-  redirectPath: string;
+  redirectPath?: string;
 }
 
 const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
   children,
-  isAuthenticated,
-  redirectPath,
+  redirectPath = "/",
 }) => {
+  const [isAuthenticated, setIsAuthenticated] = React.useState<boolean | null>(null);
+
+  React.useEffect(() => {
+    checkAuth()
+      .then(setIsAuthenticated)
+      .catch(() => setIsAuthenticated(false));
+  }, []);
+
+  if (isAuthenticated === null) {
+    return null;
+  }
+
   if (!isAuthenticated) {
     return <Navigate to={redirectPath} replace />;
   }
