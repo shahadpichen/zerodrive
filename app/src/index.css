@@ -10,6 +10,11 @@ body {
   font-variation-settings: "wdth" 100;
 }
 
+.cabin-sketch {
+  font-family: "Cabin Sketch", sans-serif;
+  font-style: normal;
+}
+
 @layer base {
   :root {
     --background: 40 91% 98%;

@@ -17,7 +17,17 @@ function Footer() {
         </Link>
       </div>
 
-      <p className="mt-4">Created by Shahad Pichen</p>
+      <p className="mt-4">
+        Created by{" "}
+        <a
+          href="https://github.com/shahadpichen"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="hover:underline font-medium"
+        >
+          Shahad Pichen
+        </a>
+      </p>
     </footer>
   );
 }
