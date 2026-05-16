@@ -1,0 +1,13 @@
+if grep -qiE '(^|[[:space:]])co-authored-by:.*(claude|anthropic)|generated with[[:space:]]+\[?claude|noreply@anthropic\.com' "$1"; then
+	echo "Commit rejected: AI/LLM attribution detected in commit message." >&2
+	echo "Remove any 'Co-Authored-By: Claude' trailers and 'Generated with Claude Code' lines." >&2
+	exit 1
+fi
+
+AUTHOR_IDENT=$(git var GIT_AUTHOR_IDENT 2>/dev/null)
+if echo "$AUTHOR_IDENT" | grep -qiE '(claude|anthropic)'; then
+	echo "Commit rejected: AI/LLM attribution detected in author identity." >&2
+	echo "Author: $AUTHOR_IDENT" >&2
+	echo "Update your git user.name / user.email to remove 'claude' or 'anthropic'." >&2
+	exit 1
+fi

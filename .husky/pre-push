@@ -1,0 +1,6 @@
+echo "🔍 Type-checking app + backend before push..."
+
+( cd app && npx tsc --noEmit ) || { echo "❌ app type check failed. Fix errors before pushing." >&2; exit 1; }
+( cd backend && npx tsc --noEmit ) || { echo "❌ backend type check failed. Fix errors before pushing." >&2; exit 1; }
+
+echo "✅ Type checks passed!"
