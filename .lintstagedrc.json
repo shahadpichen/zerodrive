@@ -1,0 +1,11 @@
+{
+  "app/**/*.{js,jsx,ts,tsx}": [
+    "prettier --write",
+    "app/node_modules/.bin/eslint --fix"
+  ],
+  "backend/**/*.ts": [
+    "prettier --write",
+    "backend/node_modules/.bin/eslint --fix"
+  ],
+  "**/*.{json,css,md}": ["prettier --write"]
+}
