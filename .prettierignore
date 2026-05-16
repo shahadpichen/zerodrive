@@ -1,0 +1,24 @@
+# dependencies
+**/node_modules/
+
+# builds / generated output
+**/build/
+backend/dist/
+**/coverage/
+*.tsbuildinfo
+
+# lockfiles (let the package manager own these)
+**/package-lock.json
+**/yarn.lock
+
+# env files
+**/.env
+**/.env.*
+
+# static assets / non-source
+app/public/
+**/*.min.js
+**/*.min.css
+
+# misc
+.DS_Store

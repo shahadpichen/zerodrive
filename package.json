@@ -1,0 +1,13 @@
+{
+  "name": "zerodrive",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Zero-knowledge encrypted cloud storage — root tooling (formatting)",
+  "scripts": {
+    "format": "prettier --write \"{app,backend}/src/**/*.{ts,tsx,js,jsx,json,css,md}\"",
+    "format:check": "prettier --check \"{app,backend}/src/**/*.{ts,tsx,js,jsx,json,css,md}\""
+  },
+  "devDependencies": {
+    "prettier": "^3.8.3"
+  }
+}
