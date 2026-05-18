@@ -1332,6 +1332,16 @@ describe("Shared Files Routes Integration", () => {
     });
   });
 
+  describe("credit endpoints removed", () => {
+    it("GET /api/credits/balance/:userId returns 404 (route unmounted)", async () => {
+      const token = generateToken(testUserEmail);
+      const res = await request(app)
+        .get("/api/credits/balance/some-user")
+        .set("Cookie", [`zerodrive_token=${token}`]);
+      expect(res.status).toBe(404);
+    });
+  });
+
   describe("POST /api/shared-files/:id/access", () => {
     const validUuid = "550e8400-e29b-41d4-a716-446655440000";
 
