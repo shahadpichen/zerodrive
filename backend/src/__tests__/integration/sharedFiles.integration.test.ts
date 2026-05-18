@@ -15,7 +15,6 @@ import { requireAuth } from "../../middleware/auth";
 jest.mock("../../config/database");
 jest.mock("../../services/emailService");
 jest.mock("../../services/analytics");
-jest.mock("../../utils/creditOperations");
 
 const mockQuery = jest.fn();
 jest.mock("../../config/database", () => ({
@@ -39,18 +38,6 @@ jest.mock("../../services/analytics", () => ({
   },
   getFileSizeBucket: jest.fn((size: number) => "1MB-10MB"),
   getFileTypeCategory: jest.fn((mimeType: string) => "document"),
-}));
-
-const mockCheckCredits = jest.fn();
-const mockDeductCredits = jest.fn();
-jest.mock("../../utils/creditOperations", () => ({
-  checkCredits: (...args: any[]) => mockCheckCredits(...args),
-  deductCredits: (...args: any[]) => mockDeductCredits(...args),
-  COST_FILE_SHARE: 1.0,
-  COST_EMAIL_NOTIFICATION: 0.5,
-  TRANSACTION_TYPE: {
-    FILE_SHARE: "file_share",
-  },
 }));
 
 describe("Shared Files Routes Integration", () => {
@@ -168,8 +155,6 @@ describe("Shared Files Routes Integration", () => {
         expires_at: expiresAt,
       };
 
-      mockCheckCredits.mockResolvedValue(true);
-      mockDeductCredits.mockResolvedValue(9.0);
       mockQuery.mockResolvedValueOnce({ rows: [] });
       mockQuery.mockResolvedValueOnce({
         rows: [{ id: "share-uuid-123", ...requestWithExpiry }],
@@ -464,8 +449,6 @@ describe("Shared Files Routes Integration", () => {
     it("shares a file with no credit checks at all (credits removed)", async () => {
       const token = generateToken(testUserEmail);
 
-      // No credit mocks configured — handler must not call checkCredits/deductCredits
-
       // Mock check for existing share (none found)
       mockQuery.mockResolvedValueOnce({ rows: [] });
 
@@ -492,13 +475,10 @@ describe("Shared Files Routes Integration", () => {
 
       expect(response.status).toBe(201);
       expect(response.body.data).toBeDefined();
-      expect(mockCheckCredits).not.toHaveBeenCalled();
-      expect(mockDeductCredits).not.toHaveBeenCalled();
     });
 
     it("should return 409 when file is already shared with recipient", async () => {
       const token = generateToken(testUserEmail);
-      mockCheckCredits.mockResolvedValue(true);
 
       // Mock existing share found
       mockQuery.mockResolvedValueOnce({
@@ -516,12 +496,10 @@ describe("Shared Files Routes Integration", () => {
 
       expect(response.status).toBe(409);
       expect(response.body.error.message).toContain("already shared");
-      expect(mockDeductCredits).not.toHaveBeenCalled();
     });
 
     it("should return 500 on database error during share check", async () => {
       const token = generateToken(testUserEmail);
-      mockCheckCredits.mockResolvedValue(true);
       mockQuery.mockRejectedValueOnce(new Error("Database connection failed"));
 
       const response = await request(app)
@@ -539,7 +517,6 @@ describe("Shared Files Routes Integration", () => {
 
     it("should return 500 on database error during insert", async () => {
       const token = generateToken(testUserEmail);
-      mockCheckCredits.mockResolvedValue(true);
       mockQuery.mockResolvedValueOnce({ rows: [] }); // No existing share
       mockQuery.mockRejectedValueOnce(new Error("Insert failed"));
 
@@ -562,8 +539,6 @@ describe("Shared Files Routes Integration", () => {
         custom_message: "Check out this file!",
       };
 
-      mockCheckCredits.mockResolvedValue(true);
-      mockDeductCredits.mockResolvedValue(8.5);
       mockQuery.mockResolvedValueOnce({ rows: [] });
       mockQuery.mockResolvedValueOnce({
         rows: [{ id: "share-uuid-123", ...requestWithMessage }],
@@ -591,8 +566,6 @@ describe("Shared Files Routes Integration", () => {
       const requestWithoutAccessType = { ...validShareRequest };
       delete (requestWithoutAccessType as any).access_type;
 
-      mockCheckCredits.mockResolvedValue(true);
-      mockDeductCredits.mockResolvedValue(9.0);
       mockQuery.mockResolvedValueOnce({ rows: [] });
       mockQuery.mockResolvedValueOnce({
         rows: [
@@ -619,8 +592,6 @@ describe("Shared Files Routes Integration", () => {
 
     it("should handle analytics tracking failure gracefully", async () => {
       const token = generateToken(testUserEmail);
-      mockCheckCredits.mockResolvedValue(true);
-      mockDeductCredits.mockResolvedValue(9.0);
       mockQuery.mockResolvedValueOnce({ rows: [] });
       mockQuery.mockResolvedValueOnce({
         rows: [{ id: "share-uuid-123", ...validShareRequest }],
