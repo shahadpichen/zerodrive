@@ -36,11 +36,12 @@ Raw SQL queries via `pg` Pool — no ORM. See `config/database.ts` for connectio
 
 ## Routes
 
-`auth`, `publicKeys`, `sharedFiles`, `presignedUrls`, `crypto`, `invitations`, `credits`, `analytics`, `webhooks`
+`auth`, `publicKeys`, `sharedFiles`, `presignedUrls`, `crypto`, `invitations`, `analytics`, `webhooks`
 
 ## Testing
 
 Jest + ts-jest + supertest. Tests in `src/__tests__/`:
+
 - `__tests__/unit/` — services, middleware, routes
 - `__tests__/integration/` — full request/response tests with supertest
 - Path alias: `@/` maps to `src/` (configured in `jest.config.js` via `moduleNameMapper`)

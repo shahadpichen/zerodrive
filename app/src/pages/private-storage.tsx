@@ -16,7 +16,10 @@ import {
 import { ConfirmationDialog } from "../components/storage/confirmation-dialog";
 import { Separator } from "../components/ui/separator";
 import { RefreshCw, FolderPlus } from "lucide-react";
-import { FolderProvider, useFolderContext } from "../components/storage/folder-context";
+import {
+  FolderProvider,
+  useFolderContext,
+} from "../components/storage/folder-context";
 import { FolderBreadcrumb } from "../components/storage/folder-breadcrumb";
 import { CreateFolderDialog } from "../components/storage/create-folder-dialog";
 
@@ -228,7 +231,7 @@ function PrivateStorageContent() {
       const files = await getAllFilesForUser(userEmail);
       setUserHasFiles(files.length > 0);
       setRefreshFileListKey((prev) => prev + 1);
-      await refreshAll(); // Also refresh credits and storage
+      await refreshAll(); // Refresh storage
       toast.success("File list refreshed successfully.", {
         id: refreshToastId,
       });
@@ -275,7 +278,7 @@ function PrivateStorageContent() {
     if (successCount > 0) {
       setRefreshFileListKey((prev) => prev + 1);
       setUserHasFiles(true);
-      await refreshAll(); // Refresh credits and storage after upload
+      await refreshAll(); // Refresh storage after upload
     }
   };
 
@@ -300,7 +303,7 @@ function PrivateStorageContent() {
     if (success) {
       setRefreshFileListKey((prev) => prev + 1);
       setUserHasFiles(false);
-      await refreshAll(); // Refresh credits and storage after delete
+      await refreshAll(); // Refresh storage after delete
     }
   };
 
@@ -358,7 +361,10 @@ function PrivateStorageContent() {
         <Separator />
 
         {/* Breadcrumb Navigation */}
-        <FolderBreadcrumb userEmail={userEmail} onFileMoved={() => setRefreshFileListKey(prev => prev + 1)} />
+        <FolderBreadcrumb
+          userEmail={userEmail}
+          onFileMoved={() => setRefreshFileListKey((prev) => prev + 1)}
+        />
 
         {/* File List */}
         <FileList
