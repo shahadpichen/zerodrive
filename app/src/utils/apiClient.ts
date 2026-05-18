@@ -3,10 +3,15 @@
  * Handles all backend API communication
  */
 
-import { getCsrfToken, refreshToken, logout as authLogout } from './authService';
+import {
+  getCsrfToken,
+  refreshToken,
+  logout as authLogout,
+} from "./authService";
 
 // API Configuration
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001/api';
+const API_BASE_URL =
+  process.env.REACT_APP_API_URL || "http://localhost:3001/api";
 const DEFAULT_TIMEOUT = 30000; // 30 seconds
 
 // API Response Types
@@ -33,7 +38,6 @@ interface PublicKeyData {
   id?: string;
   user_id: string;
   public_key: string;
-  credits?: number;
   created_at?: string;
   updated_at?: string;
 }
@@ -46,7 +50,7 @@ interface SharedFileData {
   file_name: string;
   file_size: number;
   mime_type: string;
-  access_type: 'view' | 'download';
+  access_type: "view" | "download";
   expires_at?: string;
   last_accessed_at?: string;
   created_at?: string;
@@ -58,25 +62,29 @@ export class ApiError extends Error {
   public code: string;
   public statusCode: number;
 
-  constructor(message: string, code: string = 'API_ERROR', statusCode: number = 500) {
+  constructor(
+    message: string,
+    code: string = "API_ERROR",
+    statusCode: number = 500,
+  ) {
     super(message);
-    this.name = 'ApiError';
+    this.name = "ApiError";
     this.code = code;
     this.statusCode = statusCode;
   }
 }
 
 export class NetworkError extends Error {
-  constructor(message: string = 'Network request failed') {
+  constructor(message: string = "Network request failed") {
     super(message);
-    this.name = 'NetworkError';
+    this.name = "NetworkError";
   }
 }
 
 export class TimeoutError extends Error {
-  constructor(message: string = 'Request timeout') {
+  constructor(message: string = "Request timeout") {
     super(message);
-    this.name = 'TimeoutError';
+    this.name = "TimeoutError";
   }
 }
 
@@ -92,10 +100,10 @@ class HttpClient {
 
   private async request<T>(
     endpoint: string,
-    options: RequestInit = {}
+    options: RequestInit = {},
   ): Promise<ApiResponse<T>> {
     const url = `${this.baseUrl}${endpoint}`;
-    
+
     // Create AbortController for timeout
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), this.timeout);
@@ -103,15 +111,19 @@ class HttpClient {
     try {
       // Prepare headers
       const headers: HeadersInit = {
-        'Content-Type': 'application/json',
+        "Content-Type": "application/json",
         ...options.headers,
       };
 
       // Add CSRF token for state-changing requests
-      if (['POST', 'PUT', 'DELETE', 'PATCH'].includes(options.method?.toUpperCase() || 'GET')) {
+      if (
+        ["POST", "PUT", "DELETE", "PATCH"].includes(
+          options.method?.toUpperCase() || "GET",
+        )
+      ) {
         const csrfToken = getCsrfToken();
         if (csrfToken) {
-          (headers as Record<string, string>)['X-CSRF-Token'] = csrfToken;
+          (headers as Record<string, string>)["X-CSRF-Token"] = csrfToken;
         }
       }
 
@@ -119,16 +131,16 @@ class HttpClient {
         ...options,
         signal: controller.signal,
         headers,
-        credentials: 'include', // Send cookies automatically
+        credentials: "include", // Send cookies automatically
       });
 
       clearTimeout(timeoutId);
 
       // Parse response
       let responseData: ApiResponse<T>;
-      const contentType = response.headers.get('content-type');
-      
-      if (contentType && contentType.includes('application/json')) {
+      const contentType = response.headers.get("content-type");
+
+      if (contentType && contentType.includes("application/json")) {
         responseData = await response.json();
       } else {
         // Handle non-JSON responses
@@ -136,9 +148,9 @@ class HttpClient {
         responseData = {
           success: false,
           error: {
-            code: 'INVALID_RESPONSE',
-            message: `Server returned non-JSON response: ${text}`
-          }
+            code: "INVALID_RESPONSE",
+            message: `Server returned non-JSON response: ${text}`,
+          },
         };
       }
 
@@ -146,33 +158,33 @@ class HttpClient {
       if (!response.ok) {
         // Handle 401 Unauthorized - try refresh, then logout if refresh fails
         if (response.status === 401) {
-          console.warn('Unauthorized request, attempting token refresh...');
+          console.warn("Unauthorized request, attempting token refresh...");
 
           // Try to refresh access token
           const refreshed = await refreshToken();
 
           if (refreshed) {
             // Token refreshed successfully, retry original request
-            console.log('Token refreshed, retrying request...');
+            console.log("Token refreshed, retrying request...");
             clearTimeout(timeoutId);
             return this.request<T>(endpoint, options);
           }
 
           // Refresh failed, logout and redirect
-          console.warn('Token refresh failed, logging out...');
+          console.warn("Token refresh failed, logging out...");
           await authLogout();
-          window.location.href = '/';
+          window.location.href = "/";
           throw new ApiError(
-            'Session expired, please log in again',
-            'UNAUTHORIZED',
-            401
+            "Session expired, please log in again",
+            "UNAUTHORIZED",
+            401,
           );
         }
 
         throw new ApiError(
           responseData.error?.message || `HTTP ${response.status}`,
-          responseData.error?.code || 'HTTP_ERROR',
-          response.status
+          responseData.error?.code || "HTTP_ERROR",
+          response.status,
         );
       }
 
@@ -181,32 +193,38 @@ class HttpClient {
         throw new ApiError(
           responseData.error.message,
           responseData.error.code,
-          response.status
+          response.status,
         );
       }
 
       return responseData;
-
     } catch (error: unknown) {
       clearTimeout(timeoutId);
 
-      if (error instanceof Error && error.name === 'AbortError') {
-        throw new TimeoutError(`Request to ${endpoint} timed out after ${this.timeout}ms`);
+      if (error instanceof Error && error.name === "AbortError") {
+        throw new TimeoutError(
+          `Request to ${endpoint} timed out after ${this.timeout}ms`,
+        );
       }
 
       if (error instanceof ApiError) {
         throw error;
       }
 
-      if (error instanceof TypeError && error.message.includes('fetch')) {
+      if (error instanceof TypeError && error.message.includes("fetch")) {
         throw new NetworkError(`Network error: ${error.message}`);
       }
 
-      throw new NetworkError(`Request failed: ${error instanceof Error ? error.message : String(error)}`);
+      throw new NetworkError(
+        `Request failed: ${error instanceof Error ? error.message : String(error)}`,
+      );
     }
   }
 
-  async get<T>(endpoint: string, params?: Record<string, any>): Promise<ApiResponse<T>> {
+  async get<T>(
+    endpoint: string,
+    params?: Record<string, any>,
+  ): Promise<ApiResponse<T>> {
     let url = endpoint;
     if (params) {
       const searchParams = new URLSearchParams();
@@ -218,25 +236,25 @@ class HttpClient {
       url += `?${searchParams.toString()}`;
     }
 
-    return this.request<T>(url, { method: 'GET' });
+    return this.request<T>(url, { method: "GET" });
   }
 
   async post<T>(endpoint: string, data?: any): Promise<ApiResponse<T>> {
     return this.request<T>(endpoint, {
-      method: 'POST',
+      method: "POST",
       body: data ? JSON.stringify(data) : undefined,
     });
   }
 
   async put<T>(endpoint: string, data?: any): Promise<ApiResponse<T>> {
     return this.request<T>(endpoint, {
-      method: 'PUT',
+      method: "PUT",
       body: data ? JSON.stringify(data) : undefined,
     });
   }
 
   async delete<T>(endpoint: string): Promise<ApiResponse<T>> {
-    return this.request<T>(endpoint, { method: 'DELETE' });
+    return this.request<T>(endpoint, { method: "DELETE" });
   }
 }
 
@@ -249,7 +267,7 @@ export const publicKeysApi = {
    * Store or update a user's public key
    */
   async upsert(userId: string, publicKey: string): Promise<PublicKeyData> {
-    const response = await httpClient.post<PublicKeyData>('/public-keys', {
+    const response = await httpClient.post<PublicKeyData>("/public-keys", {
       user_id: userId,
       public_key: publicKey,
     });
@@ -262,7 +280,9 @@ export const publicKeysApi = {
    */
   async get(userId: string): Promise<{ public_key: string } | null> {
     try {
-      const response = await httpClient.get<{ public_key: string }>(`/public-keys/${userId}`);
+      const response = await httpClient.get<{ public_key: string }>(
+        `/public-keys/${userId}`,
+      );
       return response.data!;
     } catch (error) {
       if (error instanceof ApiError && error.statusCode === 404) {
@@ -276,7 +296,7 @@ export const publicKeysApi = {
    * List all public keys (for debugging)
    */
   async list(): Promise<PublicKeyData[]> {
-    const response = await httpClient.get<PublicKeyData[]>('/public-keys');
+    const response = await httpClient.get<PublicKeyData[]>("/public-keys");
     return response.data!;
   },
 
@@ -302,10 +322,13 @@ export const sharedFilesApi = {
     file_name: string;
     file_size: number;
     mime_type: string;
-    access_type?: 'view' | 'download';
+    access_type?: "view" | "download";
     expires_at?: string;
   }): Promise<SharedFileData> {
-    const response = await httpClient.post<SharedFileData>('/shared-files', shareData);
+    const response = await httpClient.post<SharedFileData>(
+      "/shared-files",
+      shareData,
+    );
     return response.data!;
   },
 
@@ -318,14 +341,18 @@ export const sharedFilesApi = {
       recipient_user_id?: string;
       limit?: number;
       offset?: number;
-    } = {}
+    } = {},
   ): Promise<{ files: SharedFileData[]; total: number; hasMore: boolean }> {
     const params = {
       recipient_user_id: userId,
       ...options,
     };
 
-    const response = await httpClient.get<{ files: SharedFileData[]; total: number; hasMore: boolean }>('/shared-files', params);
+    const response = await httpClient.get<{
+      files: SharedFileData[];
+      total: number;
+      hasMore: boolean;
+    }>("/shared-files", params);
     return response.data!;
   },
 
@@ -334,7 +361,9 @@ export const sharedFilesApi = {
    */
   async getById(id: string): Promise<SharedFileData | null> {
     try {
-      const response = await httpClient.get<SharedFileData>(`/shared-files/${id}`);
+      const response = await httpClient.get<SharedFileData>(
+        `/shared-files/${id}`,
+      );
       return response.data!;
     } catch (error) {
       if (error instanceof ApiError && error.statusCode === 404) {
@@ -347,11 +376,17 @@ export const sharedFilesApi = {
   /**
    * Update shared file permissions
    */
-  async update(id: string, updateData: {
-    access_type?: 'view' | 'download';
-    expires_at?: string | null;
-  }): Promise<SharedFileData> {
-    const response = await httpClient.put<SharedFileData>(`/shared-files/${id}`, updateData);
+  async update(
+    id: string,
+    updateData: {
+      access_type?: "view" | "download";
+      expires_at?: string | null;
+    },
+  ): Promise<SharedFileData> {
+    const response = await httpClient.put<SharedFileData>(
+      `/shared-files/${id}`,
+      updateData,
+    );
     return response.data!;
   },
 
@@ -359,7 +394,9 @@ export const sharedFilesApi = {
    * Delete/revoke a shared file
    */
   async delete(id: string): Promise<{ deleted: boolean }> {
-    const response = await httpClient.delete<{ deleted: boolean }>(`/shared-files/${id}`);
+    const response = await httpClient.delete<{ deleted: boolean }>(
+      `/shared-files/${id}`,
+    );
     return response.data!;
   },
 
@@ -367,7 +404,9 @@ export const sharedFilesApi = {
    * Record file access
    */
   async recordAccess(id: string): Promise<{ recorded: boolean }> {
-    const response = await httpClient.post<{ recorded: boolean }>(`/shared-files/${id}/access`);
+    const response = await httpClient.post<{ recorded: boolean }>(
+      `/shared-files/${id}/access`,
+    );
     return response.data!;
   },
 };
@@ -389,7 +428,7 @@ export const invitationsApi = {
       sent: boolean;
       remaining: number;
       resetTime: number;
-    }>('/invitations/send', data);
+    }>("/invitations/send", data);
     return response.data!;
   },
 
@@ -424,48 +463,7 @@ export const healthApi = {
       status: string;
       timestamp: string;
       version: string;
-    }>('/health');
-    return response.data!;
-  },
-};
-
-// Credits API
-export const creditsApi = {
-  /**
-   * Get user's credit balance
-   */
-  async getBalance(userId: string): Promise<{ user_id: string; balance: number }> {
-    const response = await httpClient.get<{ user_id: string; balance: number }>(
-      `/credits/balance/${userId}`
-    );
-    return response.data!;
-  },
-
-  /**
-   * Get user's credit transaction history
-   */
-  async getTransactions(
-    userId: string,
-    options: {
-      limit?: number;
-      offset?: number;
-    } = {}
-  ): Promise<{
-    transactions: Array<{
-      id: string;
-      user_id: string;
-      amount: number;
-      transaction_type: string;
-      balance_after: number;
-      metadata?: Record<string, any>;
-      created_at: string;
-    }>;
-    count: number;
-  }> {
-    const response = await httpClient.get<{
-      transactions: Array<any>;
-      count: number;
-    }>(`/credits/transactions/${userId}`, options);
+    }>("/health");
     return response.data!;
   },
 };
@@ -476,7 +474,6 @@ const apiClient = {
   sharedFiles: sharedFilesApi,
   invitations: invitationsApi,
   health: healthApi,
-  credits: creditsApi,
   // Expose HTTP methods for custom endpoints (like pre-signed URLs)
   get: httpClient.get.bind(httpClient),
   post: httpClient.post.bind(httpClient),
