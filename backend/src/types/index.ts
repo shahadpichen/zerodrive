@@ -7,7 +7,6 @@ export interface PublicKey {
   id?: string;
   user_id: string;
   public_key: string;
-  credits?: number;
   created_at?: Date;
   updated_at?: Date;
 }
@@ -20,31 +19,9 @@ export interface SharedFile {
   file_name: string;
   file_size: number;
   mime_type: string;
-  access_type: 'view' | 'download';
+  access_type: "view" | "download";
   expires_at?: Date;
   last_accessed_at?: Date;
-  created_at?: Date;
-  updated_at?: Date;
-}
-
-export interface CreditTransaction {
-  id?: string;
-  user_id: string;
-  amount: number;
-  transaction_type: string;
-  balance_after: number;
-  metadata?: Record<string, any>;
-  created_at?: Date;
-}
-
-export interface CreditPackage {
-  id: string;
-  credits: number;
-  price_usd: number;
-  price_per_credit: number;
-  display_name: string;
-  description?: string;
-  is_active: boolean;
   created_at?: Date;
   updated_at?: Date;
 }
@@ -66,12 +43,12 @@ export interface CreateSharedFileRequest {
   file_name: string;
   file_size: number;
   mime_type: string;
-  access_type?: 'view' | 'download';
+  access_type?: "view" | "download";
   expires_at?: string; // ISO date string
 }
 
 export interface UpdateSharedFileRequest {
-  access_type?: 'view' | 'download';
+  access_type?: "view" | "download";
   expires_at?: Date | null;
 }
 
@@ -83,15 +60,6 @@ export interface GetSharedFilesQuery {
   recipient_user_id?: string;
   limit?: number;
   offset?: number;
-}
-
-export interface GetCreditBalanceRequest {
-  user_id: string;
-}
-
-export interface CreditBalanceResponse {
-  user_id: string;
-  balance: number;
 }
 
 // API Response Types
@@ -168,12 +136,12 @@ export interface GetSharedFilesOptions {
 
 // Health Check Types
 export interface HealthCheckResponse {
-  status: 'ok' | 'error';
+  status: "ok" | "error";
   timestamp: string;
   uptime: number;
   environment: string;
   version: string;
-  database: 'connected' | 'disconnected';
+  database: "connected" | "disconnected";
 }
 
 // Error Types
@@ -215,7 +183,7 @@ export interface EnvConfig {
 }
 
 // Utility Types
-export type LogLevel = 'error' | 'warn' | 'info' | 'debug';
+export type LogLevel = "error" | "warn" | "info" | "debug";
 
 export interface LogMeta {
   [key: string]: any;
@@ -262,10 +230,22 @@ declare global {
 }
 
 // Export commonly used types
-export type CreatePublicKeyResult = Pick<PublicKey, 'id' | 'user_id' | 'created_at' | 'updated_at'>;
-export type CreateSharedFileResult = Pick<SharedFile, 'id' | 'file_id' | 'file_name' | 'created_at'>;
-export type ClaimSharedFileResult = Pick<SharedFile, 'id' | 'file_id' | 'file_name' | 'updated_at'>;
-export type DeleteSharedFileResult = Pick<SharedFile, 'id' | 'file_id' | 'file_name'>;
+export type CreatePublicKeyResult = Pick<
+  PublicKey,
+  "id" | "user_id" | "created_at" | "updated_at"
+>;
+export type CreateSharedFileResult = Pick<
+  SharedFile,
+  "id" | "file_id" | "file_name" | "created_at"
+>;
+export type ClaimSharedFileResult = Pick<
+  SharedFile,
+  "id" | "file_id" | "file_name" | "updated_at"
+>;
+export type DeleteSharedFileResult = Pick<
+  SharedFile,
+  "id" | "file_id" | "file_name"
+>;
 
 // Validation Schemas (for Joi)
 export interface ValidationSchemas {
