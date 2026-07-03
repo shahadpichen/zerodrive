@@ -141,7 +141,7 @@ function Header() {
                   {userEmail && !storageInfo ? (
                     <div className="space-y-2">
                       <div className="flex items-center justify-between">
-                        <span className="text-sm text-muted-foreground">
+                        <span className="text-sm font-semibold text-muted-foreground">
                           Storage
                         </span>
                         <div className="h-4 bg-muted animate-pulse rounded w-24"></div>
