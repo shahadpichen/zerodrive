@@ -4,6 +4,7 @@ import {
   getFoldersForUser,
   getFilesInFolder,
   deleteFolder as deleteFolderFromDB,
+  updateFolderName,
   moveFileToFolder,
   getAllFilesForUser,
   sendToGoogleDrive,
@@ -15,7 +16,7 @@ import logger from "./logger";
 export const createFolder = async (
   folderName: string,
   parentId: string | null,
-  userEmail: string
+  userEmail: string,
 ): Promise<FolderMeta | null> => {
   const createToastId = toast.loading(`Creating folder "${folderName}"...`);
 
@@ -41,12 +42,14 @@ export const createFolder = async (
           "Content-Type": "application/json",
         },
         body: JSON.stringify(metadata),
-      }
+      },
     );
 
     const data = await response.json();
     if (!response.ok || !data.id) {
-      throw new Error(`Failed to create folder: ${data.error?.message || "Unknown error"}`);
+      throw new Error(
+        `Failed to create folder: ${data.error?.message || "Unknown error"}`,
+      );
     }
 
     logger.log("[Folder] Folder created on Google Drive:", data);
@@ -82,7 +85,7 @@ export const deleteFolder = async (
   folderId: string,
   folderName: string,
   userEmail: string,
-  force: boolean = false
+  force: boolean = false,
 ): Promise<boolean> => {
   const deleteToastId = toast.loading(`Deleting folder "${folderName}"...`);
 
@@ -100,7 +103,9 @@ export const deleteFolder = async (
 
     // If force, move files to root
     if (force && filesInFolder.length > 0) {
-      logger.log(`[Folder] Moving ${filesInFolder.length} files to root before deleting folder`);
+      logger.log(
+        `[Folder] Moving ${filesInFolder.length} files to root before deleting folder`,
+      );
       await Promise.all(filesInFolder.map((f) => moveFileToFolder(f.id, null)));
     }
 
@@ -115,11 +120,13 @@ export const deleteFolder = async (
       {
         method: "DELETE",
         headers: { Authorization: `Bearer ${token}` },
-      }
+      },
     );
 
     if (!response.ok) {
-      throw new Error(`Failed to delete folder: ${response.status} ${response.statusText}`);
+      throw new Error(
+        `Failed to delete folder: ${response.status} ${response.statusText}`,
+      );
     }
 
     // Delete from IndexedDB
@@ -142,11 +149,67 @@ export const deleteFolder = async (
   }
 };
 
+export const renameFolder = async (
+  folderId: string,
+  oldName: string,
+  newName: string,
+  userEmail: string,
+): Promise<boolean> => {
+  const trimmed = newName.trim();
+  if (!trimmed || trimmed === oldName) return false;
+
+  const renameToastId = toast.loading(`Renaming "${oldName}"...`);
+
+  try {
+    const { getGoogleAccessToken } = await import("./gapiInit");
+    const token = await getGoogleAccessToken();
+    if (!token) throw new Error("User not authenticated.");
+
+    // Rename the folder on Google Drive
+    logger.log("[Folder] Renaming folder on Google Drive:", folderId, trimmed);
+    const response = await fetch(
+      `https://www.googleapis.com/drive/v3/files/${folderId}`,
+      {
+        method: "PATCH",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ name: trimmed }),
+      },
+    );
+
+    if (!response.ok) {
+      throw new Error(
+        `Failed to rename folder: ${response.status} ${response.statusText}`,
+      );
+    }
+
+    // Update IndexedDB
+    await updateFolderName(folderId, trimmed);
+
+    // Sync metadata
+    const updatedFiles = await getAllFilesForUser(userEmail);
+    const updatedFolders = await getFoldersForUser(userEmail);
+    await sendToGoogleDrive(updatedFiles, updatedFolders);
+
+    toast.success(`Renamed to "${trimmed}"`, { id: renameToastId });
+    return true;
+  } catch (error: any) {
+    logger.error("[Folder] Failed to rename folder:", error);
+    toast.error("Failed to rename folder", {
+      description: error.message,
+      id: renameToastId,
+    });
+    return false;
+  }
+};
+
 export const moveFile = async (
   fileId: string,
   fileName: string,
   newFolderId: string | null,
-  userEmail: string
+  userEmail: string,
 ): Promise<boolean> => {
   const moveToastId = toast.loading(`Moving "${fileName}"...`);
 
@@ -161,7 +224,11 @@ export const moveFile = async (
       throw new Error("File not found");
     }
 
-    logger.log("[Folder] Moving file:", { fileId, from: file.folderId, to: newFolderId });
+    logger.log("[Folder] Moving file:", {
+      fileId,
+      from: file.folderId,
+      to: newFolderId,
+    });
 
     // Build Google Drive API request
     let url = `https://www.googleapis.com/drive/v3/files/${fileId}?`;
@@ -184,7 +251,9 @@ export const moveFile = async (
       });
 
       if (!response.ok) {
-        throw new Error(`Failed to move file: ${response.status} ${response.statusText}`);
+        throw new Error(
+          `Failed to move file: ${response.status} ${response.statusText}`,
+        );
       }
     }
 

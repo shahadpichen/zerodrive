@@ -38,6 +38,7 @@ import { FilePreviewDialog } from "./file-preview-dialog";
 import { isPreviewable } from "../../utils/filePreview";
 import { useFolderContext } from "./folder-context";
 import { FolderItem } from "./folder-item";
+import { FolderActions } from "./folder-actions";
 import { FolderBreadcrumb } from "./folder-breadcrumb";
 
 interface FileListProps {
@@ -672,7 +673,7 @@ export const FileList: React.FC<FileListProps> = ({
             : "No files or folders. Upload a file or create a folder to get started."}
         </p>
       ) : viewMode === "grid" ? (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 2xl:grid-cols-10 gap-4">
           {visibleFolders.map((folder) => (
             <FolderItem
               key={folder.id}
@@ -758,7 +759,16 @@ export const FileList: React.FC<FileListProps> = ({
                   <td className="py-2.5 pr-3 text-muted-foreground">
                     {new Date(folder.createdDate).toLocaleDateString()}
                   </td>
-                  <td className="py-2.5"></td>
+                  <td className="py-2.5">
+                    <FolderActions
+                      folder={folder}
+                      userEmail={userEmail!}
+                      onChanged={() =>
+                        setRefreshFileListKey((prev) => prev + 1)
+                      }
+                      variant="inline"
+                    />
+                  </td>
                 </tr>
               ))}
 
