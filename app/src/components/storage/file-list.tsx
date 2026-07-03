@@ -38,6 +38,7 @@ import { FilePreviewDialog } from "./file-preview-dialog";
 import { isPreviewable } from "../../utils/filePreview";
 import { useFolderContext } from "./folder-context";
 import { FolderItem } from "./folder-item";
+import { FolderBreadcrumb } from "./folder-breadcrumb";
 
 interface FileListProps {
   view?: "compact" | "recent" | "full";
@@ -557,7 +558,7 @@ export const FileList: React.FC<FileListProps> = ({
   return (
     <div className="space-y-4">
       {/* Toolbar: search + type filter + sort + view toggle */}
-      <div className="flex flex-col gap-3 border-b pb-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-3 pb-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-2 border px-3 py-2 sm:w-80">
           <Search className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
           <input
@@ -653,6 +654,14 @@ export const FileList: React.FC<FileListProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Breadcrumb — only inside a folder; doubles as a move-to-parent drop target */}
+      {userEmail && currentPath.length > 0 && (
+        <FolderBreadcrumb
+          userEmail={userEmail}
+          onFileMoved={() => setRefreshFileListKey((prev) => prev + 1)}
+        />
+      )}
 
       {isLoadingFiles ? (
         <p className="text-center text-muted-foreground py-8">Loading...</p>
