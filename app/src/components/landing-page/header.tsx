@@ -25,14 +25,12 @@ function Header() {
           </span>
         </h1>
         <a
-          href="https://github.com/shahadpichen/zerobox"
+          href="https://github.com/shahadpichen/zerodrive"
           target="_blank"
           rel="noopener noreferrer"
+          className="text-sm font-medium hover:underline"
         >
-          <h1 className="flex items-center gap-1">
-            {/* <FaGithub className="text-xl" /> */}
-            <span className="text-sm font-medium hover:underline">Github</span>
-          </h1>
+          Star on GitHub
         </a>
         <ModeToggle />
       </div>
