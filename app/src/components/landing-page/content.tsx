@@ -14,4 +14,12 @@ export const content = [
     description:
       "ZeroDrive uses a <u>12-word recovery phrase</u> to generate your encryption keys, keeping your identity and files fully under your control. You can securely share encrypted files with other users via email using <u>public-key cryptography</u>, so only the intended recipient can decrypt them. If a recipient isn’t on ZeroDrive yet, they’ll receive an <u>email invitation</u> to join and access the file. All your keys can also be backed up to Google Drive (encrypted), letting you recover access from any device.",
   },
+  {
+    description:
+      "Privacy through E2E encryption; Reliability of Google; Freedom of open-source.",
+  },
+
+  // {
+  //   description: "We hope you enjoy ZeroDrive! <br/> Regards, <br/> Shahad",
+  // },
 ];

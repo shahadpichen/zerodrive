@@ -1,12 +1,4 @@
-type HowItWorksSection = {
-  heading: string;
-  content: string;
-  illustration?: string;
-  illustrationAlt?: string;
-  illustrationSide?: "left" | "right";
-};
-
-export const HowItWorksContent: HowItWorksSection[] = [
+export const HowItWorksContent = [
   {
     heading: "Your Keys, Your Files, Your Privacy",
     content:
@@ -16,10 +8,6 @@ export const HowItWorksContent: HowItWorksSection[] = [
     heading: "Personal File Encryption",
     content:
       "When you upload a file, ZeroDrive encrypts it <u>locally in your browser</u> using <u>AES-256-GCM</u>, a military-grade encryption standard. Your 12-word phrase derives a unique encryption key that never leaves your device. The encrypted file is then uploaded to your <u>Google Drive</u>, where it appears as an unreadable binary blob. Even Google cannot decrypt your files.",
-    illustration: "/file_encrypting_illustration.png",
-    illustrationAlt:
-      "A locked scroll of encrypted text, illustrating files encrypted before they leave your device",
-    illustrationSide: "right",
   },
   {
     heading: "Secure File Sharing with Public-Key Cryptography",
@@ -45,9 +33,5 @@ export const HowItWorksContent: HowItWorksSection[] = [
     heading: "Open Source for Complete Transparency",
     content:
       "As an <u>open-source</u> project, every line of ZeroDrive's code is available for review on GitHub. Security researchers, developers, and privacy advocates can audit our implementation to verify that we do exactly what we claim. You can also <u>self-host</u> the entire stack—frontend, backend, and database—on your own infrastructure for maximum control.",
-    illustration: "/cpu_illustration.png",
-    illustrationAlt:
-      "A server with a steering wheel attached, illustrating that you are in the driver's seat with a self-hostable, open-source stack",
-    illustrationSide: "left",
   },
 ];
