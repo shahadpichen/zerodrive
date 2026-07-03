@@ -6,7 +6,6 @@ import {
   Inbox,
   Key,
   ChevronLeft,
-  Upload,
   Trash2,
   Share2,
 } from "lucide-react";
@@ -58,12 +57,6 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   const [isProcessingSharingKeys, setIsProcessingSharingKeys] = useState(false);
 
   const isActive = (path: string) => location.pathname === path;
-
-  const handleUpload = () => {
-    // Trigger file upload - this will be connected to the file input in the page
-    const event = new CustomEvent("trigger-upload");
-    window.dispatchEvent(event);
-  };
 
   const handleDeleteAll = () => {
     // Trigger delete all - this will be connected to the delete confirmation in the page
@@ -132,7 +125,7 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
     <div className="flex flex-col h-full">
       {/* Navigation */}
       <nav className="flex-1 overflow-y-auto py-4" role="navigation">
-        <div className="space-y-1">
+        <div className="space-y-1 px-2">
           {navigationItems.map((item) => {
             const Icon = item.icon;
             const active = isActive(item.path);
@@ -144,51 +137,58 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
                 onClick={onNavigate}
                 aria-current={active ? "page" : undefined}
                 title={!isOpen ? item.label : undefined}
-                className={`flex flex-col px-4 ${isOpen ? "items-start" : "items-center"}`}
+                className={`flex items-center gap-3 border-l-2 px-3 py-2.5 text-sm transition-colors ${
+                  isOpen ? "" : "justify-center"
+                } ${
+                  active
+                    ? "border-foreground bg-muted font-semibold"
+                    : "border-transparent hover:bg-muted/60"
+                }`}
               >
-                <Button variant="ghost">
-                  {!isOpen && <Icon className="h-5 w-5 flex-shrink-0" />}
-                  {isOpen && <span>{item.label}</span>}
-                </Button>
+                <Icon
+                  className={`h-[18px] w-[18px] flex-shrink-0 ${active ? "stroke-[2.5]" : ""}`}
+                />
+                {isOpen && <span>{item.label}</span>}
               </Link>
             );
           })}
         </div>
 
         {/* Quick Actions */}
-        <>
-          <Separator className="my-4" />
-          <div className="space-y-1 flex flex-col px-4">
-            <Button
-              variant="ghost"
-              className={`${isOpen ? "items-start justify-start" : "items-center justify-center"}`}
-              onClick={handleUpload}
-            >
-              {!isOpen && <Upload className="h-5 w-5 flex-shrink-0" />}
-              {isOpen && <span>Upload Files</span>}
-            </Button>
-
-            <Button
-              variant="ghost"
-              className={`${isOpen ? "items-start justify-start" : "items-center justify-center"}`}
-              onClick={handleEnableSharing}
-              disabled={isProcessingSharingKeys}
-            >
-              {!isOpen && <Share2 className="h-5 w-5 flex-shrink-0" />}
-              {isOpen && <span>Enable Sharing</span>}
-            </Button>
-
-            <Button
-              variant="ghost"
-              className={`${isOpen ? "items-start justify-start" : "items-center justify-center"} text-destructive hover:text-destructive`}
-              onClick={handleDeleteAll}
-            >
-              {!isOpen && <Trash2 className="h-5 w-5 flex-shrink-0" />}
-              {isOpen && <span>Delete All Files</span>}
-            </Button>
-          </div>
-        </>
+        <Separator className="my-4" />
+        <div className="px-2">
+          {isOpen && (
+            <p className="mb-2 px-3 text-[10.5px] uppercase tracking-[0.12em] text-muted-foreground">
+              Actions
+            </p>
+          )}
+          <button
+            onClick={handleEnableSharing}
+            disabled={isProcessingSharingKeys}
+            title={!isOpen ? "Enable Sharing" : undefined}
+            className={`flex w-full items-center gap-3 px-3 py-2.5 text-sm transition-colors hover:bg-muted/60 disabled:opacity-50 ${
+              isOpen ? "" : "justify-center"
+            }`}
+          >
+            <Share2 className="h-[18px] w-[18px] flex-shrink-0" />
+            {isOpen && <span>Enable Sharing</span>}
+          </button>
+        </div>
       </nav>
+
+      {/* Destructive action pinned to the bottom, away from navigation */}
+      <div className="border-t p-2">
+        <button
+          onClick={handleDeleteAll}
+          title={!isOpen ? "Delete All Files" : undefined}
+          className={`flex w-full items-center gap-3 px-3 py-2.5 text-sm text-destructive transition-colors hover:bg-destructive/10 ${
+            isOpen ? "" : "justify-center"
+          }`}
+        >
+          <Trash2 className="h-[18px] w-[18px] flex-shrink-0" />
+          {isOpen && <span>Delete All Files</span>}
+        </button>
+      </div>
     </div>
   );
 }

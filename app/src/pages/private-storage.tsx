@@ -15,7 +15,7 @@ import {
 } from "../utils/fileOperations";
 import { ConfirmationDialog } from "../components/storage/confirmation-dialog";
 import { Separator } from "../components/ui/separator";
-import { RefreshCw, FolderPlus } from "lucide-react";
+import { RefreshCw, FolderPlus, Upload } from "lucide-react";
 import {
   FolderProvider,
   useFolderContext,
@@ -333,6 +333,14 @@ function PrivateStorageContent() {
             </p>
           </div>
           <div className="flex gap-2">
+            <Button
+              size="sm"
+              onClick={handleUploadTriggerInternal}
+              disabled={uploading || isLoadingUserFiles}
+            >
+              <Upload className="h-4 w-4 mr-2" />
+              Upload
+            </Button>
             <Button
               variant="outline"
               size="sm"

@@ -24,7 +24,7 @@ function AuthenticatedLayoutContent({
             !isMobile && isOpen ? "md:ml-64" : !isMobile ? "md:ml-16" : ""
           }`}
         >
-          <div className="mx-auto p-6 max-w-7xl">{children}</div>
+          <div className="mx-auto px-6 py-8 max-w-5xl">{children}</div>
         </main>
       </div>
     </div>
