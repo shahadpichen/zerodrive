@@ -33,6 +33,15 @@ module.exports = {
     'prefer-const': 'warn',
     'no-var': 'error',
   },
+  overrides: [
+    {
+      // tsconfig.json excludes test files (they run via ts-jest), so type-aware
+      // linting (parserOptions.project) cannot parse them. Lint tests without
+      // the project service so syntactic/semantic rules still apply.
+      files: ['**/*.test.ts', '**/*.spec.ts'],
+      parserOptions: { project: null },
+    },
+  ],
   ignorePatterns: [
     'dist',
     'node_modules',

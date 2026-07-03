@@ -1,7 +1,7 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
 import { Progress } from "../ui/progress";
-import { Zap, Coins, Menu, LogOut, AlertTriangle } from "lucide-react";
+import { Zap, Menu, LogOut, AlertTriangle } from "lucide-react";
 import { Button } from "../ui/button";
 import { useApp } from "../../contexts/app-context";
 import { useSidebar } from "../../contexts/sidebar-context";
@@ -18,14 +18,8 @@ import { Avatar, AvatarFallback, AvatarImage } from "../ui/avatar";
 
 function Header() {
   const navigate = useNavigate();
-  const {
-    creditBalance,
-    storageInfo,
-    userEmail,
-    userName,
-    userImage,
-    hasDecryptionError,
-  } = useApp();
+  const { storageInfo, userEmail, userName, userImage, hasDecryptionError } =
+    useApp();
   const { toggle } = useSidebar();
 
   const getUserInitials = (name: string, email: string) => {
@@ -49,7 +43,6 @@ function Header() {
   const handleLogout = async () => {
     try {
       // Clear cache on logout
-      localStorage.removeItem("zerodrive-credits-cache");
       localStorage.removeItem("zerodrive-storage-cache");
 
       const { logout } = await import("../../utils/authService");
@@ -141,49 +134,6 @@ function Header() {
                     </p>
                   </div>
                 </DropdownMenuLabel>
-                <DropdownMenuSeparator />
-
-                {/* Credits Section */}
-                <div className="px-2 py-3">
-                  {userEmail && creditBalance === null ? (
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm text-muted-foreground">
-                        Credits
-                      </span>
-                      <div className="h-4 bg-muted animate-pulse rounded w-16"></div>
-                    </div>
-                  ) : (
-                    creditBalance !== null && (
-                      <div className="flex items-center justify-between">
-                        <span className="flex items-center gap-2 text-sm text-muted-foreground">
-                          <Coins
-                            className={
-                              creditBalance < 1
-                                ? "text-red-600"
-                                : creditBalance < 3
-                                  ? "text-amber-600"
-                                  : "text-green-600"
-                            }
-                            size={16}
-                          />
-                          Credits
-                        </span>
-                        <span
-                          className={`text-sm font-semibold ${
-                            creditBalance < 1
-                              ? "text-red-600"
-                              : creditBalance < 3
-                                ? "text-amber-600"
-                                : "text-green-600"
-                          }`}
-                        >
-                          {creditBalance.toFixed(1)}
-                        </span>
-                      </div>
-                    )
-                  )}
-                </div>
-
                 <DropdownMenuSeparator />
 
                 {/* Storage Section */}

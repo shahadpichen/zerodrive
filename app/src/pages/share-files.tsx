@@ -5,7 +5,6 @@ import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
 import { gapi } from "gapi-script";
 import { toast } from "sonner";
-import { useApp } from "../contexts/app-context";
 import {
   Card,
   CardContent,
@@ -36,8 +35,6 @@ import { recoverRsaKeysIfNeeded } from "../utils/rsaKeyRecovery";
 
 const ShareFilesPage: React.FC = () => {
   const navigate = useNavigate();
-  const { creditBalance, isLoadingCredits, refreshCredits } = useApp();
-
   const [file, setFile] = useState<File | null>(null);
   const [recipientEmail, setRecipientEmail] = useState<string>("");
   const [customMessage, setCustomMessage] = useState<string>("");
@@ -69,7 +66,7 @@ const ShareFilesPage: React.FC = () => {
       await apiClient.publicKeys.delete(hashedEmail);
 
       console.log(
-        "Rollback completed: keys deleted from all storage locations"
+        "Rollback completed: keys deleted from all storage locations",
       );
     } catch (error) {
       console.error("Error during rollback:", error);
@@ -100,12 +97,12 @@ const ShareFilesPage: React.FC = () => {
                 if (mnemonic) {
                   const localKeyPair = await getUserKeyPair(
                     senderEmail,
-                    mnemonic
+                    mnemonic,
                   );
                   if (localKeyPair?.publicKeyJwk) {
                     await storeUserPublicKey(
                       hashedEmail,
-                      localKeyPair.publicKeyJwk
+                      localKeyPair.publicKeyJwk,
                     );
                     console.log("Public key synced to server");
                   }
@@ -167,8 +164,6 @@ const ShareFilesPage: React.FC = () => {
     }
   }, [hasGeneratedKeys]);
 
-  // Credit balance is now managed by AppContext - no need to fetch locally
-
   // Verify mnemonic function - only for decryption, NOT stored in memory
   const verifyMnemonic = async () => {
     if (!mnemonicInput || !senderEmail) return;
@@ -199,7 +194,7 @@ const ShareFilesPage: React.FC = () => {
   };
 
   const handleRecipientEmailChange = (
-    e: React.ChangeEvent<HTMLInputElement>
+    e: React.ChangeEvent<HTMLInputElement>,
   ) => {
     setRecipientEmail(e.target.value);
   };
@@ -253,7 +248,7 @@ const ShareFilesPage: React.FC = () => {
       // Get mnemonic from memory (user must have come from /key-management)
       const mnemonic = getMnemonic();
       if (!mnemonic) {
-        throw new Error('Mnemonic not found - cannot encrypt RSA private key');
+        throw new Error("Mnemonic not found - cannot encrypt RSA private key");
       }
       await storeUserKeyPair(senderEmail, keyPair, mnemonic);
 
@@ -266,16 +261,16 @@ const ShareFilesPage: React.FC = () => {
         try {
           const encryptedPrivateKeyBlob = await encryptRsaPrivateKeyWithAesKey(
             keyPair.privateKeyJwk,
-            primaryAesKey
+            primaryAesKey,
           );
 
           console.log(
             "Encrypted private key blob for backup (using primary AES key):",
-            encryptedPrivateKeyBlob
+            encryptedPrivateKeyBlob,
           );
 
           const uploadFileId = await uploadEncryptedRsaKeyToDrive(
-            encryptedPrivateKeyBlob
+            encryptedPrivateKeyBlob,
           );
 
           if (!uploadFileId) {
@@ -343,7 +338,7 @@ const ShareFilesPage: React.FC = () => {
     }
     if (!hasGeneratedKeys) {
       toast.error(
-        "You need to generate your sharing keys first. Click the button above."
+        "You need to generate your sharing keys first. Click the button above.",
       );
       return;
     }
@@ -364,17 +359,14 @@ const ShareFilesPage: React.FC = () => {
         recipientEmail,
         senderEmail,
         mnemonic,
-        customMessage || undefined
+        customMessage || undefined,
       );
       const shareId = crypto.randomUUID();
       await storeFileShare(shareId, "encrypted-share", preparation);
       toast.success(
         `File "${file.name}" has been prepared for sharing with ${recipientEmail}`,
-        { id: sharingToastId }
+        { id: sharingToastId },
       );
-
-      // Refresh credit balance after successful share
-      await refreshCredits();
 
       // Keep mnemonic available for multiple shares in the same session
       // User can close/refresh page to clear it
@@ -382,26 +374,14 @@ const ShareFilesPage: React.FC = () => {
       setFile(null);
       setRecipientEmail("");
       const fileInput = document.getElementById(
-        "file-input"
+        "file-input",
       ) as HTMLInputElement;
       if (fileInput) fileInput.value = "";
     } catch (error) {
       console.error("Error sharing file:", error);
 
-      // Check if error is due to insufficient credits
-      if (
-        error instanceof Error &&
-        (error.message.includes("Insufficient credits") ||
-          error.message.includes("PAYMENT_REQUIRED"))
-      ) {
-        toast.error("Insufficient credits", {
-          description: "You don't have enough credits to share this file. Each share costs 1 credit, with an additional 0.5 credit for email notifications.",
-          id: sharingToastId,
-          duration: 8000,
-        });
-      }
       // Check if error is due to missing recipient key
-      else if (
+      if (
         error instanceof Error &&
         (error.message.includes("has not registered their public key") ||
           (error.message.includes("Recipient") &&
@@ -432,7 +412,7 @@ const ShareFilesPage: React.FC = () => {
 
     setIsSendingInvitation(true);
     const inviteToastId = toast.loading(
-      `Sending invitation to ${recipientEmail}...`
+      `Sending invitation to ${recipientEmail}...`,
     );
 
     try {
@@ -518,50 +498,13 @@ const ShareFilesPage: React.FC = () => {
               ) : (
                 <>
                   <div className="p-4 bg-green-50 dark:bg-green-950 rounded-md border border-green-200 dark:border-green-800">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <h3 className="text-sm font-medium text-green-800 dark:text-green-300">
-                          Sharing Keys Active
-                        </h3>
-                        <p className="text-xs text-green-700 dark:text-green-400 mt-1">
-                          You can now select a file and recipient to share securely.
-                        </p>
-                      </div>
-                      {!isLoadingCredits && creditBalance !== null && (
-                        <div className="text-right">
-                          <p className="text-xs text-green-700 dark:text-green-400 font-medium">
-                            Credits
-                          </p>
-                          <p className={`text-lg font-bold ${
-                            creditBalance < 1
-                              ? 'text-red-600 dark:text-red-400'
-                              : creditBalance < 3
-                              ? 'text-amber-600 dark:text-amber-400'
-                              : 'text-green-800 dark:text-green-300'
-                          }`}>
-                            {creditBalance.toFixed(1)}
-                          </p>
-                        </div>
-                      )}
-                    </div>
+                    <h3 className="text-sm font-medium text-green-800 dark:text-green-300">
+                      Sharing Keys Active
+                    </h3>
+                    <p className="text-xs text-green-700 dark:text-green-400 mt-1">
+                      You can now select a file and recipient to share securely.
+                    </p>
                   </div>
-
-                  {creditBalance !== null && creditBalance < 3 && creditBalance >= 1 && (
-                    <div className="p-3 bg-amber-50 dark:bg-amber-950 rounded-md border border-amber-200 dark:border-amber-800">
-                      <p className="text-xs text-amber-800 dark:text-amber-300">
-                        ⚠️ Low credits warning: You have {creditBalance.toFixed(1)} credits remaining.
-                        Each share costs 1 credit (+ 0.5 for email notifications).
-                      </p>
-                    </div>
-                  )}
-
-                  {creditBalance !== null && creditBalance < 1 && (
-                    <div className="p-3 bg-red-50 dark:bg-red-950 rounded-md border border-red-200 dark:border-red-800">
-                      <p className="text-xs text-red-800 dark:text-red-300 font-medium">
-                        ❌ Out of credits: You need at least 1 credit to share files.
-                      </p>
-                    </div>
-                  )}
 
                   {showMnemonicInput && (
                     <div className="mt-4 p-4 bg-yellow-50 dark:bg-yellow-950 rounded-md border border-yellow-200 dark:border-yellow-800">
@@ -639,11 +582,10 @@ const ShareFilesPage: React.FC = () => {
                   isSharing ||
                   !senderEmail ||
                   !hasGeneratedKeys ||
-                  (showMnemonicInput && !mnemonicVerified) ||
-                  (creditBalance !== null && creditBalance < 1)
+                  (showMnemonicInput && !mnemonicVerified)
                 }
               >
-                {isSharing ? "Preparing Share..." : creditBalance !== null && creditBalance < 1 ? "Insufficient Credits" : "Share Encrypted File"}
+                {isSharing ? "Preparing Share..." : "Share Encrypted File"}
               </Button>
             </CardContent>
           </Card>
