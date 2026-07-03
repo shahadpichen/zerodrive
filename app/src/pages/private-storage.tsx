@@ -14,12 +14,24 @@ import {
   deleteAllAndSyncFiles,
 } from "../utils/fileOperations";
 import { ConfirmationDialog } from "../components/storage/confirmation-dialog";
-import { RefreshCw, FolderPlus, Upload } from "lucide-react";
+import {
+  RefreshCw,
+  FolderPlus,
+  Upload,
+  MoreVertical,
+  Trash2,
+} from "lucide-react";
 import {
   FolderProvider,
   useFolderContext,
 } from "../components/storage/folder-context";
 import { CreateFolderDialog } from "../components/storage/create-folder-dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "../components/ui/dropdown-menu";
 
 // Imports for sharing key functionality (kept for potential future use)
 import { recoverRsaKeysIfNeeded } from "../utils/rsaKeyRecovery";
@@ -408,6 +420,28 @@ function PrivateStorageContent() {
               />
               Refresh
             </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="px-2"
+                  aria-label="More actions"
+                  disabled={isLoadingUserFiles}
+                >
+                  <MoreVertical className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem
+                  onClick={() => setShowDeleteConfirm(true)}
+                  className="text-destructive focus:text-destructive"
+                >
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Delete All Files
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
 
