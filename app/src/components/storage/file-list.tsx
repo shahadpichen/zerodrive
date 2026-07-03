@@ -40,6 +40,7 @@ import { useFolderContext } from "./folder-context";
 import { FolderItem } from "./folder-item";
 import { FolderActions } from "./folder-actions";
 import { FolderBreadcrumb } from "./folder-breadcrumb";
+import { moveFile } from "../../utils/folderOperations";
 
 interface FileListProps {
   view?: "compact" | "recent" | "full";
@@ -81,7 +82,7 @@ export const FileList: React.FC<FileListProps> = ({
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [sortKey, setSortKey] = useState<"name" | "date">("date");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
-  const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
+  const [viewMode, setViewMode] = useState<"grid" | "list">("list");
   const [downloadingFileId, setDownloadingFileId] = useState<string | null>(
     null,
   );
@@ -97,6 +98,7 @@ export const FileList: React.FC<FileListProps> = ({
     mimeType: string;
   } | null>(null);
   const [draggingFileId, setDraggingFileId] = useState<string | null>(null);
+  const [dragOverFolderId, setDragOverFolderId] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchFiles = async () => {
@@ -741,10 +743,33 @@ export const FileList: React.FC<FileListProps> = ({
               {visibleFolders.map((folder) => (
                 <tr
                   key={folder.id}
-                  className="border-b cursor-pointer hover:bg-muted/50"
+                  className={`border-b cursor-pointer ${
+                    dragOverFolderId === folder.id
+                      ? "bg-primary/10 outline outline-1 outline-primary"
+                      : "hover:bg-muted/50"
+                  }`}
                   onClick={() => {
                     setCurrentPath([...currentPath, folder]);
                     navigateToFolder(folder.id);
+                  }}
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    setDragOverFolderId(folder.id);
+                  }}
+                  onDragLeave={() => setDragOverFolderId(null)}
+                  onDrop={async (e) => {
+                    e.preventDefault();
+                    setDragOverFolderId(null);
+                    const fileId = e.dataTransfer.getData("text/x-file-id");
+                    const fileName = e.dataTransfer.getData("text/x-file-name");
+                    if (!fileId || !fileName || !userEmail) return;
+                    const ok = await moveFile(
+                      fileId,
+                      fileName,
+                      folder.id,
+                      userEmail,
+                    );
+                    if (ok) setRefreshFileListKey((prev) => prev + 1);
                   }}
                 >
                   <td className="py-2.5 pr-3">
@@ -777,7 +802,17 @@ export const FileList: React.FC<FileListProps> = ({
                 return (
                   <tr
                     key={file.id}
-                    className="border-b cursor-pointer hover:bg-muted/50"
+                    draggable
+                    onDragStart={(e) => {
+                      e.dataTransfer.setData("text/x-file-id", file.id);
+                      e.dataTransfer.setData("text/x-file-name", file.name);
+                      e.dataTransfer.effectAllowed = "move";
+                      setDraggingFileId(file.id);
+                    }}
+                    onDragEnd={() => setDraggingFileId(null)}
+                    className={`border-b cursor-pointer hover:bg-muted/50 ${
+                      draggingFileId === file.id ? "opacity-50" : ""
+                    }`}
                     onClick={() =>
                       canPreview
                         ? handlePreview(file.id, file.name, file.mimeType)
