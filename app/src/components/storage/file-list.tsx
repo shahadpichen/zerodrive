@@ -10,7 +10,21 @@ import {
 } from "../../utils/dexieDB";
 
 import { decryptFile } from "../../utils/decryptFile";
-import { Trash2, Eye } from "lucide-react";
+import {
+  Trash2,
+  Eye,
+  Search,
+  LayoutGrid,
+  List as ListIcon,
+  ArrowDownUp,
+  ChevronDown,
+} from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "../ui/dropdown-menu";
 import {
   MimeTypeCategory,
   mimeTypeCategories,
@@ -36,7 +50,14 @@ function useSafeFolderContext() {
   try {
     return useFolderContext();
   } catch {
-    return { currentFolderId: null };
+    return {
+      currentFolderId: null,
+      currentPath: [] as FolderMeta[],
+      navigateToFolder: () => {},
+      navigateUp: () => {},
+      goToRoot: () => {},
+      setCurrentPath: () => {},
+    };
   }
 }
 
@@ -45,16 +66,20 @@ export const FileList: React.FC<FileListProps> = ({
   refreshKey,
   userEmail: userEmailProp,
 }) => {
-  const { currentFolderId } = useSafeFolderContext();
+  const { currentFolderId, currentPath, navigateToFolder, setCurrentPath } =
+    useSafeFolderContext();
   const [allUserFiles, setAllUserFiles] = useState<FileMeta[]>([]);
   const [filteredFiles, setFilteredFiles] = useState<FileMeta[]>([]);
   const [folders, setFolders] = useState<FolderMeta[]>([]);
   const userEmail = userEmailProp || null;
   const [isLoadingFiles, setIsLoadingFiles] = useState<boolean>(true);
-  const [filter] = useState<MimeTypeCategory | "All Files">(
+  const [filter, setFilter] = useState<MimeTypeCategory | "All Files">(
     "All Files",
   );
-  const [searchQuery] = useState<string>("");
+  const [searchQuery, setSearchQuery] = useState<string>("");
+  const [sortKey, setSortKey] = useState<"name" | "date">("date");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [downloadingFileId, setDownloadingFileId] = useState<string | null>(
     null,
   );
@@ -165,11 +190,20 @@ export const FileList: React.FC<FileListProps> = ({
       );
     }
 
+    results = [...results].sort((a, b) => {
+      const cmp =
+        sortKey === "name"
+          ? a.name.localeCompare(b.name)
+          : new Date(a.uploadedDate).getTime() -
+            new Date(b.uploadedDate).getTime();
+      return sortDir === "asc" ? cmp : -cmp;
+    });
+
     setFilteredFiles(results);
     console.log(
       `[FileList - ${view}] Filtering applied, ${results.length} files shown.`,
     );
-  }, [filter, searchQuery, allUserFiles, view]);
+  }, [filter, searchQuery, sortKey, sortDir, allUserFiles, view]);
 
   const downloadAndDecryptFile = async (fileId: string, fileName: string) => {
     setDownloadingFileId(fileId);
@@ -236,7 +270,9 @@ export const FileList: React.FC<FileListProps> = ({
         console.error("Decryption error:", decryptionError);
 
         const errorMessage =
-          decryptionError instanceof Error ? decryptionError.message : "Unknown decryption error";
+          decryptionError instanceof Error
+            ? decryptionError.message
+            : "Unknown decryption error";
 
         if (errorMessage.includes("key doesn't match")) {
           toast.error("Wrong encryption key", {
@@ -261,7 +297,8 @@ export const FileList: React.FC<FileListProps> = ({
     } catch (error: unknown) {
       console.error("Error during file download or decryption:", error);
       toast.error("Error during file download", {
-        description: error instanceof Error ? error.message : "An unknown error occurred",
+        description:
+          error instanceof Error ? error.message : "An unknown error occurred",
       });
     } finally {
       setDownloadingFileId(null);
@@ -325,7 +362,8 @@ export const FileList: React.FC<FileListProps> = ({
     } catch (error: unknown) {
       console.error("Error during delete process:", error);
       toast.error(`Failed to delete ${fileName}`, {
-        description: error instanceof Error ? error.message : "An unknown error occurred",
+        description:
+          error instanceof Error ? error.message : "An unknown error occurred",
         id: deleteToastId,
       });
       deleteSuccess = false;
@@ -482,82 +520,302 @@ export const FileList: React.FC<FileListProps> = ({
     );
   }
 
-  // Full view - show folders and files in a grid of cards
+  // Full view - toolbar + grid/list of folders and files
+  const visibleFolders = searchQuery
+    ? folders.filter((f) =>
+        f.name.toLowerCase().includes(searchQuery.toLowerCase()),
+      )
+    : folders;
+
+  const filterChips: {
+    label: string;
+    value: MimeTypeCategory | "All Files";
+  }[] = [
+    { label: "All", value: "All Files" },
+    { label: "Images", value: "Images" },
+    { label: "PDFs", value: "PDFs" },
+    { label: "Videos", value: "Videos" },
+  ];
+
+  const sortLabels: Record<string, string> = {
+    "date-desc": "Newest",
+    "date-asc": "Oldest",
+    "name-asc": "Name A–Z",
+    "name-desc": "Name Z–A",
+  };
+  const currentSortLabel = sortLabels[`${sortKey}-${sortDir}`];
+
+  const typeLabel = (mimeType: string): string => {
+    const entry = (
+      Object.entries(mimeTypeCategories) as [MimeTypeCategory, string[]][]
+    ).find(([, list]) => list.includes(mimeType));
+    return entry ? entry[0] : "File";
+  };
+
+  const isEmpty = visibleFolders.length === 0 && filteredFiles.length === 0;
+
   return (
     <div className="space-y-4">
+      {/* Toolbar: search + type filter + sort + view toggle */}
+      <div className="flex flex-col gap-3 border-b pb-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-2 border px-3 py-2 sm:w-80">
+          <Search className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
+          <input
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search files…"
+            className="w-full bg-transparent text-sm outline-none"
+          />
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          {filterChips.map((chip) => (
+            <button
+              key={chip.value}
+              onClick={() => setFilter(chip.value)}
+              className={`px-3 py-1.5 text-xs transition-colors ${
+                filter === chip.value
+                  ? "border border-foreground bg-muted font-semibold"
+                  : "border border-border text-muted-foreground hover:bg-muted/60"
+              }`}
+            >
+              {chip.label}
+            </button>
+          ))}
+
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button className="flex items-center gap-2 border px-3 py-1.5 text-xs">
+                <ArrowDownUp className="h-3.5 w-3.5" />
+                {currentSortLabel}
+                <ChevronDown className="h-3.5 w-3.5" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem
+                onClick={() => {
+                  setSortKey("date");
+                  setSortDir("desc");
+                }}
+              >
+                Newest first
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => {
+                  setSortKey("date");
+                  setSortDir("asc");
+                }}
+              >
+                Oldest first
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => {
+                  setSortKey("name");
+                  setSortDir("asc");
+                }}
+              >
+                Name A–Z
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => {
+                  setSortKey("name");
+                  setSortDir("desc");
+                }}
+              >
+                Name Z–A
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+
+          <div className="flex border">
+            <button
+              onClick={() => setViewMode("grid")}
+              aria-label="Grid view"
+              className={`p-2 ${
+                viewMode === "grid"
+                  ? "bg-muted text-foreground"
+                  : "text-muted-foreground hover:bg-muted/60"
+              }`}
+            >
+              <LayoutGrid className="h-4 w-4" />
+            </button>
+            <button
+              onClick={() => setViewMode("list")}
+              aria-label="List view"
+              className={`border-l p-2 ${
+                viewMode === "list"
+                  ? "bg-muted text-foreground"
+                  : "text-muted-foreground hover:bg-muted/60"
+              }`}
+            >
+              <ListIcon className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      </div>
+
       {isLoadingFiles ? (
         <p className="text-center text-muted-foreground py-8">Loading...</p>
-      ) : (
-        <>
-          {folders.length > 0 || filteredFiles.length > 0 ? (
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
-              {/* Folders */}
-              {folders.map((folder) => (
-                <FolderItem
-                  key={folder.id}
-                  folder={folder}
-                  userEmail={userEmail!}
-                  onDeleted={() => setRefreshFileListKey((prev) => prev + 1)}
-                  onFileMoved={() => setRefreshFileListKey((prev) => prev + 1)}
-                />
-              ))}
+      ) : isEmpty ? (
+        <p className="text-center text-muted-foreground py-8">
+          {searchQuery
+            ? `No files match "${searchQuery}".`
+            : "No files or folders. Upload a file or create a folder to get started."}
+        </p>
+      ) : viewMode === "grid" ? (
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
+          {visibleFolders.map((folder) => (
+            <FolderItem
+              key={folder.id}
+              folder={folder}
+              userEmail={userEmail!}
+              onDeleted={() => setRefreshFileListKey((prev) => prev + 1)}
+              onFileMoved={() => setRefreshFileListKey((prev) => prev + 1)}
+            />
+          ))}
 
-              {/* File cards */}
-              {filteredFiles.map((file) => (
-                <div
-                  key={file.id}
-                  className={`relative flex flex-col items-center gap-2 p-4 cursor-pointer group ${
-                    draggingFileId === file.id ? "opacity-50" : ""
-                  }`}
-                  draggable
-                  onDragStart={(e) => {
-                    e.dataTransfer.setData("text/x-file-id", file.id);
-                    e.dataTransfer.setData("text/x-file-name", file.name);
-                    e.dataTransfer.effectAllowed = "move";
-                    setDraggingFileId(file.id);
-                  }}
-                  onDragEnd={() => setDraggingFileId(null)}
-                  onClick={() =>
-                    handlePreview(file.id, file.name, file.mimeType)
-                  }
-                  title={file.name}
-                >
-                  {/* Delete button - top right, visible on hover */}
-                  <button
-                    onClick={(e) => deleteFileHandler(file.id, file.name, e)}
-                    className="absolute top-2 right-2 p-1 rounded-md opacity-0 group-hover:opacity-100 transition-opacity text-destructive hover:bg-destructive/10"
-                    aria-label="Delete file"
-                    title="Delete file"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
+          {filteredFiles.map((file) => (
+            <div
+              key={file.id}
+              className={`relative flex flex-col items-center gap-2 p-4 cursor-pointer group ${
+                draggingFileId === file.id ? "opacity-50" : ""
+              }`}
+              draggable
+              onDragStart={(e) => {
+                e.dataTransfer.setData("text/x-file-id", file.id);
+                e.dataTransfer.setData("text/x-file-name", file.name);
+                e.dataTransfer.effectAllowed = "move";
+                setDraggingFileId(file.id);
+              }}
+              onDragEnd={() => setDraggingFileId(null)}
+              onClick={() => handlePreview(file.id, file.name, file.mimeType)}
+              title={file.name}
+            >
+              <button
+                onClick={(e) => deleteFileHandler(file.id, file.name, e)}
+                className="absolute top-2 right-2 p-1 rounded-md opacity-0 group-hover:opacity-100 transition-opacity text-destructive hover:bg-destructive/10"
+                aria-label="Delete file"
+                title="Delete file"
+              >
+                <Trash2 className="h-4 w-4" />
+              </button>
 
-                  {/* Large file type icon */}
-                  <img
-                    src={getFileIconPath(file.mimeType)}
-                    alt=""
-                    className="w-12 h-12"
-                  />
+              <img
+                src={getFileIconPath(file.mimeType)}
+                alt=""
+                className="w-12 h-12"
+              />
 
-                  {/* Filename */}
-                  <p className="text-sm font-medium text-center w-full truncate">
-                    {file.name}
-                  </p>
+              <p className="text-sm font-medium text-center w-full truncate">
+                {file.name}
+              </p>
 
-                  {/* Date */}
-                  <p className="text-xs text-muted-foreground">
-                    {new Date(file.uploadedDate).toLocaleDateString()}
-                  </p>
-                </div>
-              ))}
+              <p className="text-xs text-muted-foreground">
+                {new Date(file.uploadedDate).toLocaleDateString()}
+              </p>
             </div>
-          ) : (
-            <p className="text-center text-muted-foreground py-8">
-              No files or folders. Upload a file or create a folder to get
-              started.
-            </p>
-          )}
-        </>
+          ))}
+        </div>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full border-collapse text-sm">
+            <thead>
+              <tr className="border-b text-left text-xs uppercase tracking-wide text-muted-foreground">
+                <th className="py-2.5 pr-3 font-medium">Name</th>
+                <th className="py-2.5 pr-3 font-medium">Type</th>
+                <th className="py-2.5 pr-3 font-medium">Modified</th>
+                <th className="py-2.5"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {visibleFolders.map((folder) => (
+                <tr
+                  key={folder.id}
+                  className="border-b cursor-pointer hover:bg-muted/50"
+                  onClick={() => {
+                    setCurrentPath([...currentPath, folder]);
+                    navigateToFolder(folder.id);
+                  }}
+                >
+                  <td className="py-2.5 pr-3">
+                    <div className="flex items-center gap-2.5">
+                      <img src="/folder.png" alt="" className="h-5 w-5" />
+                      <span className="font-medium truncate">
+                        {folder.name}
+                      </span>
+                    </div>
+                  </td>
+                  <td className="py-2.5 pr-3 text-muted-foreground">Folder</td>
+                  <td className="py-2.5 pr-3 text-muted-foreground">
+                    {new Date(folder.createdDate).toLocaleDateString()}
+                  </td>
+                  <td className="py-2.5"></td>
+                </tr>
+              ))}
+
+              {filteredFiles.map((file) => {
+                const canPreview = isPreviewable(file.mimeType, file.name);
+                return (
+                  <tr
+                    key={file.id}
+                    className="border-b cursor-pointer hover:bg-muted/50"
+                    onClick={() =>
+                      canPreview
+                        ? handlePreview(file.id, file.name, file.mimeType)
+                        : downloadAndDecryptFile(file.id, file.name)
+                    }
+                  >
+                    <td className="py-2.5 pr-3">
+                      <div className="flex items-center gap-2.5">
+                        <img
+                          src={getFileIconPath(file.mimeType)}
+                          alt=""
+                          className="h-5 w-5"
+                        />
+                        <span className="truncate">{file.name}</span>
+                      </div>
+                    </td>
+                    <td className="py-2.5 pr-3 text-muted-foreground">
+                      {typeLabel(file.mimeType)}
+                    </td>
+                    <td className="py-2.5 pr-3 text-muted-foreground">
+                      {new Date(file.uploadedDate).toLocaleDateString()}
+                    </td>
+                    <td className="py-2.5">
+                      <div className="flex items-center justify-end gap-3">
+                        {canPreview && (
+                          <button
+                            onClick={(e) =>
+                              handlePreview(
+                                file.id,
+                                file.name,
+                                file.mimeType,
+                                e,
+                              )
+                            }
+                            className="text-muted-foreground hover:text-foreground"
+                            aria-label="Preview file"
+                          >
+                            <Eye className="h-4 w-4" />
+                          </button>
+                        )}
+                        <button
+                          onClick={(e) =>
+                            deleteFileHandler(file.id, file.name, e)
+                          }
+                          className="text-muted-foreground hover:text-destructive"
+                          aria-label="Delete file"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       )}
 
       {/* Delete Confirmation Dialog */}
