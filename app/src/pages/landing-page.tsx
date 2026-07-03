@@ -4,6 +4,7 @@ import { content } from "../components/landing-page/content";
 import { GoogleAuth } from "../components/landing-page/google-auth";
 import Footer from "../components/landing-page/footer";
 import Header from "../components/landing-page/header";
+import RecoveryPhrase from "../components/landing-page/recovery-phrase";
 
 interface LandingPageProps {
   onAuthChange?: (authenticated: boolean) => void;
@@ -82,6 +83,7 @@ function LandingPage({ onAuthChange }: LandingPageProps) {
             <Markdown className="inline-block text-left md:w-[85%] font-light text-base ">
               {section.description}
             </Markdown>
+            {section.heading === "Anonymous File Sharing" && <RecoveryPhrase />}
           </div>
         ))}
       </div>
