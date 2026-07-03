@@ -137,16 +137,16 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
                 onClick={onNavigate}
                 aria-current={active ? "page" : undefined}
                 title={!isOpen ? item.label : undefined}
-                className={`flex items-center gap-3 border-l-2 px-3 py-2.5 text-sm transition-colors ${
+                className={`flex items-center gap-3 px-3 py-2.5 text-sm transition-colors ${
                   isOpen ? "" : "justify-center"
                 } ${
                   active
-                    ? "border-foreground bg-muted font-semibold"
+                    ? "border-foreground bg-muted"
                     : "border-transparent hover:bg-muted/60"
                 }`}
               >
                 <Icon
-                  className={`h-[18px] w-[18px] flex-shrink-0 ${active ? "stroke-[2.5]" : ""}`}
+                  className={`h-[18px] w-[18px] flex-shrink-0 ${active ? "stroke-[2]" : ""}`}
                 />
                 {isOpen && <span>{item.label}</span>}
               </Link>
