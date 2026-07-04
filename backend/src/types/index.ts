@@ -7,6 +7,9 @@ export interface PublicKey {
   id?: string;
   user_id: string;
   public_key: string;
+  key_version: number;
+  fingerprint: string | null;
+  is_active: boolean;
   created_at?: Date;
   updated_at?: Date;
 }

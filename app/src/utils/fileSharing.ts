@@ -11,6 +11,7 @@ import {
   readSharedKeyCiphertext,
   serializeSharedKeyEnvelope,
 } from "./sharedKeyEnvelope";
+import { DirectoryPublicKey } from "./apiClient";
 
 /**
  * Represents the result of preparing a file for sharing (Step 1).
@@ -176,16 +177,39 @@ export async function storeUserPublicKey(
 export async function fetchUserPublicKey(
   email: string,
 ): Promise<JsonWebKey | null> {
+  const record = await fetchRecipientPublicKey(email);
+  return record ? JSON.parse(record.public_key) : null;
+}
+
+export async function fetchRecipientPublicKey(
+  email: string,
+): Promise<DirectoryPublicKey | null> {
   try {
     const result = await apiClient.publicKeys.lookup(email);
     if (!result || !result.public_key) {
       logger.warn("Recipient public key not found");
       return null;
     }
-    return JSON.parse(result.public_key);
+    const key = JSON.parse(result.public_key) as JsonWebKey;
+    const canonicalKey = JSON.stringify({
+      e: key.e,
+      kty: key.kty,
+      n: key.n,
+    });
+    const digest = await crypto.subtle.digest(
+      "SHA-256",
+      new TextEncoder().encode(canonicalKey),
+    );
+    const calculatedFingerprint = Array.from(new Uint8Array(digest))
+      .map((byte) => byte.toString(16).padStart(2, "0"))
+      .join("");
+    if (calculatedFingerprint !== result.fingerprint) {
+      throw new Error("Recipient directory returned an invalid fingerprint");
+    }
+    return result;
   } catch (error) {
     logger.warn("Recipient public key lookup failed", error);
-    return null;
+    throw error;
   }
 }
 
@@ -322,6 +346,7 @@ export async function prepareFileForSharing(
   senderEmail: string,
   mnemonic: string,
   customMessage?: string,
+  pinnedRecipientPublicKey?: JsonWebKey,
 ): Promise<{
   encryptedFileBlob: Blob;
   recipientEmail: string;
@@ -349,22 +374,15 @@ export async function prepareFileForSharing(
     // Hash the recipient's email
     // Get the recipient's public key from the database
     // Fetch the recipient's public key JWK directly for logging and use
-    const publicKeyResult = await apiClient.publicKeys.lookup(recipientEmail);
+    const recipientPublicJWKForEncryption =
+      pinnedRecipientPublicKey || (await fetchUserPublicKey(recipientEmail));
 
-    if (!publicKeyResult || !publicKeyResult.public_key) {
+    if (!recipientPublicJWKForEncryption) {
       logger.error(`[FILE-SHARE] Failed to fetch recipient public key`);
       throw new Error(
         `Recipient ${recipientEmail} has not registered their public key yet, or an error occurred fetching it.`,
       );
     }
-
-    const recipientPublicJWKForEncryption = JSON.parse(
-      publicKeyResult.public_key,
-    );
-    logger.log(
-      `[FILE-SHARE] Public Key JWK of recipient (${recipientEmail}) being used for encryption:`,
-      JSON.stringify(recipientPublicJWKForEncryption),
-    );
 
     // Import this specific JWK to a CryptoKey for encryption
     const recipientPublicKeyCryptoKey = await crypto.subtle.importKey(

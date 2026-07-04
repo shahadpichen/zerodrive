@@ -10,8 +10,11 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 -- Stores RSA public keys for users to enable encrypted file sharing
 CREATE TABLE IF NOT EXISTS public_keys (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    user_id VARCHAR(255) NOT NULL UNIQUE,
+    user_id VARCHAR(255) NOT NULL,
     public_key TEXT NOT NULL,
+    key_version INTEGER NOT NULL DEFAULT 1 CHECK (key_version > 0),
+    fingerprint CHAR(64) NOT NULL CHECK (fingerprint ~ '^[0-9a-f]{64}$'),
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
@@ -46,6 +49,10 @@ CREATE TABLE IF NOT EXISTS shared_files (
 
 -- Create indexes for better query performance
 CREATE INDEX IF NOT EXISTS idx_public_keys_user_id ON public_keys(user_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_public_keys_owner_version
+    ON public_keys(user_id, key_version);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_public_keys_one_active
+    ON public_keys(user_id) WHERE is_active;
 CREATE INDEX IF NOT EXISTS idx_shared_files_recipient ON shared_files(recipient_user_id);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_shared_files_file_id_unique ON shared_files(file_id);
 CREATE INDEX IF NOT EXISTS idx_shared_files_expires_at ON shared_files(expires_at);

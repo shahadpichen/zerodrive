@@ -1,7 +1,7 @@
 import request from "supertest";
 import express from "express";
 import publicKeysRouter from "../../routes/publicKeys";
-import { query } from "../../config/database";
+import { query, transaction } from "../../config/database";
 import { deriveLookupCandidates } from "../../utils/identity";
 
 jest.mock("../../config/database");
@@ -9,12 +9,14 @@ jest.mock("../../config/database");
 const ownerLookupId = "a".repeat(64);
 const validPublicKey = JSON.stringify({
   kty: "RSA",
-  n: "test-modulus",
+  n: Buffer.alloc(256, 7).toString("base64url"),
   e: "AQAB",
   alg: "RSA-OAEP-256",
   key_ops: ["encrypt"],
   ext: true,
 });
+const fingerprint = "f".repeat(64);
+const clientQuery = jest.fn();
 
 const app = express();
 app.use(express.json());
@@ -40,13 +42,29 @@ app.use(
 );
 
 describe("privacy-preserving public key directory", () => {
-  beforeEach(() => jest.clearAllMocks());
+  beforeEach(() => {
+    jest.clearAllMocks();
+    (transaction as jest.Mock).mockImplementation(async (callback) =>
+      callback({ query: clientQuery }),
+    );
+  });
 
   it("stores a key only under the authenticated lookup id", async () => {
-    (query as jest.Mock)
+    clientQuery
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [{ next_version: 1 }] })
       .mockResolvedValueOnce({ rows: [] })
       .mockResolvedValueOnce({
-        rows: [{ user_id: ownerLookupId, public_key: validPublicKey }],
+        rows: [
+          {
+            user_id: ownerLookupId,
+            public_key: validPublicKey,
+            key_version: 1,
+            fingerprint,
+            is_active: true,
+          },
+        ],
       });
 
     await request(app)
@@ -54,10 +72,55 @@ describe("privacy-preserving public key directory", () => {
       .send({ public_key: validPublicKey })
       .expect(201);
 
-    expect(query).toHaveBeenLastCalledWith(expect.stringContaining("INSERT"), [
-      ownerLookupId,
-      validPublicKey,
-    ]);
+    expect(clientQuery).toHaveBeenLastCalledWith(
+      expect.stringContaining("INSERT INTO public_keys"),
+      [
+        ownerLookupId,
+        validPublicKey,
+        1,
+        expect.stringMatching(/^[0-9a-f]{64}$/),
+      ],
+    );
+  });
+
+  it("retains the previous key and creates a new active version on rotation", async () => {
+    clientQuery
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            user_id: ownerLookupId,
+            public_key: JSON.stringify({ kty: "RSA", n: "old", e: "AQAB" }),
+            key_version: 1,
+            fingerprint: "0".repeat(64),
+            is_active: true,
+          },
+        ],
+      })
+      .mockResolvedValueOnce({ rows: [{ next_version: 2 }] })
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            user_id: ownerLookupId,
+            public_key: validPublicKey,
+            key_version: 2,
+            fingerprint,
+            is_active: true,
+          },
+        ],
+      });
+
+    const response = await request(app)
+      .post("/api/public-keys")
+      .send({ public_key: validPublicKey })
+      .expect(201);
+
+    expect(clientQuery).toHaveBeenCalledWith(
+      expect.stringContaining("SET is_active = FALSE"),
+      [ownerLookupId],
+    );
+    expect(response.body.data.key_version).toBe(2);
   });
 
   it("rejects caller-supplied owner identifiers", async () => {
@@ -85,7 +148,7 @@ describe("privacy-preserving public key directory", () => {
 
   it("looks up a recipient without returning an internal identifier", async () => {
     (query as jest.Mock).mockResolvedValue({
-      rows: [{ public_key: validPublicKey }],
+      rows: [{ public_key: validPublicKey, key_version: 3, fingerprint }],
     });
 
     const response = await request(app)
@@ -98,7 +161,11 @@ describe("privacy-preserving public key directory", () => {
       candidates,
       candidates[0],
     ]);
-    expect(response.body.data).toEqual({ public_key: validPublicKey });
+    expect(response.body.data).toEqual({
+      public_key: validPublicKey,
+      key_version: 3,
+      fingerprint,
+    });
   });
 
   it("returns 404 for an unknown recipient", async () => {

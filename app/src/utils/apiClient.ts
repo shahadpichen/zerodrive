@@ -40,6 +40,15 @@ interface PublicKeyData {
   public_key: string;
   created_at?: string;
   updated_at?: string;
+  key_version?: number;
+  fingerprint?: string;
+  is_active?: boolean;
+}
+
+export interface DirectoryPublicKey {
+  public_key: string;
+  key_version: number;
+  fingerprint: string;
 }
 
 interface SharedFileData {
@@ -291,9 +300,9 @@ export const publicKeysApi = {
   /**
    * Get a user's public key by user ID
    */
-  async lookup(email: string): Promise<{ public_key: string } | null> {
+  async lookup(email: string): Promise<DirectoryPublicKey | null> {
     try {
-      const response = await httpClient.post<{ public_key: string }>(
+      const response = await httpClient.post<DirectoryPublicKey>(
         "/public-keys/lookup",
         { email },
       );

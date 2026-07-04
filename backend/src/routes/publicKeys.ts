@@ -4,12 +4,13 @@
 
 import { Router } from "express";
 import Joi from "joi";
-import { query } from "../config/database";
+import { query, transaction } from "../config/database";
 import { asyncHandler } from "../middleware/errorHandler";
 import { ApiErrors } from "../middleware/errorHandler";
 import { Request, Response } from "express";
 import { PublicKey } from "../types";
 import { deriveLookupCandidates } from "../utils/identity";
+import crypto from "crypto";
 
 const router = Router();
 
@@ -31,7 +32,7 @@ interface PublicEncryptionJwk {
   d?: string;
 }
 
-function validatePublicKeyJwk(serializedKey: string): void {
+function validatePublicKeyJwk(serializedKey: string): PublicEncryptionJwk {
   let key: PublicEncryptionJwk;
 
   try {
@@ -40,12 +41,18 @@ function validatePublicKeyJwk(serializedKey: string): void {
     throw ApiErrors.ValidationError("public_key must be valid JSON");
   }
 
+  let modulusBytes = 0;
+  try {
+    modulusBytes = key.n ? Buffer.from(key.n, "base64url").byteLength : 0;
+  } catch {
+    modulusBytes = 0;
+  }
+
   const isEncryptionKey =
     key.kty === "RSA" &&
     typeof key.n === "string" &&
-    key.n.length > 0 &&
-    typeof key.e === "string" &&
-    key.e.length > 0 &&
+    modulusBytes === 256 &&
+    key.e === "AQAB" &&
     (!key.alg || key.alg === "RSA-OAEP-256") &&
     (!key.key_ops ||
       (key.key_ops.length === 1 && key.key_ops[0] === "encrypt")) &&
@@ -56,6 +63,12 @@ function validatePublicKeyJwk(serializedKey: string): void {
       "public_key must be an RSA-OAEP-256 public encryption JWK",
     );
   }
+  return key;
+}
+
+function fingerprintPublicKey(key: PublicEncryptionJwk): string {
+  const canonicalKey = JSON.stringify({ e: key.e, kty: key.kty, n: key.n });
+  return crypto.createHash("sha256").update(canonicalKey).digest("hex");
 }
 
 function toClientPublicKey(record: PublicKey) {
@@ -82,44 +95,53 @@ router.post(
 
     const { public_key } = value;
     const userId = req.user.emailHash;
-    validatePublicKeyJwk(public_key);
+    const fingerprint = fingerprintPublicKey(validatePublicKeyJwk(public_key));
 
     try {
-      // Check if public key already exists for this user
-      const existingKey = await query<PublicKey>(
-        "SELECT * FROM public_keys WHERE user_id = $1",
-        [userId],
+      const stored = await transaction(async (client) => {
+        await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [
+          userId,
+        ]);
+        const existingKey = await client.query<PublicKey>(
+          `SELECT * FROM public_keys
+           WHERE user_id = $1 AND is_active = TRUE
+           FOR UPDATE`,
+          [userId],
+        );
+        const active = existingKey.rows[0];
+        if (active?.fingerprint === fingerprint) {
+          return { record: active, created: false };
+        }
+
+        const versionResult = await client.query<{ next_version: number }>(
+          `SELECT COALESCE(MAX(key_version), 0) + 1 AS next_version
+           FROM public_keys WHERE user_id = $1`,
+          [userId],
+        );
+        const keyVersion = versionResult.rows[0].next_version;
+
+        await client.query(
+          `UPDATE public_keys SET is_active = FALSE
+           WHERE user_id = $1 AND is_active = TRUE`,
+          [userId],
+        );
+        const inserted = await client.query<PublicKey>(
+          `INSERT INTO public_keys
+             (user_id, public_key, key_version, fingerprint, is_active)
+           VALUES ($1, $2, $3, $4, TRUE)
+           RETURNING *`,
+          [userId, public_key, keyVersion, fingerprint],
+        );
+        return { record: inserted.rows[0], created: true };
+      });
+
+      res.apiSuccess(
+        toClientPublicKey(stored.record),
+        stored.created
+          ? "Public key version stored successfully"
+          : "Public key already current",
+        stored.created ? 201 : 200,
       );
-
-      if (existingKey.rows.length > 0) {
-        // Update existing public key
-        const result = await query<PublicKey>(
-          `UPDATE public_keys 
-         SET public_key = $2, updated_at = CURRENT_TIMESTAMP 
-         WHERE user_id = $1 
-         RETURNING *`,
-          [userId, public_key],
-        );
-
-        res.apiSuccess(
-          toClientPublicKey(result.rows[0]),
-          "Public key updated successfully",
-        );
-      } else {
-        // Create new public key record
-        const result = await query<PublicKey>(
-          `INSERT INTO public_keys (user_id, public_key) 
-         VALUES ($1, $2) 
-         RETURNING *`,
-          [userId, public_key],
-        );
-
-        res.apiSuccess(
-          toClientPublicKey(result.rows[0]),
-          "Public key stored successfully",
-          201,
-        );
-      }
     } catch (error) {
       throw ApiErrors.InternalServer("Failed to store public key");
     }
@@ -141,9 +163,9 @@ router.post(
     try {
       const lookupIds = deriveLookupCandidates(value.email);
       const result = await query<PublicKey>(
-        `SELECT public_key
+        `SELECT public_key, key_version, fingerprint
          FROM public_keys
-         WHERE user_id = ANY($1::varchar[])
+         WHERE user_id = ANY($1::varchar[]) AND is_active = TRUE
          ORDER BY CASE WHEN user_id = $2 THEN 0 ELSE 1 END
          LIMIT 1`,
         [lookupIds, lookupIds[0]],
@@ -154,7 +176,15 @@ router.post(
       }
 
       res.apiSuccess(
-        { public_key: result.rows[0].public_key },
+        {
+          public_key: result.rows[0].public_key,
+          key_version: result.rows[0].key_version,
+          fingerprint:
+            result.rows[0].fingerprint ||
+            fingerprintPublicKey(
+              validatePublicKeyJwk(result.rows[0].public_key),
+            ),
+        },
         "Public key retrieved successfully",
       );
     } catch (error) {

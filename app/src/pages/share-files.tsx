@@ -32,13 +32,15 @@ import {
 } from "../utils/dexieDB";
 import { decryptFile } from "../utils/decryptFile";
 import {
+  fetchRecipientPublicKey,
   fetchUserPublicKey,
   generateUserKeyPair,
   prepareFileForSharing,
   storeFileShare,
   storeUserPublicKey,
 } from "../utils/fileSharing";
-import apiClient from "../utils/apiClient";
+import apiClient, { DirectoryPublicKey } from "../utils/apiClient";
+import { getRecipientKeyPin, pinRecipientKey } from "../utils/recipientKeyPins";
 import {
   deleteUserKeyPair,
   getUserKeyPair,
@@ -158,6 +160,10 @@ const ShareFilesPage: React.FC = () => {
   const [recipientError, setRecipientError] = useState("");
   const [isCheckingRecipient, setIsCheckingRecipient] = useState(false);
   const [recipientVerified, setRecipientVerified] = useState(false);
+  const [recipientDirectoryKey, setRecipientDirectoryKey] =
+    useState<DirectoryPublicKey | null>(null);
+  const [changedRecipientKey, setChangedRecipientKey] =
+    useState<DirectoryPublicKey | null>(null);
   const [customMessage, setCustomMessage] = useState("");
   const [showMessage, setShowMessage] = useState(false);
   const [mnemonicInput, setMnemonicInput] = useState("");
@@ -378,6 +384,8 @@ const ShareFilesPage: React.FC = () => {
     setRecipientEmail(value);
     setRecipientError("");
     setRecipientVerified(false);
+    setRecipientDirectoryKey(null);
+    setChangedRecipientKey(null);
   };
 
   const validateRecipient = async (): Promise<boolean> => {
@@ -399,7 +407,7 @@ const ShareFilesPage: React.FC = () => {
     setIsCheckingRecipient(true);
     setRecipientError("");
     try {
-      const publicKey = await fetchUserPublicKey(normalizedEmail);
+      const publicKey = await fetchRecipientPublicKey(normalizedEmail);
       setRecipientEmail(normalizedEmail);
 
       if (!publicKey) {
@@ -408,6 +416,25 @@ const ShareFilesPage: React.FC = () => {
         return false;
       }
 
+      const pinnedKey = getRecipientKeyPin(normalizedEmail);
+      if (pinnedKey && pinnedKey.fingerprint !== publicKey.fingerprint) {
+        setRecipientVerified(false);
+        setChangedRecipientKey(publicKey);
+        setRecipientError(
+          "This recipient's encryption key changed. Confirm the new fingerprint before sharing.",
+        );
+        return false;
+      }
+
+      if (!pinnedKey) {
+        pinRecipientKey(
+          normalizedEmail,
+          publicKey.fingerprint,
+          publicKey.key_version,
+        );
+      }
+      setRecipientDirectoryKey(publicKey);
+      setChangedRecipientKey(null);
       setRecipientVerified(true);
       return true;
     } catch (error) {
@@ -427,9 +454,29 @@ const ShareFilesPage: React.FC = () => {
 
     const validRecipient = recipientVerified || (await validateRecipient());
     if (validRecipient) {
+      if (recipientDirectoryKey) {
+        pinRecipientKey(
+          recipientEmail,
+          recipientDirectoryKey.fingerprint,
+          recipientDirectoryKey.key_version,
+        );
+      }
       setShareError("");
       setPageState("review");
     }
+  };
+
+  const confirmChangedRecipientKey = () => {
+    if (!changedRecipientKey) return;
+    pinRecipientKey(
+      recipientEmail,
+      changedRecipientKey.fingerprint,
+      changedRecipientKey.key_version,
+    );
+    setRecipientDirectoryKey(changedRecipientKey);
+    setChangedRecipientKey(null);
+    setRecipientError("");
+    setRecipientVerified(true);
   };
 
   const getFileForSharing = async (): Promise<File> => {
@@ -488,6 +535,9 @@ const ShareFilesPage: React.FC = () => {
         senderEmail,
         mnemonic,
         customMessage.trim() || undefined,
+        recipientDirectoryKey
+          ? JSON.parse(recipientDirectoryKey.public_key)
+          : undefined,
       );
 
       setShareStage("uploading");
@@ -963,9 +1013,31 @@ const ShareFilesPage: React.FC = () => {
               )}
             </div>
             {recipientError ? (
-              <p id="recipient-error" className="text-xs text-destructive">
-                {recipientError}
-              </p>
+              <div id="recipient-error" className="space-y-3">
+                <p className="text-xs text-destructive">{recipientError}</p>
+                {changedRecipientKey && (
+                  <div className="border border-destructive/40 bg-destructive/5 p-3">
+                    <p className="text-xs font-medium">New key fingerprint</p>
+                    <code className="mt-1 block break-all text-[11px] text-muted-foreground">
+                      {changedRecipientKey.fingerprint}
+                    </code>
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      Verify this fingerprint with the recipient through another
+                      channel. First-contact trust depends on the ZeroDrive
+                      directory.
+                    </p>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="mt-3"
+                      onClick={confirmChangedRecipientKey}
+                    >
+                      Trust this new key
+                    </Button>
+                  </div>
+                )}
+              </div>
             ) : (
               <p id="recipient-help" className="text-xs text-muted-foreground">
                 {recipientVerified
