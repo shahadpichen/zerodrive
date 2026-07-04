@@ -1,31 +1,49 @@
-import React, { useState, useEffect } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import {
+  AlertCircle,
+  ArrowLeft,
+  Check,
+  Eye,
+  EyeOff,
+  FileUp,
+  HardDrive,
+  KeyRound,
+  Loader2,
+  LockKeyhole,
+  Mail,
+  RefreshCw,
+  Send,
+  ShieldCheck,
+  Upload,
+  X,
+} from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
-import { gapi } from "gapi-script";
-import { toast } from "sonner";
+import { Progress } from "../components/ui/progress";
+import { Textarea } from "../components/ui/textarea";
+import { getFileIconPath } from "../lib/mime-types";
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "../components/ui/card";
-import { Separator } from "../components/ui/separator";
+  fetchAndStoreFileMetadata,
+  FileMeta,
+  getAllFilesForUser,
+} from "../utils/dexieDB";
+import { decryptFile } from "../utils/decryptFile";
 import {
+  fetchUserPublicKey,
+  generateUserKeyPair,
+  hashEmail,
   prepareFileForSharing,
   storeFileShare,
-  generateUserKeyPair,
   storeUserPublicKey,
-  hashEmail,
-  fetchUserPublicKey,
 } from "../utils/fileSharing";
 import apiClient from "../utils/apiClient";
 import {
-  storeUserKeyPair,
-  getUserKeyPair,
   deleteUserKeyPair,
+  getUserKeyPair,
+  storeUserKeyPair,
 } from "../utils/keyStorage";
 import { encryptRsaPrivateKeyWithAesKey } from "../utils/rsaKeyManager";
 import { uploadEncryptedRsaKeyToDrive } from "../utils/gdriveKeyStorage";
@@ -33,664 +51,1269 @@ import { getStoredKey } from "../utils/cryptoUtils";
 import { getMnemonic } from "../utils/mnemonicManager";
 import { recoverRsaKeysIfNeeded } from "../utils/rsaKeyRecovery";
 
+type PageState =
+  | "checking"
+  | "setup"
+  | "unlock"
+  | "compose"
+  | "review"
+  | "invite"
+  | "sharing"
+  | "success";
+
+type ShareStage = "preparing" | "encrypting" | "uploading" | "finishing";
+type FileSource = "device" | "storage";
+
+interface ShareReceipt {
+  fileName: string;
+  recipientEmail: string;
+  expiresAt: Date;
+}
+
+const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function formatBytes(bytes: number): string {
+  if (bytes === 0) return "0 B";
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  const index = Math.min(
+    Math.floor(Math.log(bytes) / Math.log(1024)),
+    units.length - 1,
+  );
+  return `${(bytes / 1024 ** index).toFixed(index === 0 ? 0 : 1)} ${units[index]}`;
+}
+
+async function syncPublicKeyIfNeeded(
+  email: string,
+  mnemonic: string,
+): Promise<void> {
+  try {
+    const hashedEmail = await hashEmail(email);
+    const serverKey = await fetchUserPublicKey(hashedEmail);
+    if (serverKey) return;
+
+    const localKeyPair = await getUserKeyPair(email, mnemonic);
+    if (localKeyPair?.publicKeyJwk) {
+      await storeUserPublicKey(hashedEmail, localKeyPair.publicKeyJwk);
+    }
+  } catch (error) {
+    console.error("[Share] Public-key sync failed:", error);
+  }
+}
+
+function StepIndicator({
+  current,
+}: {
+  current: "file" | "recipient" | "review";
+}) {
+  const steps = [
+    { id: "file", label: "File" },
+    { id: "recipient", label: "Recipient" },
+    { id: "review", label: "Review" },
+  ] as const;
+  const currentIndex = steps.findIndex((step) => step.id === current);
+
+  return (
+    <ol className="grid grid-cols-3 border" aria-label="Sharing progress">
+      {steps.map((step, index) => {
+        const complete = index < currentIndex;
+        const active = index === currentIndex;
+        return (
+          <li
+            key={step.id}
+            className={`flex items-center gap-2 border-r px-3 py-2.5 text-xs last:border-r-0 sm:px-4 ${
+              active ? "bg-muted/60 text-foreground" : "text-muted-foreground"
+            }`}
+            aria-current={active ? "step" : undefined}
+          >
+            <span
+              className={`flex h-5 w-5 items-center justify-center border text-[10px] ${
+                complete ? "bg-foreground text-background" : ""
+              }`}
+              aria-hidden="true"
+            >
+              {complete ? <Check className="h-3 w-3" /> : index + 1}
+            </span>
+            <span className={active ? "font-medium" : ""}>{step.label}</span>
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
 const ShareFilesPage: React.FC = () => {
   const navigate = useNavigate();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const openKeyManagement = () => navigate("/key-management?returnTo=%2Fshare");
+
+  const [pageState, setPageState] = useState<PageState>("checking");
+  const [senderEmail, setSenderEmail] = useState("");
   const [file, setFile] = useState<File | null>(null);
-  const [recipientEmail, setRecipientEmail] = useState<string>("");
-  const [customMessage, setCustomMessage] = useState<string>("");
-  const [senderEmail, setSenderEmail] = useState<string>("");
-  const [isSharing, setIsSharing] = useState<boolean>(false);
-  const [hasGeneratedKeys, setHasGeneratedKeys] = useState<boolean>(false);
-  const [isGeneratingKeys, setIsGeneratingKeys] = useState<boolean>(false);
-  const [isCheckingKeys, setIsCheckingKeys] = useState<boolean>(true);
-  const [recipientKeyMissing, setRecipientKeyMissing] =
-    useState<boolean>(false);
-  const [isSendingInvitation, setIsSendingInvitation] =
-    useState<boolean>(false);
-  const [mnemonicInput, setMnemonicInput] = useState<string>("");
-  const [showMnemonicInput, setShowMnemonicInput] = useState<boolean>(false);
-  const [isVerifyingMnemonic, setIsVerifyingMnemonic] =
-    useState<boolean>(false);
-  const [mnemonicVerified, setMnemonicVerified] = useState<boolean>(false);
-
-  // Rollback function to clean up keys if backup fails
-  const rollbackKeyGeneration = async (email: string) => {
-    try {
-      console.log("Rolling back key generation for:", email);
-
-      // 1. Delete from IndexedDB
-      await deleteUserKeyPair(email);
-
-      // 2. Delete from PostgreSQL
-      const hashedEmail = await hashEmail(email);
-      await apiClient.publicKeys.delete(hashedEmail);
-
-      console.log(
-        "Rollback completed: keys deleted from all storage locations",
-      );
-    } catch (error) {
-      console.error("Error during rollback:", error);
-    }
-  };
+  const [storedFile, setStoredFile] = useState<FileMeta | null>(null);
+  const [fileSource, setFileSource] = useState<FileSource>("device");
+  const [storageFiles, setStorageFiles] = useState<FileMeta[]>([]);
+  const [storageSearch, setStorageSearch] = useState("");
+  const [isLoadingStorage, setIsLoadingStorage] = useState(false);
+  const [storageLoaded, setStorageLoaded] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+  const [recipientEmail, setRecipientEmail] = useState("");
+  const [recipientError, setRecipientError] = useState("");
+  const [isCheckingRecipient, setIsCheckingRecipient] = useState(false);
+  const [recipientVerified, setRecipientVerified] = useState(false);
+  const [customMessage, setCustomMessage] = useState("");
+  const [showMessage, setShowMessage] = useState(false);
+  const [mnemonicInput, setMnemonicInput] = useState("");
+  const [showMnemonic, setShowMnemonic] = useState(false);
+  const [isVerifyingMnemonic, setIsVerifyingMnemonic] = useState(false);
+  const [isGeneratingKeys, setIsGeneratingKeys] = useState(false);
+  const [isSendingInvitation, setIsSendingInvitation] = useState(false);
+  const [invitationSent, setInvitationSent] = useState(false);
+  const [shareStage, setShareStage] = useState<ShareStage>("encrypting");
+  const [shareError, setShareError] = useState("");
+  const [receipt, setReceipt] = useState<ShareReceipt | null>(null);
 
   useEffect(() => {
-    const initializeAndCheckKeys = async () => {
-      if (!senderEmail) return;
+    let active = true;
 
-      setIsCheckingKeys(true);
-
+    const initialize = async () => {
       try {
-        // Use centralized recovery utility
-        const result = await recoverRsaKeysIfNeeded(senderEmail, false);
+        const { getUserEmail, hasGoogleTokensInStorage, logout } =
+          await import("../utils/authService");
+        const email = await getUserEmail();
+
+        if (!email || !hasGoogleTokensInStorage()) {
+          await logout();
+          window.location.href = "/";
+          return;
+        }
+
+        try {
+          const { initializeGapi } = await import("../utils/gapiInit");
+          await initializeGapi();
+        } catch (error) {
+          console.error("[Share] Google Drive initialization failed:", error);
+        }
+
+        if (!active) return;
+        setSenderEmail(email);
+
+        const result = await recoverRsaKeysIfNeeded(email, true);
+        if (!active) return;
 
         if (result.keysExisted || result.recovered) {
-          // Keys exist or were successfully recovered
-          setHasGeneratedKeys(true);
-
-          // Auto-repair: Ensure public key is synced to server
-          if (result.keysExisted) {
-            const hashedEmail = await hashEmail(senderEmail);
-            try {
-              const serverKey = await fetchUserPublicKey(hashedEmail);
-              if (!serverKey) {
-                const mnemonic = getMnemonic();
-                if (mnemonic) {
-                  const localKeyPair = await getUserKeyPair(
-                    senderEmail,
-                    mnemonic,
-                  );
-                  if (localKeyPair?.publicKeyJwk) {
-                    await storeUserPublicKey(
-                      hashedEmail,
-                      localKeyPair.publicKeyJwk,
-                    );
-                    console.log("Public key synced to server");
-                  }
-                }
-              }
-            } catch (syncError) {
-              console.error("Error syncing public key to server:", syncError);
-            }
+          const mnemonic = getMnemonic();
+          if (mnemonic) {
+            await syncPublicKeyIfNeeded(email, mnemonic);
           }
+          if (active) setPageState(mnemonic ? "compose" : "unlock");
         } else {
-          // No keys found (user hasn't enabled sharing yet)
-          setHasGeneratedKeys(false);
+          setPageState("setup");
         }
       } catch (error) {
-        console.error("Error during key initialization:", error);
-        setHasGeneratedKeys(false);
-      } finally {
-        setIsCheckingKeys(false);
+        console.error("[Share] Failed to initialize:", error);
+        if (active) {
+          setShareError("We could not check your sharing setup. Try again.");
+          setPageState("setup");
+        }
       }
     };
 
-    if (senderEmail) initializeAndCheckKeys();
-  }, [senderEmail, navigate]);
-
-  useEffect(() => {
-    const getUserEmail = async () => {
-      try {
-        // Use authService to get email (more reliable than GAPI)
-        const { getUserEmail: getEmail } = await import("../utils/authService");
-        const email = await getEmail();
-
-        if (email) {
-          setSenderEmail(email);
-        } else {
-          console.warn("User not authenticated");
-          navigate("/");
-        }
-      } catch (error) {
-        console.error("Error getting user email:", error);
-        navigate("/");
-      }
+    initialize();
+    return () => {
+      active = false;
     };
-    getUserEmail();
-  }, [navigate]);
+  }, []);
 
-  // Check if mnemonic exists in memory
-  useEffect(() => {
-    if (hasGeneratedKeys) {
-      const mnemonic = getMnemonic();
-      if (!mnemonic) {
-        // Keys exist but mnemonic not in memory - show input
-        setShowMnemonicInput(true);
-        setMnemonicVerified(false);
-      } else {
-        // Mnemonic in memory - no need for input
-        setShowMnemonicInput(false);
-        setMnemonicVerified(true);
-      }
-    }
-  }, [hasGeneratedKeys]);
-
-  // Verify mnemonic function - only for decryption, NOT stored in memory
-  const verifyMnemonic = async () => {
-    if (!mnemonicInput || !senderEmail) return;
-
-    setIsVerifyingMnemonic(true);
+  const rollbackKeyGeneration = async (email: string) => {
     try {
-      // Try to decrypt keys with mnemonic
-      const keyPair = await getUserKeyPair(senderEmail, mnemonicInput);
-      if (keyPair) {
-        setMnemonicVerified(true);
-        setShowMnemonicInput(false);
-        toast.success("Mnemonic verified - you can now share files");
-      } else {
-        toast.error("Invalid mnemonic or keys not found");
-      }
+      await deleteUserKeyPair(email);
+      const hashedEmail = await hashEmail(email);
+      await apiClient.publicKeys.delete(hashedEmail);
     } catch (error) {
-      console.error("Mnemonic verification failed:", error);
-      toast.error("Invalid mnemonic - cannot decrypt keys");
-    } finally {
-      setIsVerifyingMnemonic(false);
+      console.error("[Share] Key rollback failed:", error);
     }
-  };
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files.length > 0) {
-      setFile(e.target.files[0]);
-    }
-  };
-
-  const handleRecipientEmailChange = (
-    e: React.ChangeEvent<HTMLInputElement>,
-  ) => {
-    setRecipientEmail(e.target.value);
   };
 
   const handleGenerateKeys = async () => {
-    if (!senderEmail) {
-      toast.error("User email not available. Cannot generate keys.");
-      return;
-    }
+    if (!senderEmail || isGeneratingKeys) return;
 
     setIsGeneratingKeys(true);
-    const genToastId = toast.loading("Performing preflight checks...");
+    setShareError("");
 
     try {
-      // 1. Check Google Drive authentication FIRST
-      const authInstance = gapi.auth2?.getAuthInstance();
-      if (!authInstance || !authInstance.isSignedIn.get()) {
-        toast.error("Google Drive not authenticated", {
-          description:
-            "Backup is required for file sharing. Please ensure you are signed in.",
-          id: genToastId,
-        });
-        setIsGeneratingKeys(false);
-        return;
-      }
-
-      // 2. Check for primary encryption key
-      toast.loading("Checking for primary encryption key...", {
-        id: genToastId,
-      });
       const primaryAesKey = await getStoredKey();
+      const mnemonic = getMnemonic();
 
-      if (!primaryAesKey) {
-        toast.info("Redirecting to Key Management page...", {
-          id: genToastId,
-          description: "You need to set up your main encryption key first.",
-        });
-        setIsGeneratingKeys(false);
-        navigate("/key-management");
+      if (!primaryAesKey || !mnemonic) {
+        toast.info("Set up your encryption key first");
+        openKeyManagement();
         return;
       }
 
-      // 3. Generate RSA keys
-      toast.loading("Generating your sharing keys...", { id: genToastId });
       const keyPair = await generateUserKeyPair();
       const hashedEmail = await hashEmail(senderEmail);
 
-      // 4. Store keys locally (IndexedDB and PostgreSQL)
       await storeUserPublicKey(hashedEmail, keyPair.publicKeyJwk);
-
-      // Get mnemonic from memory (user must have come from /key-management)
-      const mnemonic = getMnemonic();
-      if (!mnemonic) {
-        throw new Error("Mnemonic not found - cannot encrypt RSA private key");
-      }
       await storeUserKeyPair(senderEmail, keyPair, mnemonic);
 
-      // 5. Backup to Google Drive (MANDATORY)
-      if (keyPair.privateKeyJwk) {
-        toast.loading("Backing up to Google Drive (required)...", {
-          id: genToastId,
-        });
-
-        try {
-          const encryptedPrivateKeyBlob = await encryptRsaPrivateKeyWithAesKey(
-            keyPair.privateKeyJwk,
-            primaryAesKey,
-          );
-
-          console.log(
-            "Encrypted private key blob for backup (using primary AES key):",
-            encryptedPrivateKeyBlob,
-          );
-
-          const uploadFileId = await uploadEncryptedRsaKeyToDrive(
-            encryptedPrivateKeyBlob,
-          );
-
-          if (!uploadFileId) {
-            throw new Error("Google Drive upload returned null");
-          }
-
-          // ✅ SUCCESS - Everything worked!
-          setHasGeneratedKeys(true);
-          toast.success("Sharing keys generated and backed up to Drive", {
-            id: genToastId,
-          });
-        } catch (backupError) {
-          // ❌ BACKUP FAILED - Rollback everything
-          console.error("Backup failed, rolling back:", backupError);
-
-          toast.loading("Backup failed - cleaning up...", { id: genToastId });
-
-          await rollbackKeyGeneration(senderEmail);
-
-          toast.error("Key generation cancelled due to backup failure", {
-            description:
-              backupError instanceof Error
-                ? backupError.message
-                : "Could not backup to Google Drive. Please check connection and try again.",
-            id: genToastId,
-            duration: 8000,
-          });
-
-          setIsGeneratingKeys(false);
-          return; // Stop here - don't continue
-        }
+      try {
+        const encryptedPrivateKey = await encryptRsaPrivateKeyWithAesKey(
+          keyPair.privateKeyJwk,
+          primaryAesKey,
+        );
+        const backupId =
+          await uploadEncryptedRsaKeyToDrive(encryptedPrivateKey);
+        if (!backupId) throw new Error("Google Drive backup failed");
+      } catch (error) {
+        await rollbackKeyGeneration(senderEmail);
+        throw error;
       }
+
+      toast.success("File sharing is ready");
+      setPageState("compose");
     } catch (error) {
-      console.error("Error during sharing key generation process:", error);
-      let errorMessage =
-        error instanceof Error ? error.message : "Unknown error";
-      let description = "";
-      if (
-        errorMessage.includes("API key") ||
-        errorMessage.includes("connect")
-      ) {
-        description = "Network connection issue.";
-      }
-      toast.error("Failed to generate sharing keys", {
-        description: description || errorMessage,
-        id: genToastId,
-      });
+      console.error("[Share] Failed to enable sharing:", error);
+      setShareError(
+        error instanceof Error
+          ? error.message
+          : "Sharing setup failed. Check your connection and try again.",
+      );
     } finally {
       setIsGeneratingKeys(false);
     }
   };
 
-  const handleShareFile = async () => {
-    if (!file) {
-      toast.error("Please select a file to share");
-      return;
-    }
-    if (!recipientEmail) {
-      toast.error("Please enter recipient's email");
-      return;
-    }
-    if (!senderEmail) {
-      toast.error("Your email could not be determined");
-      return;
-    }
-    if (!hasGeneratedKeys) {
-      toast.error(
-        "You need to generate your sharing keys first. Click the button above.",
-      );
-      return;
-    }
+  const verifyMnemonic = async () => {
+    if (!mnemonicInput.trim() || !senderEmail || isVerifyingMnemonic) return;
 
-    // Get mnemonic from memory or from input field
-    const mnemonic = getMnemonic() || mnemonicInput;
-    if (!mnemonic) {
-      toast.error("Mnemonic is required to decrypt sharing keys");
-      return;
-    }
-
-    setIsSharing(true);
-    setRecipientKeyMissing(false); // Reset state
-    const sharingToastId = toast.loading(`Preparing to share ${file.name}...`);
+    setIsVerifyingMnemonic(true);
+    setShareError("");
     try {
+      const keyPair = await getUserKeyPair(senderEmail, mnemonicInput.trim());
+      if (!keyPair) throw new Error("Sharing keys were not found");
+      await syncPublicKeyIfNeeded(senderEmail, mnemonicInput.trim());
+      setPageState("compose");
+      toast.success("Sharing keys unlocked");
+    } catch (error) {
+      console.error("[Share] Mnemonic verification failed:", error);
+      setShareError(
+        "That recovery phrase could not unlock your sharing keys. Check it and try again.",
+      );
+    } finally {
+      setIsVerifyingMnemonic(false);
+    }
+  };
+
+  const hasSelectedFile = Boolean(file || storedFile);
+  const selectedFileName = file?.name || storedFile?.name || "";
+  const selectedMimeType = file?.type || storedFile?.mimeType || "";
+  const filteredStorageFiles = storageFiles.filter((stored) =>
+    stored.name.toLowerCase().includes(storageSearch.trim().toLowerCase()),
+  );
+
+  const loadStorageFiles = async (forceRefresh = false) => {
+    if (!senderEmail || isLoadingStorage) return;
+    if (storageLoaded && !forceRefresh) return;
+
+    setIsLoadingStorage(true);
+    setShareError("");
+    try {
+      if (forceRefresh || !storageLoaded) {
+        try {
+          await fetchAndStoreFileMetadata();
+        } catch (error) {
+          console.warn(
+            "[Share] Could not refresh storage metadata; using local cache:",
+            error,
+          );
+        }
+      }
+      const files = await getAllFilesForUser(senderEmail);
+      setStorageFiles(
+        [...files].sort(
+          (a, b) =>
+            new Date(b.uploadedDate).getTime() -
+            new Date(a.uploadedDate).getTime(),
+        ),
+      );
+      setStorageLoaded(true);
+    } catch (error) {
+      console.error("[Share] Failed to load stored files:", error);
+      setShareError("Your stored files could not be loaded. Try refreshing.");
+    } finally {
+      setIsLoadingStorage(false);
+    }
+  };
+
+  const chooseFileSource = (source: FileSource) => {
+    setFileSource(source);
+    setShareError("");
+    if (source === "storage") void loadStorageFiles();
+  };
+
+  const selectFile = (selectedFile?: File) => {
+    if (!selectedFile) return;
+    setFile(selectedFile);
+    setStoredFile(null);
+    setFileSource("device");
+    setShareError("");
+  };
+
+  const selectStoredFile = (selectedFile: FileMeta) => {
+    setStoredFile(selectedFile);
+    setFile(null);
+    setFileSource("storage");
+    if (fileInputRef.current) fileInputRef.current.value = "";
+    setShareError("");
+  };
+
+  const removeFile = () => {
+    setFile(null);
+    setStoredFile(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const handleDrop = (event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    setIsDragging(false);
+    selectFile(event.dataTransfer.files[0]);
+  };
+
+  const handleRecipientChange = (value: string) => {
+    setRecipientEmail(value);
+    setRecipientError("");
+    setRecipientVerified(false);
+  };
+
+  const validateRecipient = async (): Promise<boolean> => {
+    const normalizedEmail = recipientEmail.trim().toLowerCase();
+
+    if (!normalizedEmail) {
+      setRecipientError("Enter the recipient's email address.");
+      return false;
+    }
+    if (!emailPattern.test(normalizedEmail)) {
+      setRecipientError("Enter a valid email address.");
+      return false;
+    }
+    if (normalizedEmail === senderEmail.trim().toLowerCase()) {
+      setRecipientError("Choose someone other than your own account.");
+      return false;
+    }
+
+    setIsCheckingRecipient(true);
+    setRecipientError("");
+    try {
+      const hashedEmail = await hashEmail(normalizedEmail);
+      const publicKey = await fetchUserPublicKey(hashedEmail);
+      setRecipientEmail(normalizedEmail);
+
+      if (!publicKey) {
+        setRecipientVerified(false);
+        setPageState("invite");
+        return false;
+      }
+
+      setRecipientVerified(true);
+      return true;
+    } catch (error) {
+      console.error("[Share] Recipient lookup failed:", error);
+      setRecipientError("We could not check this recipient. Try again.");
+      return false;
+    } finally {
+      setIsCheckingRecipient(false);
+    }
+  };
+
+  const continueToReview = async () => {
+    if (!hasSelectedFile) {
+      setShareError("Choose a file before continuing.");
+      return;
+    }
+
+    const validRecipient = recipientVerified || (await validateRecipient());
+    if (validRecipient) {
+      setShareError("");
+      setPageState("review");
+    }
+  };
+
+  const getFileForSharing = async (): Promise<File> => {
+    if (file) return file;
+    if (!storedFile) throw new Error("Choose a file before continuing.");
+
+    setShareStage("preparing");
+    const { getGoogleAccessToken } = await import("../utils/gapiInit");
+    const token = await getGoogleAccessToken();
+    if (!token) {
+      throw new Error(
+        "Google Drive is not connected. Sign in again and retry.",
+      );
+    }
+
+    const response = await fetch(
+      `https://www.googleapis.com/drive/v3/files/${storedFile.id}?alt=media`,
+      {
+        headers: { Authorization: `Bearer ${token}` },
+      },
+    );
+    if (!response.ok) {
+      throw new Error(
+        `Could not download ${storedFile.name} from your storage.`,
+      );
+    }
+
+    const encryptedBlob = await response.blob();
+    const decryptedBlob = await decryptFile(encryptedBlob);
+    return new File([decryptedBlob], storedFile.name, {
+      type: storedFile.mimeType || "application/octet-stream",
+      lastModified: new Date(storedFile.uploadedDate).getTime(),
+    });
+  };
+
+  const handleShareFile = async () => {
+    if (!hasSelectedFile || !senderEmail || !recipientVerified) return;
+
+    const mnemonic = getMnemonic() || mnemonicInput.trim();
+    if (!mnemonic) {
+      setShareError("Unlock your sharing keys before continuing.");
+      setPageState("unlock");
+      return;
+    }
+
+    setPageState("sharing");
+    setShareStage(storedFile ? "preparing" : "encrypting");
+    setShareError("");
+
+    try {
+      const fileToShare = await getFileForSharing();
+      setShareStage("encrypting");
       const preparation = await prepareFileForSharing(
-        file,
+        fileToShare,
         recipientEmail,
         senderEmail,
         mnemonic,
-        customMessage || undefined,
-      );
-      const shareId = crypto.randomUUID();
-      await storeFileShare(shareId, "encrypted-share", preparation);
-      toast.success(
-        `File "${file.name}" has been prepared for sharing with ${recipientEmail}`,
-        { id: sharingToastId },
+        customMessage.trim() || undefined,
       );
 
-      // Keep mnemonic available for multiple shares in the same session
-      // User can close/refresh page to clear it
+      setShareStage("uploading");
+      await storeFileShare(
+        crypto.randomUUID(),
+        "encrypted-share",
+        preparation,
+        () => setShareStage("finishing"),
+      );
 
-      setFile(null);
-      setRecipientEmail("");
-      const fileInput = document.getElementById(
-        "file-input",
-      ) as HTMLInputElement;
-      if (fileInput) fileInput.value = "";
+      const completedReceipt: ShareReceipt = {
+        fileName: fileToShare.name,
+        recipientEmail,
+        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      };
+      setReceipt(completedReceipt);
+      setPageState("success");
     } catch (error) {
-      console.error("Error sharing file:", error);
-
-      // Check if error is due to missing recipient key
+      console.error("[Share] File sharing failed:", error);
       if (
         error instanceof Error &&
-        (error.message.includes("has not registered their public key") ||
-          (error.message.includes("Recipient") &&
-            error.message.includes("not registered")))
+        error.message.includes("has not registered")
       ) {
-        setRecipientKeyMissing(true);
-        toast.error("Recipient has not set up file sharing", {
-          description: `${recipientEmail} hasn't registered their public key yet. You can send them an invitation below.`,
-          id: sharingToastId,
-          duration: 6000,
-        });
-      } else {
-        toast.error("Failed to share file", {
-          description: error instanceof Error ? error.message : "Unknown error",
-          id: sharingToastId,
-        });
+        setRecipientVerified(false);
+        setPageState("invite");
+        return;
       }
-    } finally {
-      setIsSharing(false);
+
+      setShareError(
+        error instanceof Error
+          ? error.message
+          : "The file could not be shared. Try again.",
+      );
+      setPageState("review");
     }
   };
 
   const handleSendInvitation = async () => {
-    if (!recipientEmail) {
-      toast.error("Please enter recipient's email");
-      return;
-    }
+    if (!recipientEmail || isSendingInvitation) return;
 
     setIsSendingInvitation(true);
-    const inviteToastId = toast.loading(
-      `Sending invitation to ${recipientEmail}...`,
-    );
-
+    setShareError("");
     try {
       const result = await apiClient.invitations.send({
         recipient_email: recipientEmail,
-        sender_message: customMessage || undefined,
+        sender_message: customMessage.trim() || undefined,
       });
-
-      toast.success("Invitation sent successfully!", {
-        description: `${recipientEmail} has been invited to join ZeroDrive. ${result.remaining} invitations remaining this hour.`,
-        id: inviteToastId,
+      setInvitationSent(true);
+      toast.success("Invitation sent", {
+        description: `${result.remaining} invitations remaining this hour.`,
       });
-
-      setRecipientKeyMissing(false); // Hide invitation card after sending
     } catch (error) {
-      console.error("Error sending invitation:", error);
-      toast.error("Failed to send invitation", {
-        description: error instanceof Error ? error.message : "Unknown error",
-        id: inviteToastId,
-      });
+      console.error("[Share] Invitation failed:", error);
+      setShareError(
+        error instanceof Error
+          ? error.message
+          : "The invitation could not be sent.",
+      );
     } finally {
       setIsSendingInvitation(false);
     }
   };
 
-  return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Share Files</h1>
-        <p className="text-muted-foreground mt-1">
-          Securely share your encrypted files with other ZeroDrive users
-        </p>
+  const startAnotherShare = () => {
+    removeFile();
+    setFileSource("device");
+    setStorageSearch("");
+    setRecipientEmail("");
+    setRecipientError("");
+    setRecipientVerified(false);
+    setCustomMessage("");
+    setShowMessage(false);
+    setShareError("");
+    setInvitationSent(false);
+    setReceipt(null);
+    setPageState("compose");
+  };
+
+  const renderError = () =>
+    shareError ? (
+      <div
+        className="flex items-start gap-2 border border-destructive/50 bg-destructive/5 px-4 py-3 text-sm"
+        role="alert"
+      >
+        <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0 text-destructive" />
+        <span>{shareError}</span>
       </div>
+    ) : null;
 
-      <div className="max-w-6xl">
-        {/* Two-Column Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Left Card: Main File Sharing */}
-          <Card className="h-fit">
-            <CardHeader>
-              <CardTitle>File Sharing</CardTitle>
-              <CardDescription>
-                Upload and share your encrypted files
-              </CardDescription>
-            </CardHeader>
+  const renderPrerequisite = () => {
+    if (pageState === "checking") {
+      return (
+        <div className="flex min-h-72 flex-col items-center justify-center border">
+          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+          <p className="mt-3 text-sm font-medium">Checking sharing setup</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            This should only take a moment.
+          </p>
+        </div>
+      );
+    }
 
-            <CardContent className="space-y-6">
-              {isCheckingKeys ? (
-                <div className="p-4 text-center">
-                  <p className="text-sm text-muted-foreground">
-                    Checking key status...
-                  </p>
-                </div>
-              ) : !hasGeneratedKeys ? (
-                <div className="p-4 bg-amber-50 dark:bg-amber-950 rounded-md border border-amber-200 dark:border-amber-800 space-y-3">
-                  <div>
-                    <h3 className="text-sm font-medium text-amber-800 dark:text-amber-300">
-                      Setup Sharing Keys
-                    </h3>
-                    <p className="text-xs text-amber-700 dark:text-amber-400 mt-1">
-                      Generate your unique RSA key pair for securely sharing
-                      files. If you have set up your main ZeroDrive encryption
-                      key (via Key Management), your sharing private key will be
-                      automatically backed up to your Google Drive (hidden
-                      appData folder), encrypted with that main key.
-                    </p>
-                  </div>
-                  <Button
-                    size="sm"
-                    onClick={handleGenerateKeys}
-                    disabled={isGeneratingKeys || !senderEmail}
-                    className="w-full"
-                  >
-                    {isGeneratingKeys
-                      ? "Processing..."
-                      : "Generate Sharing Keys & Backup to Drive"}
-                  </Button>
-                  <p className="text-xs text-muted-foreground pt-1">
-                    If your main key isn't set up, sharing keys will be
-                    generated for local use only, and backup will be skipped.
-                  </p>
-                </div>
-              ) : (
-                <>
-                  <div className="p-4 bg-green-50 dark:bg-green-950 rounded-md border border-green-200 dark:border-green-800">
-                    <h3 className="text-sm font-medium text-green-800 dark:text-green-300">
-                      Sharing Keys Active
-                    </h3>
-                    <p className="text-xs text-green-700 dark:text-green-400 mt-1">
-                      You can now select a file and recipient to share securely.
-                    </p>
-                  </div>
-
-                  {showMnemonicInput && (
-                    <div className="mt-4 p-4 bg-yellow-50 dark:bg-yellow-950 rounded-md border border-yellow-200 dark:border-yellow-800">
-                      <h3 className="text-sm font-medium text-yellow-800 dark:text-yellow-300 mb-2">
-                        Mnemonic Required
-                      </h3>
-                      <p className="text-xs text-yellow-700 dark:text-yellow-400 mb-3">
-                        Enter your mnemonic to decrypt sharing keys. This will
-                        only be used for decryption.
-                      </p>
-                      <div className="flex gap-2">
-                        <Input
-                          type="password"
-                          placeholder="Enter your mnemonic phrase"
-                          value={mnemonicInput}
-                          onChange={(e) => setMnemonicInput(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter" && mnemonicInput) {
-                              verifyMnemonic();
-                            }
-                          }}
-                          disabled={isVerifyingMnemonic}
-                          className="flex-1"
-                        />
-                        <Button
-                          onClick={verifyMnemonic}
-                          disabled={!mnemonicInput || isVerifyingMnemonic}
-                        >
-                          {isVerifyingMnemonic ? "Verifying..." : "Verify"}
-                        </Button>
-                      </div>
-                    </div>
-                  )}
-                </>
-              )}
-
-              <Separator />
-
-              <div className="space-y-3">
-                <Label htmlFor="file-input">File to Share</Label>
-                <Input
-                  id="file-input"
-                  type="file"
-                  onChange={handleFileChange}
-                  disabled={isSharing || !hasGeneratedKeys}
-                />
-                {file && (
-                  <p className="text-xs text-muted-foreground">
-                    Selected: {file.name} ({(file.size / 1024).toFixed(1)} KB)
-                  </p>
-                )}
+    if (pageState === "setup") {
+      return (
+        <div className="border">
+          <div className="border-b p-6 sm:p-8">
+            <div className="flex h-10 w-10 items-center justify-center border">
+              <KeyRound className="h-5 w-5" />
+            </div>
+            <h2 className="mt-5 text-lg font-semibold">
+              Enable file sharing once
+            </h2>
+            <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted-foreground">
+              ZeroDrive will create a private sharing identity for this account.
+              Its encrypted backup is stored in your Google Drive so you can
+              recover it on another device.
+            </p>
+          </div>
+          <div className="space-y-4 p-6 sm:p-8">
+            {renderError()}
+            <div className="grid gap-3 text-sm sm:grid-cols-3">
+              <div className="flex items-start gap-2">
+                <Check className="mt-0.5 h-4 w-4 text-green-600" />
+                <span>Generated on this device</span>
               </div>
-
-              <div className="space-y-3">
-                <Label htmlFor="recipient-email">Recipient Email</Label>
-                <Input
-                  id="recipient-email"
-                  type="email"
-                  placeholder="recipient@example.com"
-                  value={recipientEmail}
-                  onChange={handleRecipientEmailChange}
-                  disabled={isSharing || !hasGeneratedKeys}
-                />
-                <p className="text-xs text-muted-foreground">
-                  The recipient must have also generated their sharing keys.
-                </p>
+              <div className="flex items-start gap-2">
+                <Check className="mt-0.5 h-4 w-4 text-green-600" />
+                <span>Encrypted before backup</span>
               </div>
-
+              <div className="flex items-start gap-2">
+                <Check className="mt-0.5 h-4 w-4 text-green-600" />
+                <span>Never visible to ZeroDrive</span>
+              </div>
+            </div>
+            <div className="flex flex-col gap-2 pt-2 sm:flex-row">
               <Button
-                className="w-full mt-2"
-                onClick={handleShareFile}
-                disabled={
-                  !file ||
-                  !recipientEmail ||
-                  isSharing ||
-                  !senderEmail ||
-                  !hasGeneratedKeys ||
-                  (showMnemonicInput && !mnemonicVerified)
+                onClick={handleGenerateKeys}
+                disabled={isGeneratingKeys || !senderEmail}
+              >
+                {isGeneratingKeys ? (
+                  <>
+                    <Loader2 className="animate-spin" />
+                    Enabling sharing
+                  </>
+                ) : (
+                  <>
+                    <KeyRound />
+                    Enable sharing
+                  </>
+                )}
+              </Button>
+              <Button
+                variant="outline"
+                onClick={openKeyManagement}
+                disabled={isGeneratingKeys}
+              >
+                Manage encryption key
+              </Button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="border">
+        <div className="border-b p-6 sm:p-8">
+          <div className="flex h-10 w-10 items-center justify-center border">
+            <LockKeyhole className="h-5 w-5" />
+          </div>
+          <h2 className="mt-5 text-lg font-semibold">
+            Unlock your sharing keys
+          </h2>
+          <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted-foreground">
+            Enter your recovery phrase to use the encrypted sharing key stored
+            on this device.
+          </p>
+        </div>
+        <div className="space-y-4 p-6 sm:p-8">
+          <div className="space-y-2">
+            <Label htmlFor="share-mnemonic">Recovery phrase</Label>
+            <div className="relative">
+              <Input
+                id="share-mnemonic"
+                type={showMnemonic ? "text" : "password"}
+                value={mnemonicInput}
+                onChange={(event) => {
+                  setMnemonicInput(event.target.value);
+                  setShareError("");
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") verifyMnemonic();
+                }}
+                placeholder="Enter your 12-word recovery phrase"
+                className="pr-10"
+                autoComplete="off"
+                disabled={isVerifyingMnemonic}
+              />
+              <button
+                type="button"
+                onClick={() => setShowMnemonic((visible) => !visible)}
+                className="absolute inset-y-0 right-0 flex w-10 items-center justify-center text-muted-foreground hover:text-foreground"
+                aria-label={
+                  showMnemonic ? "Hide recovery phrase" : "Show recovery phrase"
                 }
               >
-                {isSharing ? "Preparing Share..." : "Share Encrypted File"}
+                {showMnemonic ? <EyeOff /> : <Eye />}
+              </button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Used only in this tab and never sent to the server.
+            </p>
+          </div>
+          {renderError()}
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <Button
+              onClick={verifyMnemonic}
+              disabled={!mnemonicInput.trim() || isVerifyingMnemonic}
+            >
+              {isVerifyingMnemonic ? (
+                <>
+                  <Loader2 className="animate-spin" />
+                  Unlocking
+                </>
+              ) : (
+                "Unlock sharing"
+              )}
+            </Button>
+            <Button
+              variant="outline"
+              onClick={openKeyManagement}
+              disabled={isVerifyingMnemonic}
+            >
+              Open Key Management
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const renderCompose = () => (
+    <div className="space-y-5">
+      <StepIndicator current={hasSelectedFile ? "recipient" : "file"} />
+
+      <div className="border">
+        <div className="border-b px-5 py-4">
+          <h2 className="text-sm font-semibold">Choose a file</h2>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Choose a new file from this device or one already in your encrypted
+            storage.
+          </p>
+        </div>
+        <div className="space-y-4 p-5">
+          <input
+            ref={fileInputRef}
+            id="share-file-input"
+            type="file"
+            className="sr-only"
+            aria-label="File to share"
+            onChange={(event) => selectFile(event.target.files?.[0])}
+          />
+
+          {!hasSelectedFile && (
+            <div
+              className="grid grid-cols-2 border"
+              role="tablist"
+              aria-label="File source"
+            >
+              <button
+                type="button"
+                role="tab"
+                aria-selected={fileSource === "device"}
+                onClick={() => chooseFileSource("device")}
+                className={`flex items-center justify-center gap-2 border-r px-4 py-2.5 text-xs font-medium ${
+                  fileSource === "device" ? "bg-muted/60" : "hover:bg-muted/30"
+                }`}
+              >
+                <FileUp className="h-4 w-4" />
+                From this device
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={fileSource === "storage"}
+                onClick={() => chooseFileSource("storage")}
+                className={`flex items-center justify-center gap-2 px-4 py-2.5 text-xs font-medium ${
+                  fileSource === "storage" ? "bg-muted/60" : "hover:bg-muted/30"
+                }`}
+              >
+                <HardDrive className="h-4 w-4" />
+                My Storage
+              </button>
+            </div>
+          )}
+
+          {hasSelectedFile ? (
+            <div className="flex items-center gap-4 border p-4">
+              <img
+                src={getFileIconPath(selectedMimeType)}
+                alt=""
+                className="h-10 w-10 object-contain"
+              />
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-medium">
+                  {selectedFileName}
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {file
+                    ? `${formatBytes(file.size)}${file.type ? ` · ${file.type}` : ""}`
+                    : `Already in My Storage${storedFile?.mimeType ? ` · ${storedFile.mimeType}` : ""}`}
+                </p>
+              </div>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={removeFile}
+                aria-label="Remove selected file"
+              >
+                <X />
               </Button>
-            </CardContent>
-          </Card>
-
-          {/* Right Card: Custom Message */}
-          <Card className="h-fit">
-            <CardHeader>
-              <CardTitle>Personalize Email</CardTitle>
-              <CardDescription>
-                Add a custom message to your notification email (optional)
-              </CardDescription>
-            </CardHeader>
-
-            <CardContent className="space-y-4">
-              <div>
-                <Label htmlFor="custom-message">Your Message</Label>
-                <textarea
-                  id="custom-message"
-                  className="flex min-h-[200px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 mt-2"
-                  placeholder="Hey! I'm sharing this file with you. Check it out when you get a chance!"
-                  value={customMessage}
-                  onChange={(e) =>
-                    setCustomMessage(e.target.value.slice(0, 500))
-                  }
-                  disabled={isSharing || !hasGeneratedKeys}
-                  maxLength={500}
+            </div>
+          ) : fileSource === "device" ? (
+            <div
+              className={`flex min-h-44 cursor-pointer flex-col items-center justify-center border border-dashed px-5 text-center transition-colors ${
+                isDragging
+                  ? "border-foreground bg-muted/60"
+                  : "hover:bg-muted/40"
+              }`}
+              onClick={() => fileInputRef.current?.click()}
+              onDragEnter={(event) => {
+                event.preventDefault();
+                setIsDragging(true);
+              }}
+              onDragOver={(event) => event.preventDefault()}
+              onDragLeave={(event) => {
+                if (
+                  !event.currentTarget.contains(event.relatedTarget as Node)
+                ) {
+                  setIsDragging(false);
+                }
+              }}
+              onDrop={handleDrop}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  fileInputRef.current?.click();
+                }
+              }}
+              role="button"
+              tabIndex={0}
+              aria-label="Choose a file to share"
+            >
+              <FileUp className="h-7 w-7 text-muted-foreground" />
+              <p className="mt-3 text-sm font-medium">
+                Drop a file here or choose from your device
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                The original file never reaches our server.
+              </p>
+              <span className="mt-4 inline-flex h-8 items-center gap-2 border px-3 text-xs font-medium">
+                <Upload />
+                Choose file
+              </span>
+            </div>
+          ) : (
+            <div className="border">
+              <div className="flex flex-col gap-2 border-b p-3 sm:flex-row">
+                <Input
+                  value={storageSearch}
+                  onChange={(event) => setStorageSearch(event.target.value)}
+                  placeholder="Search your storage"
+                  aria-label="Search your storage"
+                  className="flex-1"
                 />
-                <div className="flex items-center justify-between mt-2">
-                  <p className="text-xs text-muted-foreground">
-                    {customMessage.length}/500 characters
-                  </p>
-                  {customMessage && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setCustomMessage("")}
-                      className="h-auto py-1 px-2 text-xs"
-                    >
-                      Clear
-                    </Button>
-                  )}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => loadStorageFiles(true)}
+                  disabled={isLoadingStorage}
+                >
+                  <RefreshCw
+                    className={isLoadingStorage ? "animate-spin" : ""}
+                  />
+                  Refresh
+                </Button>
+              </div>
+
+              {isLoadingStorage ? (
+                <div className="flex min-h-40 items-center justify-center gap-2 text-sm text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Loading your files
                 </div>
-              </div>
-
-              <div className="p-4 bg-muted/50 rounded-lg border">
-                <p className="text-xs font-medium mb-2">📧 Email Preview</p>
-                <p className="text-xs text-muted-foreground italic">
-                  {customMessage ||
-                    "Someone has shared a file with you on ZeroDrive, a secure zero-knowledge file sharing platform."}
-                </p>
-              </div>
-
-              <div className="text-xs text-muted-foreground space-y-1">
-                <p>
-                  💡 <strong>Tip:</strong> Your identity remains private. The
-                  recipient will not see your name or email address.
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Invitation Alert - Shows when recipient key is missing */}
-          {recipientKeyMissing && (
-            <div className="col-span-1 lg:col-span-2">
-              <Card className="border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/50">
-                <CardHeader>
-                  <CardTitle className="text-amber-800 dark:text-amber-300">
-                    📨 Recipient Not Set Up
-                  </CardTitle>
-                  <CardDescription className="text-amber-700 dark:text-amber-400">
-                    {recipientEmail} hasn't registered their public key yet.
-                    Send them an invitation to join ZeroDrive!
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <p className="text-sm text-amber-700 dark:text-amber-400">
-                    Your invitation will include:
+              ) : filteredStorageFiles.length > 0 ? (
+                <div
+                  className="max-h-72 divide-y overflow-y-auto"
+                  aria-label="Files in My Storage"
+                >
+                  {filteredStorageFiles.map((stored) => (
+                    <button
+                      key={stored.id}
+                      type="button"
+                      onClick={() => selectStoredFile(stored)}
+                      className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-muted/40"
+                    >
+                      <img
+                        src={getFileIconPath(stored.mimeType)}
+                        alt=""
+                        className="h-8 w-8 flex-shrink-0 object-contain"
+                      />
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-sm font-medium">
+                          {stored.name}
+                        </span>
+                        <span className="mt-0.5 block text-xs text-muted-foreground">
+                          Added{" "}
+                          {new Date(stored.uploadedDate).toLocaleDateString()}
+                        </span>
+                      </span>
+                      <span className="text-xs text-muted-foreground">
+                        Select
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <div className="flex min-h-40 flex-col items-center justify-center px-5 text-center">
+                  <HardDrive className="h-6 w-6 text-muted-foreground" />
+                  <p className="mt-3 text-sm font-medium">
+                    {storageSearch
+                      ? "No matching files"
+                      : "Your storage is empty"}
                   </p>
-                  <ul className="text-sm text-amber-700 dark:text-amber-400 list-disc list-inside space-y-1 ml-2">
-                    <li>A link to sign up for ZeroDrive</li>
-                    <li>Instructions to enable file sharing</li>
-                    {customMessage && <li>Your personal message</li>}
-                  </ul>
-                  <div className="flex gap-3">
-                    <Button
-                      onClick={handleSendInvitation}
-                      disabled={isSendingInvitation || !recipientEmail}
-                      className="flex-1"
-                    >
-                      {isSendingInvitation ? "Sending..." : "Send Invitation"}
-                    </Button>
-                    <Button
-                      variant="outline"
-                      onClick={() => setRecipientKeyMissing(false)}
-                      disabled={isSendingInvitation}
-                    >
-                      Cancel
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {storageSearch
+                      ? "Try a different search."
+                      : "Upload a file in Storage, then return here to share it."}
+                  </p>
+                </div>
+              )}
             </div>
           )}
         </div>
       </div>
+
+      <div className="border">
+        <div className="border-b px-5 py-4">
+          <h2 className="text-sm font-semibold">Choose the recipient</h2>
+          <p className="mt-1 text-xs text-muted-foreground">
+            We check that this account can receive encrypted files before
+            uploading anything.
+          </p>
+        </div>
+        <div className="space-y-4 p-5">
+          <div className="space-y-2">
+            <Label htmlFor="recipient-email">Email address</Label>
+            <div className="relative">
+              <Input
+                id="recipient-email"
+                type="email"
+                value={recipientEmail}
+                onChange={(event) => handleRecipientChange(event.target.value)}
+                placeholder="recipient@example.com"
+                className={recipientVerified ? "pr-10" : ""}
+                aria-invalid={Boolean(recipientError)}
+                aria-describedby={
+                  recipientError ? "recipient-error" : "recipient-help"
+                }
+                disabled={isCheckingRecipient}
+              />
+              {recipientVerified && (
+                <Check className="absolute right-3 top-2.5 h-4 w-4 text-green-600" />
+              )}
+            </div>
+            {recipientError ? (
+              <p id="recipient-error" className="text-xs text-destructive">
+                {recipientError}
+              </p>
+            ) : (
+              <p id="recipient-help" className="text-xs text-muted-foreground">
+                {recipientVerified
+                  ? "Ready to receive encrypted files."
+                  : "The recipient needs a ZeroDrive sharing key."}
+              </p>
+            )}
+          </div>
+
+          <div className="border-t pt-4">
+            <button
+              type="button"
+              onClick={() => setShowMessage((visible) => !visible)}
+              className="flex items-center gap-2 text-sm font-medium hover:underline"
+              aria-expanded={showMessage}
+            >
+              <Mail className="h-4 w-4" />
+              {showMessage
+                ? "Remove personal message"
+                : "Add a personal message"}
+              <span className="font-normal text-muted-foreground">
+                (optional)
+              </span>
+            </button>
+            {showMessage && (
+              <div className="mt-4 space-y-2">
+                <Label htmlFor="custom-message">Message</Label>
+                <Textarea
+                  id="custom-message"
+                  value={customMessage}
+                  onChange={(event) =>
+                    setCustomMessage(event.target.value.slice(0, 500))
+                  }
+                  placeholder="Add context for the recipient..."
+                  maxLength={500}
+                  rows={4}
+                />
+                <div className="flex justify-between text-xs text-muted-foreground">
+                  <span>
+                    Adding a message sends the recipient an email notification.
+                  </span>
+                  <span>{customMessage.length}/500</span>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {renderError()}
+
+      <div className="flex justify-end">
+        <Button
+          onClick={continueToReview}
+          disabled={
+            !hasSelectedFile || !recipientEmail.trim() || isCheckingRecipient
+          }
+        >
+          {isCheckingRecipient ? (
+            <>
+              <Loader2 className="animate-spin" />
+              Checking recipient
+            </>
+          ) : (
+            <>
+              Review share
+              <Send />
+            </>
+          )}
+        </Button>
+      </div>
+    </div>
+  );
+
+  const renderReview = () => (
+    <div className="space-y-5">
+      <StepIndicator current="review" />
+      <div className="border">
+        <div className="border-b px-5 py-4">
+          <h2 className="text-sm font-semibold">Review before sharing</h2>
+          <p className="mt-1 text-xs text-muted-foreground">
+            The encrypted copy will expire automatically after seven days.
+          </p>
+        </div>
+        <dl className="divide-y">
+          <div className="grid gap-1 px-5 py-4 sm:grid-cols-[140px_1fr]">
+            <dt className="text-xs text-muted-foreground">File</dt>
+            <dd className="flex min-w-0 items-center gap-3 text-sm">
+              {hasSelectedFile && (
+                <img
+                  src={getFileIconPath(selectedMimeType)}
+                  alt=""
+                  className="h-6 w-6 object-contain"
+                />
+              )}
+              <span className="truncate">{selectedFileName}</span>
+              <span className="flex-shrink-0 text-xs text-muted-foreground">
+                {file ? formatBytes(file.size) : "From My Storage"}
+              </span>
+            </dd>
+          </div>
+          <div className="grid gap-1 px-5 py-4 sm:grid-cols-[140px_1fr]">
+            <dt className="text-xs text-muted-foreground">Recipient</dt>
+            <dd className="flex items-center gap-2 text-sm">
+              {recipientEmail}
+              <Check className="h-4 w-4 text-green-600" />
+            </dd>
+          </div>
+          <div className="grid gap-1 px-5 py-4 sm:grid-cols-[140px_1fr]">
+            <dt className="text-xs text-muted-foreground">Notification</dt>
+            <dd className="text-sm">
+              {customMessage.trim()
+                ? "Email notification with your message"
+                : "No email notification"}
+            </dd>
+          </div>
+          {customMessage.trim() && (
+            <div className="grid gap-1 px-5 py-4 sm:grid-cols-[140px_1fr]">
+              <dt className="text-xs text-muted-foreground">Message</dt>
+              <dd className="whitespace-pre-wrap text-sm">
+                {customMessage.trim()}
+              </dd>
+            </div>
+          )}
+          <div className="grid gap-1 px-5 py-4 sm:grid-cols-[140px_1fr]">
+            <dt className="text-xs text-muted-foreground">Protection</dt>
+            <dd className="flex items-center gap-2 text-sm">
+              <ShieldCheck className="h-4 w-4" />
+              End-to-end encrypted · expires in 7 days
+            </dd>
+          </div>
+        </dl>
+      </div>
+
+      {renderError()}
+
+      <div className="flex flex-col-reverse justify-between gap-2 sm:flex-row">
+        <Button variant="outline" onClick={() => setPageState("compose")}>
+          <ArrowLeft />
+          Edit details
+        </Button>
+        <Button onClick={handleShareFile}>
+          <LockKeyhole />
+          Encrypt and share
+        </Button>
+      </div>
+    </div>
+  );
+
+  const renderInvitation = () => (
+    <div className="border">
+      <div className="border-b p-6 sm:p-8">
+        <div className="flex h-10 w-10 items-center justify-center border">
+          <Mail className="h-5 w-5" />
+        </div>
+        <h2 className="mt-5 text-lg font-semibold">
+          This recipient is not ready yet
+        </h2>
+        <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted-foreground">
+          <span className="font-medium text-foreground">{recipientEmail}</span>{" "}
+          has not enabled encrypted sharing. Invite them to ZeroDrive, then try
+          again after they finish setup.
+        </p>
+      </div>
+      <div className="space-y-4 p-6 sm:p-8">
+        {invitationSent && (
+          <div
+            className="flex items-start gap-2 border bg-muted/40 px-4 py-3 text-sm"
+            role="status"
+          >
+            <Check className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-600" />
+            <span>
+              Invitation sent. You can share the file after the recipient
+              enables sharing.
+            </span>
+          </div>
+        )}
+        {customMessage.trim() && (
+          <div className="border px-4 py-3">
+            <p className="text-xs text-muted-foreground">
+              Your invitation message
+            </p>
+            <p className="mt-2 whitespace-pre-wrap text-sm">
+              {customMessage.trim()}
+            </p>
+          </div>
+        )}
+        {renderError()}
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <Button
+            onClick={handleSendInvitation}
+            disabled={isSendingInvitation || invitationSent}
+          >
+            {isSendingInvitation ? (
+              <>
+                <Loader2 className="animate-spin" />
+                Sending invitation
+              </>
+            ) : (
+              <>
+                <Mail />
+                Send invitation
+              </>
+            )}
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => {
+              setRecipientEmail("");
+              setRecipientError("");
+              setRecipientVerified(false);
+              setInvitationSent(false);
+              setShareError("");
+              setPageState("compose");
+            }}
+            disabled={isSendingInvitation}
+          >
+            Choose someone else
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderSharing = () => {
+    const stages: Record<
+      ShareStage,
+      { title: string; description: string; progress: number }
+    > = {
+      preparing: {
+        title: "Preparing your stored file",
+        description:
+          "Downloading and decrypting it on this device before creating a separate shared copy.",
+        progress: 15,
+      },
+      encrypting: {
+        title: "Encrypting on this device",
+        description: "Your original file is not being uploaded.",
+        progress: 30,
+      },
+      uploading: {
+        title: "Uploading the encrypted copy",
+        description:
+          "Only ciphertext and encrypted key material leave this device.",
+        progress: 70,
+      },
+      finishing: {
+        title: "Creating the secure share",
+        description: "Finishing the recipient record and expiration settings.",
+        progress: 95,
+      },
+    };
+    const stage = stages[shareStage];
+
+    return (
+      <div className="flex min-h-80 flex-col items-center justify-center border px-6 text-center">
+        <Loader2 className="h-7 w-7 animate-spin" />
+        <h2 className="mt-5 text-lg font-semibold">{stage.title}</h2>
+        <p className="mt-2 max-w-md text-sm text-muted-foreground">
+          {stage.description}
+        </p>
+        <Progress
+          value={stage.progress}
+          className="mt-6 h-1.5 max-w-md"
+          aria-label="File sharing progress"
+        />
+        <p className="mt-3 text-xs text-muted-foreground" aria-live="polite">
+          {stage.progress}% complete · keep this tab open
+        </p>
+      </div>
+    );
+  };
+
+  const renderSuccess = () => (
+    <div className="border">
+      <div className="flex flex-col items-center border-b px-6 py-10 text-center">
+        <div className="flex h-12 w-12 items-center justify-center border bg-foreground text-background">
+          <Check className="h-6 w-6" />
+        </div>
+        <h2 className="mt-5 text-xl font-semibold">File shared</h2>
+        <p className="mt-2 max-w-lg text-sm text-muted-foreground">
+          <span className="font-medium text-foreground">
+            {receipt?.fileName}
+          </span>{" "}
+          is ready for{" "}
+          <span className="font-medium text-foreground">
+            {receipt?.recipientEmail}
+          </span>
+          .
+        </p>
+      </div>
+      <div className="space-y-5 p-6 sm:p-8">
+        <div className="grid gap-3 border p-4 text-sm sm:grid-cols-2">
+          <div>
+            <p className="text-xs text-muted-foreground">Protection</p>
+            <p className="mt-1">End-to-end encrypted</p>
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground">Available until</p>
+            <p className="mt-1">
+              {receipt?.expiresAt.toLocaleDateString(undefined, {
+                dateStyle: "medium",
+              })}
+            </p>
+          </div>
+        </div>
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <Button onClick={startAnotherShare}>
+            <FileUp />
+            Share another file
+          </Button>
+          <Button variant="outline" onClick={() => navigate("/home")}>
+            Done
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderContent = () => {
+    if (["checking", "setup", "unlock"].includes(pageState)) {
+      return renderPrerequisite();
+    }
+    if (pageState === "compose") return renderCompose();
+    if (pageState === "review") return renderReview();
+    if (pageState === "invite") return renderInvitation();
+    if (pageState === "sharing") return renderSharing();
+    return renderSuccess();
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl tracking-tight">Share a file</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Only the intended recipient can decrypt it.
+          </p>
+        </div>
+      </div>
+
+      <div className="max-w-4xl">{renderContent()}</div>
     </div>
   );
 };

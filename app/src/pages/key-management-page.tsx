@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   generateMnemonic,
   deriveKeyFromMnemonic,
@@ -38,9 +38,14 @@ import {
 
 export const KeyManagementPage: React.FC = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const returnTo =
+    searchParams.get("returnTo") === "/share" ? "/share" : "/storage";
+  const returnLabel =
+    returnTo === "/share" ? "Continue to Share Files" : "Continue to Storage";
   const [error, setError] = useState("");
   const [generatedMnemonic, setGeneratedMnemonic] = useState<string | null>(
-    null
+    null,
   );
   const [inputMnemonic, setInputMnemonic] = useState<string>("");
   const [showFileUpload, setShowFileUpload] = useState(false);
@@ -58,12 +63,12 @@ export const KeyManagementPage: React.FC = () => {
         const { initializeGapi } = await import("../utils/gapiInit");
         await initializeGapi();
         setIsGapiReady(true);
-        console.log('[KeyManagement] GAPI initialized successfully');
+        console.log("[KeyManagement] GAPI initialized successfully");
       } catch (error) {
-        console.error('[KeyManagement] GAPI initialization failed:', error);
+        console.error("[KeyManagement] GAPI initialization failed:", error);
         // RSA recovery will be skipped, but key generation still works
-        toast.warning('Google Drive connection unavailable', {
-          description: 'RSA key recovery from backup will not be available.',
+        toast.warning("Google Drive connection unavailable", {
+          description: "RSA key recovery from backup will not be available.",
           duration: 5000,
         });
       }
@@ -102,24 +107,34 @@ export const KeyManagementPage: React.FC = () => {
                 await recoverRsaKeysIfNeeded(userEmail);
               }
             } else {
-              console.log('[KeyManagement] Google tokens exist but GAPI not fully initialized - recovery will happen on other pages');
+              console.log(
+                "[KeyManagement] Google tokens exist but GAPI not fully initialized - recovery will happen on other pages",
+              );
             }
           } else {
-            console.log('[KeyManagement] Google Drive not connected - RSA key recovery skipped');
-            toast.info('RSA key recovery skipped', {
-              description: 'Google Drive not connected. You can enable file sharing later to create RSA keys.',
+            console.log(
+              "[KeyManagement] Google Drive not connected - RSA key recovery skipped",
+            );
+            toast.info("RSA key recovery skipped", {
+              description:
+                "Google Drive not connected. You can enable file sharing later to create RSA keys.",
               duration: 5000,
             });
           }
         } catch (recoveryError) {
-          console.error('[KeyManagement] RSA key recovery failed:', recoveryError);
-          toast.error('RSA key recovery failed', {
+          console.error(
+            "[KeyManagement] RSA key recovery failed:",
+            recoveryError,
+          );
+          toast.error("RSA key recovery failed", {
             description: String(recoveryError),
             duration: 5000,
           });
         }
       } else {
-        console.log('[KeyManagement] GAPI not ready - RSA key recovery skipped');
+        console.log(
+          "[KeyManagement] GAPI not ready - RSA key recovery skipped",
+        );
       }
 
       toast.success("New Mnemonic & Key Generated!", {
@@ -162,37 +177,44 @@ export const KeyManagementPage: React.FC = () => {
                 await recoverRsaKeysIfNeeded(userEmail);
               }
             } else {
-              console.log('[KeyManagement] Google tokens exist but GAPI not fully initialized - recovery will happen on other pages');
+              console.log(
+                "[KeyManagement] Google tokens exist but GAPI not fully initialized - recovery will happen on other pages",
+              );
             }
           } else {
-            console.log('[KeyManagement] Google Drive not connected - RSA key recovery skipped');
-            toast.info('RSA key recovery skipped', {
-              description: 'Google Drive not connected. You can enable file sharing later to create RSA keys.',
+            console.log(
+              "[KeyManagement] Google Drive not connected - RSA key recovery skipped",
+            );
+            toast.info("RSA key recovery skipped", {
+              description:
+                "Google Drive not connected. You can enable file sharing later to create RSA keys.",
               duration: 5000,
             });
           }
         } catch (recoveryError) {
-          console.error('[KeyManagement] RSA key recovery failed:', recoveryError);
-          toast.error('RSA key recovery failed', {
+          console.error(
+            "[KeyManagement] RSA key recovery failed:",
+            recoveryError,
+          );
+          toast.error("RSA key recovery failed", {
             description: String(recoveryError),
             duration: 5000,
           });
         }
       } else {
-        console.log('[KeyManagement] GAPI not ready - RSA key recovery skipped');
+        console.log(
+          "[KeyManagement] GAPI not ready - RSA key recovery skipped",
+        );
       }
 
       toast.success("Key Loaded Successfully!", {
         description: "Your encryption key has been loaded from the mnemonic.",
       });
-      // Navigate to storage instead of reloading
-      setTimeout(() => {
-        navigate("/storage");
-      }, 1500);
+      navigate(returnTo);
     } catch (err) {
       console.error("Error loading key from mnemonic:", err);
       setError(
-        "Failed to load key from mnemonic. Ensure the phrase is correct or try generating a new key if this is your first time."
+        "Failed to load key from mnemonic. Ensure the phrase is correct or try generating a new key if this is your first time.",
       );
       toast.error("Key Load Failed", {
         description: "Invalid mnemonic phrase or an unexpected error occurred.",
@@ -201,7 +223,7 @@ export const KeyManagementPage: React.FC = () => {
   };
 
   const handleFileUpload = async (
-    event: React.ChangeEvent<HTMLInputElement>
+    event: React.ChangeEvent<HTMLInputElement>,
   ) => {
     setError("");
     const file = event.target.files?.[0];
@@ -224,7 +246,7 @@ export const KeyManagementPage: React.FC = () => {
             keyJWK,
             { name: "AES-GCM" },
             true,
-            ["encrypt", "decrypt"]
+            ["encrypt", "decrypt"],
           );
 
           // Generate a mnemonic to encrypt this imported key
@@ -240,34 +262,47 @@ export const KeyManagementPage: React.FC = () => {
               if (hasGoogleTokensInStorage()) {
                 const authInstance = gapi.auth2?.getAuthInstance();
                 if (authInstance && authInstance.isSignedIn.get()) {
-                  const profile = authInstance.currentUser.get().getBasicProfile();
+                  const profile = authInstance.currentUser
+                    .get()
+                    .getBasicProfile();
                   if (profile) {
                     const userEmail = profile.getEmail();
                     await recoverRsaKeysIfNeeded(userEmail);
                   }
                 } else {
-                  console.log('[KeyManagement] Google tokens exist but GAPI not fully initialized - recovery will happen on other pages');
+                  console.log(
+                    "[KeyManagement] Google tokens exist but GAPI not fully initialized - recovery will happen on other pages",
+                  );
                 }
               } else {
-                console.log('[KeyManagement] Google Drive not connected - RSA key recovery skipped');
-                toast.info('RSA key recovery skipped', {
-                  description: 'Google Drive not connected. You can enable file sharing later to create RSA keys.',
+                console.log(
+                  "[KeyManagement] Google Drive not connected - RSA key recovery skipped",
+                );
+                toast.info("RSA key recovery skipped", {
+                  description:
+                    "Google Drive not connected. You can enable file sharing later to create RSA keys.",
                   duration: 5000,
                 });
               }
             } catch (recoveryError) {
-              console.error('[KeyManagement] RSA key recovery failed:', recoveryError);
-              toast.error('RSA key recovery failed', {
+              console.error(
+                "[KeyManagement] RSA key recovery failed:",
+                recoveryError,
+              );
+              toast.error("RSA key recovery failed", {
                 description: String(recoveryError),
                 duration: 5000,
               });
             }
           } else {
-            console.log('[KeyManagement] GAPI not ready - RSA key recovery skipped');
+            console.log(
+              "[KeyManagement] GAPI not ready - RSA key recovery skipped",
+            );
           }
 
           toast.success("Encryption key added from file!", {
-            description: "A mnemonic has been generated to protect this key. Please save it!",
+            description:
+              "A mnemonic has been generated to protect this key. Please save it!",
             duration: 10000,
           });
           // Don't navigate immediately - let user see and save the mnemonic
@@ -275,7 +310,7 @@ export const KeyManagementPage: React.FC = () => {
         } catch (error) {
           console.error("Error processing key file:", error);
           setError(
-            "Invalid key file. Please ensure the file contains a valid AES-GCM key in JSON format."
+            "Invalid key file. Please ensure the file contains a valid AES-GCM key in JSON format.",
           );
           toast.error("Invalid Key File", {
             description: "The uploaded file does not contain a valid key.",
@@ -452,9 +487,7 @@ export const KeyManagementPage: React.FC = () => {
           <Card className="sm:max-w-lg w-full h-fit">
             <CardHeader>
               <CardTitle>
-                {viewMode === "recover"
-                  ? "Recover Your Key"
-                  : "Create New Key"}
+                {viewMode === "recover" ? "Recover Your Key" : "Create New Key"}
               </CardTitle>
               <CardDescription>
                 {viewMode === "recover"
@@ -566,6 +599,12 @@ export const KeyManagementPage: React.FC = () => {
                           {isTesting ? "Testing..." : "Test Your Key"}
                         </Button>
                       </div>
+                      <Button
+                        onClick={() => navigate(returnTo)}
+                        className="w-full"
+                      >
+                        {returnLabel}
+                      </Button>
                     </div>
                   </>
                 )}
