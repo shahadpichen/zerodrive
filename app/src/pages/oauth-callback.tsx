@@ -11,6 +11,7 @@ import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
 import { storeGoogleTokens } from "../utils/authService";
 import { getUserEmail } from "../utils/authService";
+import apiClient from "../utils/apiClient";
 
 const OAuthCallback: React.FC = () => {
   const navigate = useNavigate();
@@ -63,20 +64,20 @@ const OAuthCallback: React.FC = () => {
       try {
         // JWT token is already set as httpOnly cookie by backend
 
-        // Get Google tokens from URL (base64-encoded by backend)
-        const encodedTokens = searchParams.get("tokens");
+        const exchangeCode = searchParams.get("exchange");
 
-        if (encodedTokens) {
-          console.log("[OAuth] Received tokens from backend, decoding...");
-
-          // Decode tokens
-          const tokenData = JSON.parse(atob(encodedTokens));
-          console.log("[OAuth] Token data decoded:", {
-            hasAccessToken: !!tokenData.accessToken,
-            hasRefreshToken: !!tokenData.refreshToken,
-            expiresAt: tokenData.expiresAt,
-            scope: tokenData.scope,
+        if (exchangeCode) {
+          const response = await apiClient.post("/auth/exchange", {
+            code: exchangeCode,
           });
+          const tokenData = response.data as {
+            accessToken: string;
+            refreshToken?: string;
+            expiresAt: string;
+            scope: string;
+            isNewUser: boolean;
+            hasLimitedScope: boolean;
+          };
 
           // Get user email (from JWT cookie)
           const userEmail = await getUserEmail();
@@ -108,28 +109,23 @@ const OAuthCallback: React.FC = () => {
             "[OAuth] Verification - tokens exist in sessionStorage:",
             !!storedData,
           );
-        } else {
-          console.warn(
-            "[OAuth] No tokens parameter in callback URL - this should not happen",
-          );
-        }
+          const isNewUser = tokenData.isNewUser;
+          const hasLimitedScope = tokenData.hasLimitedScope;
 
-        // Check for special flags
-        const isNewUser = searchParams.get("new") === "true";
-        const hasLimitedScope = searchParams.get("limited") === "true";
-
-        // Show appropriate message
-        if (hasLimitedScope) {
-          toast.warning("Limited permissions granted", {
-            description:
-              "Some features may not work without full Google Drive access",
-          });
-        } else if (isNewUser) {
-          toast.success("Welcome to ZeroDrive!", {
-            description: "Your account has been created successfully",
-          });
+          if (hasLimitedScope) {
+            toast.warning("Limited permissions granted", {
+              description:
+                "Some features may not work without full Google Drive access",
+            });
+          } else if (isNewUser) {
+            toast.success("Welcome to ZeroDrive!", {
+              description: "Your account has been created successfully",
+            });
+          } else {
+            toast.success("Signed in successfully!");
+          }
         } else {
-          toast.success("Signed in successfully!");
+          throw new Error("OAuth exchange code is missing");
         }
 
         // Navigate to the home hub - ProtectedRoute will verify auth via cookie
