@@ -3,16 +3,16 @@
  * Tests the DELETE endpoint used in rollback functionality
  */
 
-import request from 'supertest';
-import express from 'express';
-import publicKeysRouter from '../../routes/publicKeys';
-import { query } from '../../config/database';
+import request from "supertest";
+import express from "express";
+import publicKeysRouter from "../../routes/publicKeys";
+import { query } from "../../config/database";
 
 // Mock database
-jest.mock('../../config/database');
+jest.mock("../../config/database");
 
 // Mock logger
-jest.mock('../../utils/logger', () => ({
+jest.mock("../../utils/logger", () => ({
   default: {
     info: jest.fn(),
     error: jest.fn(),
@@ -37,26 +37,50 @@ app.use((req, res, next) => {
   next();
 });
 
-app.use('/api/public-keys', publicKeysRouter);
-
-// Error handler
-app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
-  const statusCode = err.statusCode || 500;
-  res.status(statusCode).json({
-    success: false,
-    error: err.message || 'Internal Server Error',
-  });
+const authenticatedUserHash = "a".repeat(64);
+app.use((req, _res, next) => {
+  req.user = {
+    email: "owner@example.com",
+    emailHash: authenticatedUserHash,
+  };
+  next();
 });
 
-describe('Public Keys Routes - DELETE', () => {
-  const mockUserId = 'test-user-hash-123';
+app.use("/api/public-keys", publicKeysRouter);
+
+// Error handler
+app.use(
+  (
+    err: any,
+    req: express.Request,
+    res: express.Response,
+    next: express.NextFunction,
+  ) => {
+    const statusCode = err.statusCode || 500;
+    res.status(statusCode).json({
+      success: false,
+      error: err.message || "Internal Server Error",
+    });
+  },
+);
+
+describe("Public Keys Routes - DELETE", () => {
+  const mockUserId = authenticatedUserHash;
+  const validPublicKey = JSON.stringify({
+    kty: "RSA",
+    n: "test-modulus",
+    e: "AQAB",
+    alg: "RSA-OAEP-256",
+    key_ops: ["encrypt"],
+    ext: true,
+  });
 
   beforeEach(() => {
     jest.clearAllMocks();
   });
 
-  describe('DELETE /api/public-keys/:user_id', () => {
-    it('should successfully delete existing public key', async () => {
+  describe("DELETE /api/public-keys/:user_id", () => {
+    it("should successfully delete existing public key", async () => {
       // Mock successful delete
       (query as jest.Mock).mockResolvedValue({
         rowCount: 1,
@@ -69,14 +93,14 @@ describe('Public Keys Routes - DELETE', () => {
 
       expect(response.body.success).toBe(true);
       expect(response.body.data.deleted).toBe(true);
-      expect(response.body.message).toBe('Public key deleted successfully');
+      expect(response.body.message).toBe("Public key deleted successfully");
       expect(query).toHaveBeenCalledWith(
-        'DELETE FROM public_keys WHERE user_id = $1',
-        [mockUserId]
+        "DELETE FROM public_keys WHERE user_id = $1",
+        [mockUserId],
       );
     });
 
-    it('should return 404 when public key not found', async () => {
+    it("should return 404 when public key not found", async () => {
       // Mock delete with no rows affected
       (query as jest.Mock).mockResolvedValue({
         rowCount: 0,
@@ -88,51 +112,43 @@ describe('Public Keys Routes - DELETE', () => {
         .expect(404);
 
       expect(response.body.success).toBe(false);
-      expect(response.body.error).toContain('not found');
+      expect(response.body.error).toContain("not found");
     });
 
-    it('should return 400 for invalid user_id parameter', async () => {
+    it("should return 400 for invalid user_id parameter", async () => {
       const response = await request(app)
-        .delete('/api/public-keys/')
+        .delete("/api/public-keys/")
         .expect(404); // Express returns 404 for missing route param
 
       // No database query should be made
       expect(query).not.toHaveBeenCalled();
     });
 
-    it('should return 500 on database error', async () => {
+    it("should return 500 on database error", async () => {
       // Mock database error
-      (query as jest.Mock).mockRejectedValue(new Error('Database connection failed'));
+      (query as jest.Mock).mockRejectedValue(
+        new Error("Database connection failed"),
+      );
 
       const response = await request(app)
         .delete(`/api/public-keys/${mockUserId}`)
         .expect(500);
 
       expect(response.body.success).toBe(false);
-      expect(response.body.error).toContain('Failed to delete public key');
+      expect(response.body.error).toContain("Failed to delete public key");
     });
 
-    it('should handle special characters in user_id', async () => {
-      const specialUserId = 'user-with-special-chars-!@#$%';
-
-      (query as jest.Mock).mockResolvedValue({
-        rowCount: 1,
-        rows: [],
-      });
-
+    it("should reject deleting another user public key", async () => {
       await request(app)
-        .delete(`/api/public-keys/${encodeURIComponent(specialUserId)}`)
-        .expect(200);
+        .delete(`/api/public-keys/${"b".repeat(64)}`)
+        .expect(403);
 
-      expect(query).toHaveBeenCalledWith(
-        'DELETE FROM public_keys WHERE user_id = $1',
-        [specialUserId]
-      );
+      expect(query).not.toHaveBeenCalled();
     });
   });
 
-  describe('Rollback Scenario Integration', () => {
-    it('should successfully delete key during rollback', async () => {
+  describe("Rollback Scenario Integration", () => {
+    it("should successfully delete key during rollback", async () => {
       // Simulate rollback scenario:
       // 1. Key was created
       // 2. Backup failed
@@ -151,16 +167,14 @@ describe('Public Keys Routes - DELETE', () => {
       expect(query).toHaveBeenCalledTimes(1);
     });
 
-    it('should handle double deletion gracefully', async () => {
+    it("should handle double deletion gracefully", async () => {
       // First deletion succeeds
       (query as jest.Mock).mockResolvedValueOnce({
         rowCount: 1,
         rows: [],
       });
 
-      await request(app)
-        .delete(`/api/public-keys/${mockUserId}`)
-        .expect(200);
+      await request(app).delete(`/api/public-keys/${mockUserId}`).expect(200);
 
       // Second deletion fails (key already deleted)
       (query as jest.Mock).mockResolvedValueOnce({
@@ -168,17 +182,15 @@ describe('Public Keys Routes - DELETE', () => {
         rows: [],
       });
 
-      await request(app)
-        .delete(`/api/public-keys/${mockUserId}`)
-        .expect(404);
+      await request(app).delete(`/api/public-keys/${mockUserId}`).expect(404);
     });
   });
 
-  describe('POST /api/public-keys', () => {
-    it('should create new public key', async () => {
+  describe("POST /api/public-keys", () => {
+    it("should create new public key", async () => {
       const mockPublicKey = {
         user_id: mockUserId,
-        public_key: 'test-public-key-data',
+        public_key: validPublicKey,
       };
 
       // Mock check for existing key (none found)
@@ -188,59 +200,93 @@ describe('Public Keys Routes - DELETE', () => {
 
       // Mock insert
       (query as jest.Mock).mockResolvedValueOnce({
-        rows: [{
-          user_id: mockUserId,
-          public_key: mockPublicKey.public_key,
-          created_at: new Date(),
-          updated_at: new Date(),
-        }],
+        rows: [
+          {
+            user_id: mockUserId,
+            public_key: mockPublicKey.public_key,
+            created_at: new Date(),
+            updated_at: new Date(),
+          },
+        ],
       });
 
       const response = await request(app)
-        .post('/api/public-keys')
+        .post("/api/public-keys")
         .send(mockPublicKey)
         .expect(201);
 
       expect(response.body.success).toBe(true);
-      expect(response.body.message).toBe('Public key stored successfully');
+      expect(response.body.message).toBe("Public key stored successfully");
       expect(response.body.data.user_id).toBe(mockUserId);
     });
 
-    it('should update existing public key', async () => {
+    it("should update existing public key", async () => {
       const mockPublicKey = {
         user_id: mockUserId,
-        public_key: 'updated-public-key-data',
+        public_key: validPublicKey,
       };
 
       // Mock check for existing key (found)
       (query as jest.Mock).mockResolvedValueOnce({
-        rows: [{ user_id: mockUserId, public_key: 'old-key' }],
+        rows: [{ user_id: mockUserId, public_key: "old-key" }],
       });
 
       // Mock update
       (query as jest.Mock).mockResolvedValueOnce({
-        rows: [{
-          user_id: mockUserId,
-          public_key: mockPublicKey.public_key,
-          updated_at: new Date(),
-        }],
+        rows: [
+          {
+            user_id: mockUserId,
+            public_key: mockPublicKey.public_key,
+            updated_at: new Date(),
+          },
+        ],
       });
 
       const response = await request(app)
-        .post('/api/public-keys')
+        .post("/api/public-keys")
         .send(mockPublicKey)
         .expect(200);
 
       expect(response.body.success).toBe(true);
-      expect(response.body.message).toBe('Public key updated successfully');
+      expect(response.body.message).toBe("Public key updated successfully");
+    });
+
+    it("should reject replacing another user public key", async () => {
+      const response = await request(app)
+        .post("/api/public-keys")
+        .send({
+          user_id: "b".repeat(64),
+          public_key: validPublicKey,
+        })
+        .expect(403);
+
+      expect(response.body.error).toContain("authenticated owner");
+      expect(query).not.toHaveBeenCalled();
+    });
+
+    it("should reject private or malformed key material", async () => {
+      await request(app)
+        .post("/api/public-keys")
+        .send({
+          user_id: mockUserId,
+          public_key: JSON.stringify({
+            kty: "RSA",
+            n: "test-modulus",
+            e: "AQAB",
+            d: "private-component",
+          }),
+        })
+        .expect(422);
+
+      expect(query).not.toHaveBeenCalled();
     });
   });
 
-  describe('GET /api/public-keys/:user_id', () => {
-    it('should retrieve existing public key', async () => {
+  describe("GET /api/public-keys/:user_id", () => {
+    it("should retrieve existing public key", async () => {
       const mockKeyData = {
         user_id: mockUserId,
-        public_key: 'test-public-key',
+        public_key: "test-public-key",
         created_at: new Date(),
         updated_at: new Date(),
       };
@@ -254,11 +300,11 @@ describe('Public Keys Routes - DELETE', () => {
         .expect(200);
 
       expect(response.body.success).toBe(true);
-      expect(response.body.data.public_key).toBe('test-public-key');
-      expect(response.body.message).toBe('Public key retrieved successfully');
+      expect(response.body.data.public_key).toBe("test-public-key");
+      expect(response.body.message).toBe("Public key retrieved successfully");
     });
 
-    it('should return 404 when key not found', async () => {
+    it("should return 404 when key not found", async () => {
       (query as jest.Mock).mockResolvedValue({
         rows: [],
       });
