@@ -1,372 +1,213 @@
-/**
- * UI Component Tests for Key Management Page
- *
- * Tests user interactions, warning flows, and UI state management
- */
+import React from "react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
+import { KeyManagementPage } from "../../pages/key-management-page";
+import {
+  deriveKeyFromMnemonic,
+  generateMnemonic,
+  storeKey,
+} from "../../utils/cryptoUtils";
 
-import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import { BrowserRouter } from 'react-router-dom';
-import { KeyManagementPage } from '../../pages/key-management-page';
-import '@testing-library/jest-dom';
-
-// Mock navigation
 const mockNavigate = jest.fn();
-jest.mock('react-router-dom', () => ({
-  ...jest.requireActual('react-router-dom'),
+
+jest.mock("react-router-dom", () => ({
+  ...jest.requireActual("react-router-dom"),
   useNavigate: () => mockNavigate,
 }));
 
-// Helper to render component with Router
-const renderWithRouter = (component: React.ReactElement) => {
-  return render(<BrowserRouter>{component}</BrowserRouter>);
-};
+jest.mock("../../utils/cryptoUtils", () => ({
+  deriveKeyFromMnemonic: jest.fn(),
+  generateMnemonic: jest.fn(),
+  storeKey: jest.fn(),
+}));
 
-describe('KeyManagementPage', () => {
-  let consoleErrorMock: jest.SpyInstance;
+jest.mock("../../utils/mnemonicManager", () => ({
+  setMnemonic: jest.fn(),
+}));
 
-  beforeAll(() => {
-    // Suppress React act() warnings and expected async errors in tests
-    consoleErrorMock = jest.spyOn(console, 'error').mockImplementation((message, ...args) => {
-      // Suppress act() warnings
-      if (
-        typeof message === 'string' &&
-        (message.includes('act(...)') || message.includes('not wrapped in act'))
-      ) {
-        return;
-      }
-      // Allow other console.errors to pass through for debugging
-      // (individual tests can mock console.error if they expect specific errors)
-    });
-  });
+jest.mock("../../utils/keyTest", () => ({
+  testEncryptionKey: jest.fn().mockResolvedValue({
+    success: true,
+    message: "Key works",
+  }),
+}));
 
-  afterAll(() => {
-    // Restore console.error after all tests
-    consoleErrorMock.mockRestore();
-  });
+jest.mock("../../utils/rsaKeyRecovery", () => ({
+  recoverRsaKeysIfNeeded: jest.fn(),
+}));
 
+jest.mock("../../utils/authService", () => ({
+  getUserEmail: jest.fn().mockResolvedValue("user@example.com"),
+  hasGoogleTokensInStorage: jest.fn().mockReturnValue(true),
+}));
+
+jest.mock("../../utils/gapiInit", () => ({
+  initializeGapi: jest.fn().mockResolvedValue(undefined),
+}));
+
+jest.mock("../../components/key-management/DeviceManagement", () => ({
+  DeviceManagement: () => <div>Current browser key status</div>,
+}));
+
+jest.mock("sonner", () => ({
+  toast: {
+    error: jest.fn(),
+    success: jest.fn(),
+    warning: jest.fn(),
+  },
+}));
+
+const mockDeriveKey = deriveKeyFromMnemonic as jest.MockedFunction<
+  typeof deriveKeyFromMnemonic
+>;
+const mockGenerateMnemonic = generateMnemonic as jest.MockedFunction<
+  typeof generateMnemonic
+>;
+const mockStoreKey = storeKey as jest.MockedFunction<typeof storeKey>;
+
+const mnemonic =
+  "abandon ability able about above absent absorb abstract absurd abuse access accident";
+
+function renderPage(initialEntry = "/key-management") {
+  return render(
+    <MemoryRouter initialEntries={[initialEntry]}>
+      <KeyManagementPage />
+    </MemoryRouter>,
+  );
+}
+
+async function generateNewKey() {
+  fireEvent.click(screen.getByRole("tab", { name: /create new key/i }));
+  fireEvent.click(screen.getByRole("button", { name: /create new key/i }));
+  fireEvent.click(
+    screen.getByLabelText(/losing this phrase means permanent loss/i),
+  );
+  fireEvent.click(screen.getByLabelText(/ready to save the recovery phrase/i));
+  fireEvent.click(
+    screen.getByRole("button", { name: /create encryption key/i }),
+  );
+  await screen.findByText("Your encryption key is ready");
+}
+
+describe("KeyManagementPage", () => {
   beforeEach(() => {
-    sessionStorage.clear();
-    mockNavigate.mockClear();
+    jest.clearAllMocks();
+    mockNavigate.mockReset();
+    mockGenerateMnemonic.mockReturnValue(mnemonic);
+    mockDeriveKey.mockResolvedValue({} as CryptoKey);
+    mockStoreKey.mockResolvedValue(undefined);
   });
 
-  describe('Initial Render', () => {
-    it('should render the page', () => {
-      renderWithRouter(<KeyManagementPage />);
-      expect(screen.getByText('Recover Your Key')).toBeInTheDocument();
-    });
+  it("opens in a focused recovery mode", () => {
+    renderPage();
 
-    it('should show recover mode by default', () => {
-      renderWithRouter(<KeyManagementPage />);
-      expect(
-        screen.getByPlaceholderText(/Enter your 12 or 24 word mnemonic/i)
-      ).toBeInTheDocument();
-    });
-
-    it('should have a switch to generate mode link', () => {
-      renderWithRouter(<KeyManagementPage />);
-      expect(
-        screen.getByText(/Don't have a key\? Create new secure mnemonic/i)
-      ).toBeInTheDocument();
-    });
-
-    it('should have back button to storage', () => {
-      renderWithRouter(<KeyManagementPage />);
-      const backButton = screen.getByLabelText(/Back to Storage/i);
-      expect(backButton).toBeInTheDocument();
-    });
+    expect(screen.getByText("Recover your key")).toBeInTheDocument();
+    expect(screen.getByLabelText("Recovery phrase")).toBeInTheDocument();
+    expect(screen.getByText(/never sent to the server/i)).toBeInTheDocument();
+    expect(screen.getByText("Current browser key status")).toBeInTheDocument();
   });
 
-  describe('View Mode Switching', () => {
-    it('should switch to generate mode when clicking link', () => {
-      renderWithRouter(<KeyManagementPage />);
+  it("switches cleanly between recovery and key creation", () => {
+    renderPage();
 
-      const switchLink = screen.getByText(/Don't have a key/i);
-      fireEvent.click(switchLink);
+    fireEvent.click(screen.getByRole("tab", { name: /create new key/i }));
+    expect(screen.getByText("Create a new encryption key")).toBeInTheDocument();
 
-      expect(screen.getByText('Create New Key')).toBeInTheDocument();
-      expect(
-        screen.getByText(/Generate New Secure Mnemonic & Key/i)
-      ).toBeInTheDocument();
-    });
-
-    it('should switch back to recover mode', () => {
-      renderWithRouter(<KeyManagementPage />);
-
-      // Switch to generate
-      fireEvent.click(screen.getByText(/Don't have a key/i));
-
-      // Switch back to recover
-      const recoverLink = screen.getByText(/Already have a key/i);
-      fireEvent.click(recoverLink);
-
-      expect(screen.getByText('Recover Your Key')).toBeInTheDocument();
-    });
+    fireEvent.click(screen.getByRole("tab", { name: /recover existing key/i }));
+    expect(screen.getByText("Recover your key")).toBeInTheDocument();
   });
 
-  describe('Warning Dialog Flow', () => {
-    beforeEach(() => {
-      renderWithRouter(<KeyManagementPage />);
-      // Switch to generate mode
-      fireEvent.click(screen.getByText(/Don't have a key/i));
+  it("requires both safety acknowledgements before generation", () => {
+    renderPage();
+    fireEvent.click(screen.getByRole("tab", { name: /create new key/i }));
+    fireEvent.click(screen.getByRole("button", { name: /create new key/i }));
+
+    const confirm = screen.getByRole("button", {
+      name: /create encryption key/i,
     });
+    expect(confirm).toBeDisabled();
 
-    it('should show warning dialog when clicking generate button', () => {
-      const generateBtn = screen.getByText(/Generate New Secure Mnemonic & Key/i);
-      fireEvent.click(generateBtn);
+    fireEvent.click(
+      screen.getByLabelText(/losing this phrase means permanent loss/i),
+    );
+    expect(confirm).toBeDisabled();
 
-      expect(
-        screen.getByText(/IMPORTANT: Read Before Generating Key/i)
-      ).toBeInTheDocument();
+    fireEvent.click(
+      screen.getByLabelText(/ready to save the recovery phrase/i),
+    );
+    expect(confirm).toBeEnabled();
+  });
+
+  it("presents a scannable recovery phrase and next actions", async () => {
+    renderPage();
+    await generateNewKey();
+
+    mnemonic.split(" ").forEach((word) => {
+      expect(screen.getByText(word)).toBeInTheDocument();
     });
+    expect(
+      screen.getByRole("button", { name: /copy phrase/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /download phrase/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /continue to storage/i }),
+    ).toBeInTheDocument();
+  });
 
-    it('should show warning about permanent loss', () => {
-      const generateBtn = screen.getByText(/Generate New Secure Mnemonic/i);
-      fireEvent.click(generateBtn);
-
-      expect(
-        screen.getByText(/Your Files Will Be PERMANENTLY Lost/i)
-      ).toBeInTheDocument();
+  it("recovers a valid phrase and returns to storage", async () => {
+    renderPage();
+    fireEvent.change(screen.getByLabelText("Recovery phrase"), {
+      target: { value: mnemonic },
     });
+    fireEvent.click(
+      screen.getByRole("button", { name: /recover and continue/i }),
+    );
 
-    it('should have two required checkboxes in warning dialog', () => {
-      const generateBtn = screen.getByText(/Generate New Secure Mnemonic/i);
-      fireEvent.click(generateBtn);
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith("/storage"));
+    expect(mockDeriveKey).toHaveBeenCalledWith(mnemonic);
+    expect(mockStoreKey).toHaveBeenCalled();
+  });
 
-      const checkboxes = screen.getAllByRole('checkbox');
-      expect(checkboxes.length).toBeGreaterThanOrEqual(2);
+  it("returns to sharing when Key Management was opened from /share", async () => {
+    renderPage("/key-management?returnTo=%2Fshare");
+    fireEvent.change(screen.getByLabelText("Recovery phrase"), {
+      target: { value: mnemonic },
     });
+    fireEvent.click(
+      screen.getByRole("button", { name: /recover and continue/i }),
+    );
 
-    it('should disable generate button until both checkboxes checked', () => {
-      const generateBtn = screen.getByText(/Generate New Secure Mnemonic/i);
-      fireEvent.click(generateBtn);
-
-      const confirmBtn = screen.getByText(/I Understand, Generate My Key/i);
-      expect(confirmBtn).toBeDisabled();
-    });
-
-    it('should keep button disabled with only first checkbox', () => {
-      const generateBtn = screen.getByText(/Generate New Secure Mnemonic/i);
-      fireEvent.click(generateBtn);
-
-      const checkbox1 = screen.getByLabelText(/permanent loss of ALL my files/i);
-      fireEvent.click(checkbox1);
-
-      const confirmBtn = screen.getByText(/I Understand, Generate My Key/i);
-      expect(confirmBtn).toBeDisabled();
-    });
-
-    it('should enable generate button when both checkboxes checked', () => {
-      const generateBtn = screen.getByText(/Generate New Secure Mnemonic/i);
-      fireEvent.click(generateBtn);
-
-      const checkbox1 = screen.getByLabelText(/permanent loss of ALL my files/i);
-      const checkbox2 = screen.getByLabelText(/prepared to save my backup phrase/i);
-
-      fireEvent.click(checkbox1);
-      fireEvent.click(checkbox2);
-
-      const confirmBtn = screen.getByText(/I Understand, Generate My Key/i);
-      expect(confirmBtn).not.toBeDisabled();
-    });
-
-    it('should close dialog on cancel', () => {
-      const generateBtn = screen.getByText(/Generate New Secure Mnemonic/i);
-      fireEvent.click(generateBtn);
-
-      const cancelBtn = screen.getByText('Cancel');
-      fireEvent.click(cancelBtn);
-
-      expect(
-        screen.queryByText(/IMPORTANT: Read Before Generating Key/i)
-      ).not.toBeInTheDocument();
+    await waitFor(() => {
+      expect(mockNavigate).toHaveBeenCalledWith("/share");
     });
   });
 
-  describe('Mnemonic Generation', () => {
-    beforeEach(() => {
-      renderWithRouter(<KeyManagementPage />);
-      // Switch to generate mode
-      fireEvent.click(screen.getByText(/Don't have a key/i));
+  it("shows an inline error for an invalid recovery phrase", async () => {
+    mockDeriveKey.mockRejectedValue(new Error("Invalid mnemonic phrase"));
+    renderPage();
+    fireEvent.change(screen.getByLabelText("Recovery phrase"), {
+      target: { value: "invalid phrase" },
     });
+    fireEvent.click(
+      screen.getByRole("button", { name: /recover and continue/i }),
+    );
 
-    it('should generate and display mnemonic after warning', async () => {
-      // Open dialog
-      const generateBtn = screen.getByText(/Generate New Secure Mnemonic/i);
-      fireEvent.click(generateBtn);
-
-      // Check both boxes
-      const checkbox1 = screen.getByLabelText(/permanent loss of ALL/i);
-      const checkbox2 = screen.getByLabelText(/prepared to save/i);
-      fireEvent.click(checkbox1);
-      fireEvent.click(checkbox2);
-
-      // Confirm
-      const confirmBtn = screen.getByText(/I Understand, Generate My Key/i);
-      fireEvent.click(confirmBtn);
-
-      // Wait for mnemonic to appear
-      await waitFor(() => {
-        expect(screen.getByText('Mnemonic Generated!')).toBeInTheDocument();
-      });
-    });
-
-    it('should display 12-word mnemonic', async () => {
-      // Generate mnemonic
-      const generateBtn = screen.getByText(/Generate New Secure Mnemonic/i);
-      fireEvent.click(generateBtn);
-
-      const checkbox1 = screen.getByLabelText(/permanent loss of ALL/i);
-      const checkbox2 = screen.getByLabelText(/prepared to save/i);
-      fireEvent.click(checkbox1);
-      fireEvent.click(checkbox2);
-
-      const confirmBtn = screen.getByText(/I Understand, Generate My Key/i);
-      fireEvent.click(confirmBtn);
-
-      // Check mnemonic has 12 words
-      await waitFor(() => {
-        const textarea = screen.getByDisplayValue(/\w+/) as HTMLTextAreaElement;
-        const value = textarea.value || textarea.textContent || '';
-        const words = value.trim().split(/\s+/).filter(w => w.length > 0);
-        expect(words.length).toBe(12);
-      });
-    });
-
-    it('should show download button after generation', async () => {
-      // Generate mnemonic
-      const generateBtn = screen.getByText(/Generate New Secure Mnemonic/i);
-      fireEvent.click(generateBtn);
-
-      const checkbox1 = screen.getByLabelText(/permanent loss of ALL/i);
-      const checkbox2 = screen.getByLabelText(/prepared to save/i);
-      fireEvent.click(checkbox1);
-      fireEvent.click(checkbox2);
-
-      const confirmBtn = screen.getByText(/I Understand, Generate My Key/i);
-      fireEvent.click(confirmBtn);
-
-      await waitFor(() => {
-        expect(screen.getByText(/Download Mnemonic/i)).toBeInTheDocument();
-      });
-    });
-
-    it('should show Test Your Key button after generation', async () => {
-      // Generate mnemonic
-      const generateBtn = screen.getByText(/Generate New Secure Mnemonic/i);
-      fireEvent.click(generateBtn);
-
-      const checkbox1 = screen.getByLabelText(/permanent loss of ALL/i);
-      const checkbox2 = screen.getByLabelText(/prepared to save/i);
-      fireEvent.click(checkbox1);
-      fireEvent.click(checkbox2);
-
-      const confirmBtn = screen.getByText(/I Understand, Generate My Key/i);
-      fireEvent.click(confirmBtn);
-
-      await waitFor(() => {
-        expect(screen.getByText(/Test Your Key/i)).toBeInTheDocument();
-      });
-    });
+    expect(
+      await screen.findByText(/recovery phrase is not valid/i),
+    ).toBeInTheDocument();
+    expect(mockNavigate).not.toHaveBeenCalled();
   });
 
-  describe('Recovery Mode', () => {
-    beforeEach(() => {
-      renderWithRouter(<KeyManagementPage />);
-    });
+  it("keeps legacy JSON import available without dominating the page", () => {
+    renderPage();
+    fireEvent.click(
+      screen.getByRole("button", { name: /import a legacy json key/i }),
+    );
 
-    it('should have textarea for mnemonic input', () => {
-      expect(
-        screen.getByPlaceholderText(/Enter your 12 or 24 word mnemonic/i)
-      ).toBeInTheDocument();
-    });
-
-    it('should have Load Key button', () => {
-      expect(screen.getByText(/Load Key from Mnemonic/i)).toBeInTheDocument();
-    });
-
-    it('should disable Load button when input is empty', () => {
-      const loadBtn = screen.getByText(/Load Key from Mnemonic/i);
-      expect(loadBtn).toBeDisabled();
-    });
-
-    it('should enable Load button when input has text', () => {
-      const textarea = screen.getByPlaceholderText(/Enter your 12 or 24 word mnemonic/i);
-      fireEvent.change(textarea, { target: { value: 'test mnemonic phrase' } });
-
-      const loadBtn = screen.getByText(/Load Key from Mnemonic/i);
-      expect(loadBtn).not.toBeDisabled();
-    });
-
-    it('should show advanced file upload option', () => {
-      const advancedBtn = screen.getByText(/Advanced: Use Existing Key File/i);
-      expect(advancedBtn).toBeInTheDocument();
-    });
-
-    it('should toggle file upload section', () => {
-      const advancedBtn = screen.getByText(/Advanced: Use Existing Key File/i);
-      fireEvent.click(advancedBtn);
-
-      expect(screen.getByText(/Upload your encryption key file/i)).toBeInTheDocument();
-    });
-  });
-
-  describe('Error Handling', () => {
-    it('should handle invalid mnemonic gracefully', async () => {
-      // Mock console.error to suppress expected error
-      const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
-
-      renderWithRouter(<KeyManagementPage />);
-
-      const textarea = screen.getByPlaceholderText(/Enter your 12 or 24 word mnemonic/i);
-      fireEvent.change(textarea, { target: { value: 'invalid mnemonic' } });
-
-      const loadBtn = screen.getByText(/Load Key from Mnemonic/i);
-      fireEvent.click(loadBtn);
-
-      await waitFor(() => {
-        // Should show error toast or error message
-        expect(
-          screen.queryByText(/Invalid mnemonic/i) ||
-            screen.queryByText(/Failed/i) ||
-            document.querySelector('[class*="destructive"]')
-        ).toBeTruthy();
-      });
-
-      // Verify console.error was called (error was logged)
-      expect(consoleErrorSpy).toHaveBeenCalledWith(
-        'Error loading key from mnemonic:',
-        expect.any(Error)
-      );
-
-      // Restore console.error
-      consoleErrorSpy.mockRestore();
-    });
-  });
-
-  describe('Device Management Section', () => {
-    it('should render device management component', () => {
-      renderWithRouter(<KeyManagementPage />);
-
-      expect(
-        screen.getByText(/Using ZeroDrive on Other Devices/i)
-      ).toBeInTheDocument();
-    });
-  });
-
-  describe('Accessibility', () => {
-    it('should have accessible labels for inputs', () => {
-      renderWithRouter(<KeyManagementPage />);
-
-      const textarea = screen.getByPlaceholderText(/Enter your 12 or 24 word mnemonic/i);
-      expect(textarea).toHaveAttribute('id');
-    });
-
-    it('should have accessible button labels', () => {
-      renderWithRouter(<KeyManagementPage />);
-
-      const backButton = screen.getByLabelText(/Back to Storage/i);
-      expect(backButton).toBeInTheDocument();
-    });
+    expect(
+      screen.getByLabelText("Upload your encryption key file"),
+    ).toBeInTheDocument();
   });
 });
