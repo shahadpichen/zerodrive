@@ -74,9 +74,8 @@ describe("Shared Files Routes Integration", () => {
       management_capability_hash: "a".repeat(64),
       recipient_email: testRecipientEmail,
       encrypted_file_key: "encrypted-key-data",
-      file_name: "document.pdf",
+      encrypted_metadata: Buffer.from("encrypted-metadata").toString("base64"),
       file_size: 1024000,
-      mime_type: "application/pdf",
       access_type: "view",
     };
 
@@ -122,16 +121,12 @@ describe("Shared Files Routes Integration", () => {
       );
     });
 
-    it("should create shared file and send email when custom message provided", async () => {
+    it("sends only a generic notification without plaintext metadata", async () => {
       const token = generateToken(testUserEmail);
-      const requestWithMessage = {
-        ...validShareRequest,
-        custom_message: "Check out this file!",
-      };
 
       mockQuery.mockResolvedValueOnce({ rows: [] }); // No existing share
       mockQuery.mockResolvedValueOnce({
-        rows: [{ id: "share-uuid-123", ...requestWithMessage }],
+        rows: [{ id: "share-uuid-123", ...validShareRequest }],
       });
 
       const response = await request(app)
@@ -141,7 +136,7 @@ describe("Shared Files Routes Integration", () => {
           `zerodrive_csrf=${csrfToken}`,
         ])
         .set("x-csrf-token", csrfToken)
-        .send(requestWithMessage);
+        .send(validShareRequest);
 
       expect(response.status).toBe(201);
       expect(response.body.success).toBe(true);
@@ -149,7 +144,6 @@ describe("Shared Files Routes Integration", () => {
       // Verify email was sent
       expect(mockSendFileShareNotification).toHaveBeenCalledWith(
         testRecipientEmail,
-        "Check out this file!",
       );
     });
 
@@ -286,10 +280,10 @@ describe("Shared Files Routes Integration", () => {
       expect(response.body.error.message).toContain("encrypted_file_key");
     });
 
-    it("should return 422 when required field file_name is missing", async () => {
+    it("should return 422 when encrypted metadata is missing", async () => {
       const token = generateToken(testUserEmail);
       const invalidRequest = { ...validShareRequest };
-      delete (invalidRequest as any).file_name;
+      delete (invalidRequest as any).encrypted_metadata;
 
       const response = await request(app)
         .post("/api/shared-files")
@@ -301,7 +295,7 @@ describe("Shared Files Routes Integration", () => {
         .send(invalidRequest);
 
       expect(response.status).toBe(422);
-      expect(response.body.error.message).toContain("file_name");
+      expect(response.body.error.message).toContain("encrypted_metadata");
     });
 
     it("should return 422 when required field file_size is missing", async () => {
@@ -322,10 +316,13 @@ describe("Shared Files Routes Integration", () => {
       expect(response.body.error.message).toContain("file_size");
     });
 
-    it("should return 422 when required field mime_type is missing", async () => {
+    it("rejects plaintext filename and MIME metadata", async () => {
       const token = generateToken(testUserEmail);
-      const invalidRequest = { ...validShareRequest };
-      delete (invalidRequest as any).mime_type;
+      const invalidRequest = {
+        ...validShareRequest,
+        file_name: "secret.pdf",
+        mime_type: "application/pdf",
+      };
 
       const response = await request(app)
         .post("/api/shared-files")
@@ -337,7 +334,7 @@ describe("Shared Files Routes Integration", () => {
         .send(invalidRequest);
 
       expect(response.status).toBe(422);
-      expect(response.body.error.message).toContain("mime_type");
+      expect(response.body.error.message).toContain("not allowed");
     });
 
     it("should return 422 when file_size is negative", async () => {
@@ -542,14 +539,10 @@ describe("Shared Files Routes Integration", () => {
 
     it("should handle email sending failure gracefully", async () => {
       const token = generateToken(testUserEmail);
-      const requestWithMessage = {
-        ...validShareRequest,
-        custom_message: "Check out this file!",
-      };
 
       mockQuery.mockResolvedValueOnce({ rows: [] });
       mockQuery.mockResolvedValueOnce({
-        rows: [{ id: "share-uuid-123", ...requestWithMessage }],
+        rows: [{ id: "share-uuid-123", ...validShareRequest }],
       });
       mockSendFileShareNotification.mockRejectedValueOnce(
         new Error("Email service down"),
@@ -562,7 +555,7 @@ describe("Shared Files Routes Integration", () => {
           `zerodrive_csrf=${csrfToken}`,
         ])
         .set("x-csrf-token", csrfToken)
-        .send(requestWithMessage);
+        .send(validShareRequest);
 
       // Should still succeed even if email fails
       expect(response.status).toBe(201);

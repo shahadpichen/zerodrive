@@ -47,9 +47,10 @@ interface SharedFileData {
   file_id: string;
   recipient_user_id: string;
   encrypted_file_key: string;
-  file_name: string;
+  encrypted_metadata?: string;
+  file_name?: string;
   file_size: number;
-  mime_type: string;
+  mime_type?: string;
   access_type: "view" | "download";
   expires_at?: string;
   last_accessed_at?: string;
@@ -317,11 +318,9 @@ export const sharedFilesApi = {
     file_id: string;
     management_capability_hash: string;
     recipient_email: string;
-    custom_message?: string;
     encrypted_file_key: string;
-    file_name: string;
+    encrypted_metadata: string;
     file_size: number;
-    mime_type: string;
     access_type?: "view" | "download";
     expires_at?: string;
   }): Promise<SharedFileData> {

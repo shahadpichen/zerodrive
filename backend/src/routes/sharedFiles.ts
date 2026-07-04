@@ -20,7 +20,6 @@ import {
   AnalyticsEvent,
   AnalyticsCategory,
   getFileSizeBucket,
-  getFileTypeCategory,
 } from "../services/analytics";
 import { deriveRecipientLookupId } from "../utils/identity";
 import crypto from "crypto";
@@ -58,11 +57,9 @@ const createSharedFileSchema = Joi.object({
   file_id: Joi.string().required(),
   management_capability_hash: Joi.string().hex().length(64).required(),
   recipient_email: Joi.string().email().required(),
-  custom_message: Joi.string().max(500).optional(), // Optional custom message from sender
   encrypted_file_key: Joi.string().required(),
-  file_name: Joi.string().required(),
+  encrypted_metadata: Joi.string().base64().required().max(32768),
   file_size: Joi.number().integer().min(0).required(),
-  mime_type: Joi.string().required(),
   expires_at: Joi.date().iso().optional(),
   access_type: Joi.string().valid("view", "download").default("view"),
 });
@@ -98,11 +95,9 @@ router.post(
       file_id,
       management_capability_hash,
       recipient_email,
-      custom_message,
       encrypted_file_key,
-      file_name,
+      encrypted_metadata,
       file_size,
-      mime_type,
       expires_at,
       access_type,
     } = value;
@@ -123,44 +118,30 @@ router.post(
       const result = await query<SharedFile>(
         `INSERT INTO shared_files (
         file_id, recipient_user_id, encrypted_file_key,
-        file_name, file_size, mime_type, expires_at, access_type,
+        encrypted_metadata, file_size, expires_at, access_type,
         management_capability_hash
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
       RETURNING *`,
         [
           file_id,
           recipientUserId,
           encrypted_file_key,
-          file_name,
+          encrypted_metadata,
           file_size,
-          mime_type,
           expires_at || null,
           access_type,
           management_capability_hash,
         ],
       );
 
-      // Send email notification (non-blocking)
-      // Only send email if user provided a custom message
-      // Don't wait for email to complete - respond immediately to user
-      if (recipient_email && custom_message) {
-        sendFileShareNotification(recipient_email, custom_message).catch(
-          (error) => {
-            console.error(
-              "[SharedFiles] Failed to send email notification:",
-              error.message,
-            );
-            // Don't throw - email failure should not fail the file sharing operation
-          },
-        );
-      }
+      // Send a generic notification. File metadata and the sender's message
+      // remain encrypted and are never disclosed to the backend/email provider.
+      sendFileShareNotification(recipient_email).catch(() => {});
 
       // Track file share event (anonymous)
       trackEvent(AnalyticsEvent.FILE_SHARED, AnalyticsCategory.SHARING, {
         file_size_bucket: getFileSizeBucket(file_size),
-        file_type: getFileTypeCategory(mime_type),
         has_expiration: !!expires_at,
-        has_custom_message: !!custom_message,
       }).catch(() => {}); // Don't let analytics fail the request
 
       res.apiSuccess(

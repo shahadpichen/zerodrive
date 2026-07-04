@@ -20,6 +20,7 @@ import { getFileIconPath } from "../lib/mime-types";
 import {
   arrayBufferToBase64,
   decryptSharedFile,
+  decryptSharedMetadata,
   downloadEncryptedFile,
 } from "../utils/fileSharing";
 import { getUserKeyPair, userHasStoredKeys } from "../utils/keyStorage";
@@ -52,8 +53,11 @@ interface SharedFile {
   createdAt: Date;
   expiresAt: Date | null;
   encryptedFileKey: string;
+  encryptedMetadata: string | null;
+  metadataDecrypted: boolean;
   fileSize: number | null;
   mimeType: string;
+  message?: string;
 }
 
 function formatBytes(bytes: number | null): string {
@@ -92,10 +96,12 @@ function normalizeEncryptedKey(rawKey: unknown): string {
 function mapSharedFile(row: any): SharedFile {
   return {
     id: row.id,
-    name: row.file_name,
+    name: row.file_name || "Encrypted file",
     createdAt: new Date(row.created_at),
     expiresAt: row.expires_at ? new Date(row.expires_at) : null,
     encryptedFileKey: normalizeEncryptedKey(row.encrypted_file_key),
+    encryptedMetadata: row.encrypted_metadata || null,
+    metadataDecrypted: !row.encrypted_metadata,
     fileSize:
       typeof row.file_size === "number"
         ? row.file_size
@@ -146,6 +152,55 @@ const SharedWithMePage: React.FC = () => {
       setIsLoading(false);
     }
   }, []);
+
+  useEffect(() => {
+    if (!sharingPrivateKey) return;
+    const pending = sharedFiles.filter(
+      (file) => file.encryptedMetadata && !file.metadataDecrypted,
+    );
+    if (pending.length === 0) return;
+
+    let active = true;
+    void Promise.all(
+      pending.map(async (file) => {
+        try {
+          const metadata = await decryptSharedMetadata(
+            file.encryptedMetadata!,
+            file.encryptedFileKey,
+            sharingPrivateKey,
+          );
+          return {
+            id: file.id,
+            name: metadata.name,
+            mimeType: metadata.mimeType,
+            message: metadata.message,
+          };
+        } catch {
+          return {
+            id: file.id,
+            name: "Encrypted metadata unavailable",
+            mimeType: "application/octet-stream",
+          };
+        }
+      }),
+    ).then((decrypted) => {
+      if (!active) return;
+      const byId = new Map(
+        decrypted.map((metadata) => [metadata.id, metadata]),
+      );
+      setSharedFiles((current) =>
+        current.map((file) => {
+          const metadata = byId.get(file.id);
+          return metadata
+            ? { ...file, ...metadata, metadataDecrypted: true }
+            : file;
+        }),
+      );
+    });
+    return () => {
+      active = false;
+    };
+  }, [sharedFiles, sharingPrivateKey]);
 
   useEffect(() => {
     let active = true;

@@ -16,10 +16,11 @@ export interface SharedFile {
   file_id: string;
   recipient_user_id: string;
   management_capability_hash?: string | null;
+  encrypted_metadata?: string | null;
   encrypted_file_key: string;
-  file_name: string;
+  file_name?: string | null;
   file_size: number;
-  mime_type: string;
+  mime_type?: string | null;
   access_type: "view" | "download";
   expires_at?: Date;
   last_accessed_at?: Date;

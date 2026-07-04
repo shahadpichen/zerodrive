@@ -34,6 +34,17 @@ export interface UserKeyPair {
   privateKeyJwk: JsonWebKey;
 }
 
+export interface SharedFileMetadata {
+  version: 1;
+  name: string;
+  mimeType: string;
+  message?: string;
+}
+
+const SHARED_METADATA_AAD = new TextEncoder().encode(
+  "zerodrive-share-metadata-v1",
+);
+
 /**
  * Converts an ArrayBuffer to a hexadecimal string.
  * @param buffer The ArrayBuffer to convert.
@@ -265,6 +276,26 @@ export function base64ToArrayBuffer(base64: string): ArrayBuffer {
   }
 }
 
+export async function encryptSharedMetadata(
+  metadata: SharedFileMetadata,
+  fileKey: CryptoKey,
+): Promise<string> {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const ciphertext = await crypto.subtle.encrypt(
+    {
+      name: "AES-GCM",
+      iv,
+      additionalData: SHARED_METADATA_AAD,
+    },
+    fileKey,
+    new TextEncoder().encode(JSON.stringify(metadata)),
+  );
+  const combined = new Uint8Array(iv.length + ciphertext.byteLength);
+  combined.set(iv);
+  combined.set(new Uint8Array(ciphertext), iv.length);
+  return arrayBufferToBase64(combined.buffer);
+}
+
 /**
  * Prepares a file for sharing.
  * This involves:
@@ -291,6 +322,7 @@ export async function prepareFileForSharing(
   encryptedFileBlob: Blob;
   recipientEmail: string;
   customMessage?: string;
+  encryptedMetadata: string;
   fileName: string;
   originalFileName: string;
   encryptedFileKey: string;
@@ -401,11 +433,21 @@ export async function prepareFileForSharing(
 
     // Create a unique encrypted file name
     const fileName = `encrypted_${fileId}.bin`;
+    const encryptedMetadata = await encryptSharedMetadata(
+      {
+        version: 1,
+        name: file.name,
+        mimeType: file.type || "application/octet-stream",
+        ...(customMessage && { message: customMessage }),
+      },
+      fileKey,
+    );
 
     return {
       encryptedFileBlob,
       recipientEmail,
       customMessage,
+      encryptedMetadata,
       fileName,
       originalFileName: file.name,
       encryptedFileKey: arrayBufferToBase64(encryptedFileKey),
@@ -499,11 +541,9 @@ export async function storeFileShare(
         file_id: fileKey, // Reference to MinIO storage location
         management_capability_hash: managementCapability.hash,
         recipient_email: fileData.recipientEmail, // For email notification
-        custom_message: fileData.customMessage, // Optional custom message from sender
         encrypted_file_key: encryptedFileKeyHex, // Store the hex string
-        file_name: fileData.originalFileName, // Store original filename, not encrypted blob name
+        encrypted_metadata: fileData.encryptedMetadata,
         file_size: fileData.fileSize || 0,
-        mime_type: fileData.mimeType,
         access_type: "view",
         expires_at: expirationDate, // Auto-delete after 7 days if not claimed
       });
@@ -674,6 +714,60 @@ export async function decryptSharedFile(
     }
     throw error; // Re-throw other errors
   }
+}
+
+export async function decryptSharedMetadata(
+  encryptedMetadata: string,
+  encryptedFileKey: string,
+  privateKeyJwk: JsonWebKey,
+): Promise<SharedFileMetadata> {
+  const hash =
+    privateKeyJwk.alg === "RSA-OAEP" || privateKeyJwk.alg === "RSA-OAEP-1"
+      ? "SHA-1"
+      : "SHA-256";
+  const privateKey = await crypto.subtle.importKey(
+    "jwk",
+    privateKeyJwk,
+    { name: "RSA-OAEP", hash },
+    false,
+    ["decrypt"],
+  );
+  const rawFileKey = await crypto.subtle.decrypt(
+    { name: "RSA-OAEP" },
+    privateKey,
+    base64ToArrayBuffer(encryptedFileKey),
+  );
+  const fileKey = await crypto.subtle.importKey(
+    "raw",
+    rawFileKey,
+    { name: "AES-GCM", length: 256 },
+    false,
+    ["decrypt"],
+  );
+  const encrypted = new Uint8Array(base64ToArrayBuffer(encryptedMetadata));
+  if (encrypted.byteLength < 29) {
+    throw new Error("Encrypted shared metadata is malformed");
+  }
+  const plaintext = await crypto.subtle.decrypt(
+    {
+      name: "AES-GCM",
+      iv: encrypted.slice(0, 12),
+      additionalData: SHARED_METADATA_AAD,
+    },
+    fileKey,
+    encrypted.slice(12),
+  );
+  const metadata = JSON.parse(
+    new TextDecoder().decode(plaintext),
+  ) as SharedFileMetadata;
+  if (
+    metadata.version !== 1 ||
+    typeof metadata.name !== "string" ||
+    typeof metadata.mimeType !== "string"
+  ) {
+    throw new Error("Shared metadata has an unsupported format");
+  }
+  return metadata;
 }
 
 /**

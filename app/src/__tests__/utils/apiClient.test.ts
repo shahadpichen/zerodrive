@@ -456,9 +456,8 @@ describe("ApiClient", () => {
       management_capability_hash: "a".repeat(64),
       recipient_email: "recipient@example.com",
       encrypted_file_key: "encrypted-key",
-      file_name: "test.txt",
+      encrypted_metadata: "encrypted-metadata",
       file_size: 1024,
-      mime_type: "text/plain",
     };
 
     it("should create shared file successfully", async () => {

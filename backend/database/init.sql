@@ -26,10 +26,11 @@ CREATE TABLE IF NOT EXISTS shared_files (
         management_capability_hash IS NULL
         OR management_capability_hash ~ '^[0-9a-f]{64}$'
     ),
+    encrypted_metadata TEXT,
     encrypted_file_key TEXT NOT NULL,
-    file_name VARCHAR(500) NOT NULL,
+    file_name VARCHAR(500),
     file_size BIGINT NOT NULL,
-    mime_type VARCHAR(200) NOT NULL,
+    mime_type VARCHAR(200),
     access_type VARCHAR(20) NOT NULL DEFAULT 'view' CHECK (access_type IN ('view', 'download')),
     expires_at TIMESTAMP WITH TIME ZONE,
     last_accessed_at TIMESTAMP WITH TIME ZONE,

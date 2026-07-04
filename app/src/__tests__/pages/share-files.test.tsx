@@ -183,6 +183,7 @@ describe("ShareFilesPage", () => {
       fileName: "encrypted-file.bin",
       originalFileName: "roadmap.pdf",
       encryptedFileKey: "wrapped-key",
+      encryptedMetadata: "encrypted-metadata",
       fileId: "file-id",
       mimeType: "application/pdf",
       fileSize: 15,
