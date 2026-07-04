@@ -11,6 +11,7 @@ import { Request, Response } from "express";
 import { PublicKey } from "../types";
 import { deriveLookupCandidates } from "../utils/identity";
 import crypto from "crypto";
+import { accountLimit } from "../middleware/accountLimits";
 
 const router = Router();
 
@@ -154,6 +155,11 @@ router.post(
  */
 router.post(
   "/lookup",
+  accountLimit({
+    name: "directory-lookup",
+    max: process.env.NODE_ENV === "test" ? 1000 : 30,
+    windowMs: 15 * 60 * 1000,
+  }),
   asyncHandler(async (req: Request, res: Response) => {
     const { error, value } = lookupPublicKeySchema.validate(req.body);
     if (error) {

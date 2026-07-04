@@ -26,6 +26,7 @@ import { shareCapabilityMatches } from "../utils/shareCapability";
 import { DeleteObjectCommand, HeadObjectCommand } from "@aws-sdk/client-s3";
 import { MINIO_BUCKET, s3Client } from "../config/s3";
 import crypto from "crypto";
+import { accountLimit } from "../middleware/accountLimits";
 
 const router = Router();
 const MAX_ENCRYPTED_FILE_SIZE = 100 * 1024 * 1024 + 28;
@@ -114,6 +115,18 @@ const getSharedFilesQuerySchema = Joi.object({
  */
 router.post(
   "/",
+  accountLimit({
+    name: "share-create",
+    max: process.env.NODE_ENV === "test" ? 1000 : 20,
+    windowMs: 60 * 60 * 1000,
+  }),
+  accountLimit({
+    // A conservative, ephemeral pending reservation. It expires with the
+    // pending-share TTL and is never written to PostgreSQL or linked to rows.
+    name: "pending-share-quota",
+    max: process.env.NODE_ENV === "test" ? 1000 : 5,
+    windowMs: 15 * 60 * 1000,
+  }),
   asyncHandler(async (req: Request, res: Response) => {
     // Validate request body
     const { error, value } = createSharedFileSchema.validate(req.body);
