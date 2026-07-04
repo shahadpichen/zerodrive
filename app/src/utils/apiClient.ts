@@ -246,15 +246,23 @@ class HttpClient {
     });
   }
 
-  async put<T>(endpoint: string, data?: any): Promise<ApiResponse<T>> {
+  async put<T>(
+    endpoint: string,
+    data?: any,
+    headers?: HeadersInit,
+  ): Promise<ApiResponse<T>> {
     return this.request<T>(endpoint, {
       method: "PUT",
       body: data ? JSON.stringify(data) : undefined,
+      headers,
     });
   }
 
-  async delete<T>(endpoint: string): Promise<ApiResponse<T>> {
-    return this.request<T>(endpoint, { method: "DELETE" });
+  async delete<T>(
+    endpoint: string,
+    headers?: HeadersInit,
+  ): Promise<ApiResponse<T>> {
+    return this.request<T>(endpoint, { method: "DELETE", headers });
   }
 }
 
@@ -307,6 +315,7 @@ export const sharedFilesApi = {
    */
   async create(shareData: {
     file_id: string;
+    management_capability_hash: string;
     recipient_email: string;
     custom_message?: string;
     encrypted_file_key: string;
@@ -366,10 +375,12 @@ export const sharedFilesApi = {
       access_type?: "view" | "download";
       expires_at?: string | null;
     },
+    managementCapability: string,
   ): Promise<SharedFileData> {
     const response = await httpClient.put<SharedFileData>(
       `/shared-files/${id}`,
       updateData,
+      { "X-Share-Capability": managementCapability },
     );
     return response.data!;
   },
@@ -377,9 +388,13 @@ export const sharedFilesApi = {
   /**
    * Delete/revoke a shared file
    */
-  async delete(id: string): Promise<{ deleted: boolean }> {
+  async delete(
+    id: string,
+    managementCapability: string,
+  ): Promise<{ deleted: boolean }> {
     const response = await httpClient.delete<{ deleted: boolean }>(
       `/shared-files/${id}`,
+      { "X-Share-Capability": managementCapability },
     );
     return response.data!;
   },

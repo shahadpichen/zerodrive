@@ -453,6 +453,7 @@ describe("ApiClient", () => {
   describe("Shared Files API", () => {
     const shareData = {
       file_id: "file-123",
+      management_capability_hash: "a".repeat(64),
       recipient_email: "recipient@example.com",
       encrypted_file_key: "encrypted-key",
       file_name: "test.txt",
@@ -545,7 +546,11 @@ describe("ApiClient", () => {
         }),
       });
 
-      const result = await sharedFilesApi.update("share-123", updateData);
+      const result = await sharedFilesApi.update(
+        "share-123",
+        updateData,
+        "management-capability",
+      );
 
       expect(result.access_type).toBe("download");
     });
@@ -557,7 +562,10 @@ describe("ApiClient", () => {
         json: async () => ({ success: true, data: { deleted: true } }),
       });
 
-      const result = await sharedFilesApi.delete("share-123");
+      const result = await sharedFilesApi.delete(
+        "share-123",
+        "management-capability",
+      );
 
       expect(result.deleted).toBe(true);
     });

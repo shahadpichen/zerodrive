@@ -6,6 +6,7 @@
 import apiClient from "./apiClient";
 import logger from "./logger";
 import { getUserKeyPair } from "./keyStorage";
+import { storeShareManagementCapability } from "./shareCapabilityStorage";
 
 /**
  * Represents the result of preparing a file for sharing (Step 1).
@@ -427,6 +428,34 @@ function arrayBufferToHex(buffer: ArrayBuffer): string {
   );
 }
 
+function bytesToBase64Url(bytes: Uint8Array): string {
+  let binary = "";
+  bytes.forEach((byte) => {
+    binary += String.fromCharCode(byte);
+  });
+  return btoa(binary)
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/g, "");
+}
+
+async function createManagementCapability(): Promise<{
+  plaintext: string;
+  hash: string;
+}> {
+  const plaintext = bytesToBase64Url(
+    crypto.getRandomValues(new Uint8Array(32)),
+  );
+  const hashBuffer = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(plaintext),
+  );
+  const hash = Array.from(new Uint8Array(hashBuffer))
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+  return { plaintext, hash };
+}
+
 /**
  * Store file sharing information in the database
  */
@@ -460,6 +489,7 @@ export async function storeFileShare(
     );
 
     try {
+      const managementCapability = await createManagementCapability();
       // Calculate expiration date (7 days from now)
       const expirationDate = new Date(
         Date.now() + 7 * 24 * 60 * 60 * 1000,
@@ -467,6 +497,7 @@ export async function storeFileShare(
 
       const data = await apiClient.sharedFiles.create({
         file_id: fileKey, // Reference to MinIO storage location
+        management_capability_hash: managementCapability.hash,
         recipient_email: fileData.recipientEmail, // For email notification
         custom_message: fileData.customMessage, // Optional custom message from sender
         encrypted_file_key: encryptedFileKeyHex, // Store the hex string
@@ -476,6 +507,20 @@ export async function storeFileShare(
         access_type: "view",
         expires_at: expirationDate, // Auto-delete after 7 days if not claimed
       });
+      if (!data.id) {
+        throw new Error("Share was created without an identifier");
+      }
+      try {
+        await storeShareManagementCapability(
+          data.id,
+          managementCapability.plaintext,
+        );
+      } catch (backupError) {
+        await apiClient.sharedFiles
+          .delete(data.id, managementCapability.plaintext)
+          .catch(() => {});
+        throw backupError;
+      }
       logger.log(`[FILE-SHARE] Successfully stored file share:`, data);
     } catch (error) {
       logger.error("Error creating shared file:", error);

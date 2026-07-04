@@ -15,6 +15,7 @@ export interface SharedFile {
   id?: string;
   file_id: string;
   recipient_user_id: string;
+  management_capability_hash?: string | null;
   encrypted_file_key: string;
   file_name: string;
   file_size: number;

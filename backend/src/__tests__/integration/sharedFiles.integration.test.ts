@@ -11,6 +11,7 @@ import { responseHelpers, errorHandler } from "../../middleware/errorHandler";
 import { generateToken, verifyToken } from "../../services/jwtService";
 import { requireAuth } from "../../middleware/auth";
 import { deriveRecipientLookupId } from "../../utils/identity";
+import crypto from "crypto";
 
 // Mock dependencies
 jest.mock("../../config/database");
@@ -45,10 +46,10 @@ describe("Shared Files Routes Integration", () => {
   let app: Application;
   const testUserEmail = "sender@example.com";
   const testRecipientEmail = "recipient@example.com";
-  const testRecipientEmailHash = "recipient-hash-456";
   const authenticatedUserHash = verifyToken(
     generateToken(testUserEmail),
   ).emailHash;
+  const testRecipientEmailHash = authenticatedUserHash;
   const csrfToken = "test-csrf-token";
 
   beforeAll(() => {
@@ -70,6 +71,7 @@ describe("Shared Files Routes Integration", () => {
   describe("POST /api/shared-files", () => {
     const validShareRequest = {
       file_id: "file-123",
+      management_capability_hash: "a".repeat(64),
       recipient_email: testRecipientEmail,
       encrypted_file_key: "encrypted-key-data",
       file_name: "document.pdf",
@@ -1196,9 +1198,67 @@ describe("Shared Files Routes Integration", () => {
       expect(response.body.data.deleted).toBe(true);
       expect(response.body.message).toBe("File sharing revoked successfully");
       expect(mockQuery).toHaveBeenCalledWith(
-        "DELETE FROM shared_files WHERE id = $1 AND recipient_user_id = $2",
-        [validUuid, authenticatedUserHash],
+        expect.stringContaining("management_capability_hash IS NULL"),
+        [validUuid, [authenticatedUserHash, expect.any(String)]],
       );
+    });
+
+    it("revokes a new share using only its anonymous capability", async () => {
+      const token = generateToken(testUserEmail);
+      const capability = "anonymous-management-secret";
+      const capabilityHash = crypto
+        .createHash("sha256")
+        .update(capability)
+        .digest("hex");
+      mockQuery
+        .mockResolvedValueOnce({
+          rows: [
+            {
+              id: validUuid,
+              management_capability_hash: capabilityHash,
+            },
+          ],
+        })
+        .mockResolvedValueOnce({ rowCount: 1 });
+
+      await request(app)
+        .delete(`/api/shared-files/${validUuid}`)
+        .set("Cookie", [
+          `zerodrive_token=${token}`,
+          `zerodrive_csrf=${csrfToken}`,
+        ])
+        .set("x-csrf-token", csrfToken)
+        .set("x-share-capability", capability)
+        .expect(200);
+
+      expect(mockQuery).toHaveBeenLastCalledWith(
+        "DELETE FROM shared_files WHERE id = $1",
+        [validUuid],
+      );
+    });
+
+    it("rejects an incorrect anonymous capability", async () => {
+      const token = generateToken(testUserEmail);
+      mockQuery.mockResolvedValueOnce({
+        rows: [
+          {
+            id: validUuid,
+            management_capability_hash: "a".repeat(64),
+          },
+        ],
+      });
+
+      await request(app)
+        .delete(`/api/shared-files/${validUuid}`)
+        .set("Cookie", [
+          `zerodrive_token=${token}`,
+          `zerodrive_csrf=${csrfToken}`,
+        ])
+        .set("x-csrf-token", csrfToken)
+        .set("x-share-capability", "wrong-capability")
+        .expect(403);
+
+      expect(mockQuery).toHaveBeenCalledTimes(1);
     });
 
     it("should return 401 when no auth cookie provided", async () => {

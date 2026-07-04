@@ -22,6 +22,10 @@ CREATE TABLE IF NOT EXISTS shared_files (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     file_id VARCHAR(255) NOT NULL,
     recipient_user_id VARCHAR(255) NOT NULL,
+    management_capability_hash CHAR(64) CHECK (
+        management_capability_hash IS NULL
+        OR management_capability_hash ~ '^[0-9a-f]{64}$'
+    ),
     encrypted_file_key TEXT NOT NULL,
     file_name VARCHAR(500) NOT NULL,
     file_size BIGINT NOT NULL,

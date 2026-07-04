@@ -23,17 +23,40 @@ import {
   getFileTypeCategory,
 } from "../services/analytics";
 import { deriveRecipientLookupId } from "../utils/identity";
+import crypto from "crypto";
 
 const router = Router();
 
-function toClientSharedFile(file: SharedFile): Omit<SharedFile, "file_id"> {
-  const { file_id: _privateObjectKey, ...safeFile } = file;
+function toClientSharedFile(file: SharedFile) {
+  const {
+    file_id: _privateObjectKey,
+    recipient_user_id: _privateRecipientId,
+    management_capability_hash: _privateCapabilityHash,
+    ...safeFile
+  } = file;
   return safeFile;
+}
+
+function capabilityMatches(
+  plaintextCapability: string | undefined,
+  expectedHash: string,
+): boolean {
+  if (!plaintextCapability) return false;
+  const actualHash = crypto
+    .createHash("sha256")
+    .update(plaintextCapability, "utf8")
+    .digest();
+  const expected = Buffer.from(expectedHash, "hex");
+  return (
+    actualHash.length === expected.length &&
+    crypto.timingSafeEqual(actualHash, expected)
+  );
 }
 
 // Validation schemas
 const createSharedFileSchema = Joi.object({
   file_id: Joi.string().required(),
+  management_capability_hash: Joi.string().hex().length(64).required(),
   recipient_email: Joi.string().email().required(),
   custom_message: Joi.string().max(500).optional(), // Optional custom message from sender
   encrypted_file_key: Joi.string().required(),
@@ -73,6 +96,7 @@ router.post(
 
     const {
       file_id,
+      management_capability_hash,
       recipient_email,
       custom_message,
       encrypted_file_key,
@@ -99,8 +123,9 @@ router.post(
       const result = await query<SharedFile>(
         `INSERT INTO shared_files (
         file_id, recipient_user_id, encrypted_file_key,
-        file_name, file_size, mime_type, expires_at, access_type
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        file_name, file_size, mime_type, expires_at, access_type,
+        management_capability_hash
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
       RETURNING *`,
         [
           file_id,
@@ -111,6 +136,7 @@ router.post(
           mime_type,
           expires_at || null,
           access_type,
+          management_capability_hash,
         ],
       );
 
@@ -286,14 +312,34 @@ router.put(
         throw ApiErrors.Unauthorized("Not authenticated");
       }
 
-      // Check if shared file exists
+      const suppliedCapability = req.get("x-share-capability");
+      const recipientIds = [
+        req.user.emailHash,
+        ...(req.user.legacyEmailHash ? [req.user.legacyEmailHash] : []),
+      ];
       const existingFile = await query<SharedFile>(
-        "SELECT * FROM shared_files WHERE id = $1 AND recipient_user_id = $2",
-        [id, req.user.emailHash],
+        suppliedCapability
+          ? "SELECT * FROM shared_files WHERE id = $1"
+          : `SELECT * FROM shared_files
+             WHERE id = $1
+             AND management_capability_hash IS NULL
+             AND recipient_user_id = ANY($2::varchar[])`,
+        suppliedCapability ? [id] : [id, recipientIds],
       );
 
       if (existingFile.rows.length === 0) {
         throw ApiErrors.NotFound("Shared file not found");
+      }
+      const existing = existingFile.rows[0];
+      if (existing.management_capability_hash) {
+        if (
+          !capabilityMatches(
+            suppliedCapability,
+            existing.management_capability_hash,
+          )
+        ) {
+          throw ApiErrors.Forbidden("Invalid share management capability");
+        }
       }
 
       // Build update query dynamically
@@ -331,6 +377,9 @@ router.put(
         "Shared file updated successfully",
       );
     } catch (error) {
+      if (error instanceof ApiError) {
+        throw error;
+      }
       if (
         error instanceof Error &&
         (error.message.includes("not found") ||
@@ -363,10 +412,40 @@ router.delete(
         throw ApiErrors.Unauthorized("Not authenticated");
       }
 
-      const result = await query(
-        "DELETE FROM shared_files WHERE id = $1 AND recipient_user_id = $2",
-        [id, req.user.emailHash],
-      );
+      const suppliedCapability = req.get("x-share-capability");
+      let result;
+      if (suppliedCapability) {
+        const existing = await query<SharedFile>(
+          "SELECT * FROM shared_files WHERE id = $1",
+          [id],
+        );
+        if (existing.rows.length === 0) {
+          throw ApiErrors.NotFound("Shared file not found");
+        }
+        const share = existing.rows[0];
+        if (
+          !share.management_capability_hash ||
+          !capabilityMatches(
+            suppliedCapability,
+            share.management_capability_hash,
+          )
+        ) {
+          throw ApiErrors.Forbidden("Invalid share management capability");
+        }
+        result = await query("DELETE FROM shared_files WHERE id = $1", [id]);
+      } else {
+        const recipientIds = [
+          req.user.emailHash,
+          ...(req.user.legacyEmailHash ? [req.user.legacyEmailHash] : []),
+        ];
+        result = await query(
+          `DELETE FROM shared_files
+           WHERE id = $1
+           AND management_capability_hash IS NULL
+           AND recipient_user_id = ANY($2::varchar[])`,
+          [id, recipientIds],
+        );
+      }
 
       if (result.rowCount === 0) {
         throw ApiErrors.NotFound("Shared file not found");
@@ -374,6 +453,9 @@ router.delete(
 
       res.apiSuccess({ deleted: true }, "File sharing revoked successfully");
     } catch (error) {
+      if (error instanceof ApiError) {
+        throw error;
+      }
       if (error instanceof Error && error.message.includes("not found")) {
         throw error;
       }
