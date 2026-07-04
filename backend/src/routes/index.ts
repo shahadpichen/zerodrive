@@ -7,7 +7,6 @@ import authRouter from "./auth";
 import publicKeysRouter from "./publicKeys";
 import sharedFilesRouter from "./sharedFiles";
 import presignedUrlsRouter from "./presignedUrls";
-import cryptoRouter from "./crypto";
 import webhooksRouter from "./webhooks";
 import invitationsRouter from "./invitations";
 import analyticsRouter from "./analytics";
@@ -76,7 +75,6 @@ router.use(requireAuth);
 router.use("/public-keys", publicKeysRouter);
 router.use("/shared-files", sharedFilesRouter);
 router.use("/presigned-url", presignedUrlsRouter);
-router.use("/crypto", cryptoRouter);
 router.use("/invitations", invitationsRouter);
 router.use("/analytics", analyticsRouter);
 

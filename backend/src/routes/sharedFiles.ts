@@ -22,6 +22,7 @@ import {
   getFileSizeBucket,
   getFileTypeCategory,
 } from "../services/analytics";
+import { deriveRecipientLookupId } from "../utils/identity";
 
 const router = Router();
 
@@ -33,8 +34,7 @@ function toClientSharedFile(file: SharedFile): Omit<SharedFile, "file_id"> {
 // Validation schemas
 const createSharedFileSchema = Joi.object({
   file_id: Joi.string().required(),
-  recipient_user_id: Joi.string().required(),
-  recipient_email: Joi.string().email().optional(), // For email notifications
+  recipient_email: Joi.string().email().required(),
   custom_message: Joi.string().max(500).optional(), // Optional custom message from sender
   encrypted_file_key: Joi.string().required(),
   file_name: Joi.string().required(),
@@ -73,7 +73,6 @@ router.post(
 
     const {
       file_id,
-      recipient_user_id,
       recipient_email,
       custom_message,
       encrypted_file_key,
@@ -83,12 +82,13 @@ router.post(
       expires_at,
       access_type,
     } = value;
+    const recipientUserId = deriveRecipientLookupId(recipient_email);
 
     try {
       // Check if file is already shared with this recipient
       const existingShare = await query<SharedFile>(
         "SELECT id FROM shared_files WHERE file_id = $1 AND recipient_user_id = $2",
-        [file_id, recipient_user_id],
+        [file_id, recipientUserId],
       );
 
       if (existingShare.rows.length > 0) {
@@ -104,7 +104,7 @@ router.post(
       RETURNING *`,
         [
           file_id,
-          recipient_user_id,
+          recipientUserId,
           encrypted_file_key,
           file_name,
           file_size,
@@ -170,27 +170,30 @@ router.get(
     }
 
     const { limit, offset } = value;
-    const recipientUserId = req.user.emailHash;
+    const recipientUserIds = [
+      req.user.emailHash,
+      ...(req.user.legacyEmailHash ? [req.user.legacyEmailHash] : []),
+    ];
 
     try {
       // Get total count for recipient
       const countResult = await query<{ count: string }>(
         `SELECT COUNT(*) as count
          FROM shared_files
-         WHERE recipient_user_id = $1
+         WHERE recipient_user_id = ANY($1::varchar[])
          AND (expires_at IS NULL OR expires_at > CURRENT_TIMESTAMP)`,
-        [recipientUserId],
+        [recipientUserIds],
       );
       const total = parseInt(countResult.rows[0].count);
 
       // Get paginated results for recipient
       const result = await query<SharedFile>(
         `SELECT * FROM shared_files
-       WHERE recipient_user_id = $1
+       WHERE recipient_user_id = ANY($1::varchar[])
        AND (expires_at IS NULL OR expires_at > CURRENT_TIMESTAMP)
        ORDER BY created_at DESC
        LIMIT $2 OFFSET $3`,
-        [recipientUserId, limit, offset],
+        [recipientUserIds, limit, offset],
       );
 
       const hasMore = offset + limit < total;

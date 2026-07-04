@@ -34,7 +34,6 @@ import { decryptFile } from "../utils/decryptFile";
 import {
   fetchUserPublicKey,
   generateUserKeyPair,
-  hashEmail,
   prepareFileForSharing,
   storeFileShare,
   storeUserPublicKey,
@@ -87,13 +86,12 @@ async function syncPublicKeyIfNeeded(
   mnemonic: string,
 ): Promise<void> {
   try {
-    const hashedEmail = await hashEmail(email);
-    const serverKey = await fetchUserPublicKey(hashedEmail);
+    const serverKey = await fetchUserPublicKey(email);
     if (serverKey) return;
 
     const localKeyPair = await getUserKeyPair(email, mnemonic);
     if (localKeyPair?.publicKeyJwk) {
-      await storeUserPublicKey(hashedEmail, localKeyPair.publicKeyJwk);
+      await storeUserPublicKey(localKeyPair.publicKeyJwk);
     }
   } catch (error) {
     console.error("[Share] Public-key sync failed:", error);
@@ -227,8 +225,7 @@ const ShareFilesPage: React.FC = () => {
   const rollbackKeyGeneration = async (email: string) => {
     try {
       await deleteUserKeyPair(email);
-      const hashedEmail = await hashEmail(email);
-      await apiClient.publicKeys.delete(hashedEmail);
+      await apiClient.publicKeys.delete();
     } catch (error) {
       console.error("[Share] Key rollback failed:", error);
     }
@@ -251,9 +248,7 @@ const ShareFilesPage: React.FC = () => {
       }
 
       const keyPair = await generateUserKeyPair();
-      const hashedEmail = await hashEmail(senderEmail);
-
-      await storeUserPublicKey(hashedEmail, keyPair.publicKeyJwk);
+      await storeUserPublicKey(keyPair.publicKeyJwk);
       await storeUserKeyPair(senderEmail, keyPair, mnemonic);
 
       try {
@@ -404,8 +399,7 @@ const ShareFilesPage: React.FC = () => {
     setIsCheckingRecipient(true);
     setRecipientError("");
     try {
-      const hashedEmail = await hashEmail(normalizedEmail);
-      const publicKey = await fetchUserPublicKey(hashedEmail);
+      const publicKey = await fetchUserPublicKey(normalizedEmail);
       setRecipientEmail(normalizedEmail);
 
       if (!publicKey) {

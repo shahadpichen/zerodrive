@@ -174,7 +174,7 @@ describe("Presigned URL Routes", () => {
       expect(response.body.data.expiresIn).toBe(300);
       expect(query).toHaveBeenCalledWith(expect.any(String), [
         shareId,
-        "a".repeat(64),
+        ["a".repeat(64)],
       ]);
       expect(mockGetSignedUrl).toHaveBeenCalled();
     });

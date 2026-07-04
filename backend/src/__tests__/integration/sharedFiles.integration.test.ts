@@ -10,6 +10,7 @@ import sharedFilesRouter from "../../routes/sharedFiles";
 import { responseHelpers, errorHandler } from "../../middleware/errorHandler";
 import { generateToken, verifyToken } from "../../services/jwtService";
 import { requireAuth } from "../../middleware/auth";
+import { deriveRecipientLookupId } from "../../utils/identity";
 
 // Mock dependencies
 jest.mock("../../config/database");
@@ -69,7 +70,6 @@ describe("Shared Files Routes Integration", () => {
   describe("POST /api/shared-files", () => {
     const validShareRequest = {
       file_id: "file-123",
-      recipient_user_id: testRecipientEmailHash,
       recipient_email: testRecipientEmail,
       encrypted_file_key: "encrypted-key-data",
       file_name: "document.pdf",
@@ -113,7 +113,10 @@ describe("Shared Files Routes Integration", () => {
       // Verify existing share check
       expect(mockQuery).toHaveBeenCalledWith(
         "SELECT id FROM shared_files WHERE file_id = $1 AND recipient_user_id = $2",
-        [validShareRequest.file_id, validShareRequest.recipient_user_id],
+        [
+          validShareRequest.file_id,
+          deriveRecipientLookupId(testRecipientEmail),
+        ],
       );
     });
 
@@ -245,10 +248,10 @@ describe("Shared Files Routes Integration", () => {
       expect(response.body.error.message).toContain("file_id");
     });
 
-    it("should return 422 when required field recipient_user_id is missing", async () => {
+    it("should return 422 when required field recipient_email is missing", async () => {
       const token = generateToken(testUserEmail);
       const invalidRequest = { ...validShareRequest };
-      delete (invalidRequest as any).recipient_user_id;
+      delete (invalidRequest as any).recipient_email;
 
       const response = await request(app)
         .post("/api/shared-files")
@@ -260,7 +263,7 @@ describe("Shared Files Routes Integration", () => {
         .send(invalidRequest);
 
       expect(response.status).toBe(422);
-      expect(response.body.error.message).toContain("recipient_user_id");
+      expect(response.body.error.message).toContain("recipient_email");
     });
 
     it("should return 422 when required field encrypted_file_key is missing", async () => {
@@ -682,7 +685,7 @@ describe("Shared Files Routes Integration", () => {
       expect(response.status).toBe(200);
       expect(mockQuery).toHaveBeenCalledWith(
         expect.any(String),
-        [authenticatedUserHash, 50, 0], // Default limit=50, offset=0
+        [[authenticatedUserHash, expect.any(String)], 50, 0], // Current HMAC plus legacy identifier
       );
     });
 
@@ -701,7 +704,7 @@ describe("Shared Files Routes Integration", () => {
 
       expect(response.status).toBe(200);
       expect(mockQuery).toHaveBeenCalledWith(expect.any(String), [
-        authenticatedUserHash,
+        [authenticatedUserHash, expect.any(String)],
         20,
         40,
       ]);
@@ -742,7 +745,7 @@ describe("Shared Files Routes Integration", () => {
 
       expect(response.status).toBe(200);
       expect(mockQuery).toHaveBeenCalledWith(expect.any(String), [
-        authenticatedUserHash,
+        [authenticatedUserHash, expect.any(String)],
       ]);
     });
 

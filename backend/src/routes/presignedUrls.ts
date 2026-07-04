@@ -120,13 +120,17 @@ router.post("/download", async (req: Request, res: Response) => {
       });
     }
 
+    const recipientUserIds = [
+      req.user.emailHash,
+      ...(req.user.legacyEmailHash ? [req.user.legacyEmailHash] : []),
+    ];
     const shareResult = await query<{ file_id: string }>(
       `SELECT file_id
        FROM shared_files
        WHERE id = $1
-       AND recipient_user_id = $2
+       AND recipient_user_id = ANY($2::varchar[])
        AND (expires_at IS NULL OR expires_at > CURRENT_TIMESTAMP)`,
-      [value.shareId, req.user.emailHash],
+      [value.shareId, recipientUserIds],
     );
 
     if (shareResult.rows.length === 0) {

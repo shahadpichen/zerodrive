@@ -52,29 +52,6 @@ function bufferToHex(buffer: ArrayBuffer): string {
  * @param email The email address to hash.
  * @returns A Promise that resolves to the salted SHA-256 hash as a hex string.
  */
-export async function hashEmail(email: string): Promise<string> {
-  try {
-    // Use backend API for salted hash
-    const response = await apiClient.post("/crypto/hash-email", {
-      email: email.toLowerCase().trim(),
-    });
-
-    if (
-      response.success &&
-      response.data &&
-      typeof response.data === "object" &&
-      "hashedEmail" in response.data
-    ) {
-      return (response.data as { hashedEmail: string }).hashedEmail;
-    }
-
-    throw new Error("Failed to hash email: Invalid response from server");
-  } catch (error) {
-    logger.error("Error hashing email:", error);
-    throw new Error("Failed to hash email address");
-  }
-}
-
 /**
  * Encrypts file content using AES-GCM with a provided CryptoKey.
  * The 12-byte Initialization Vector (IV) is prepended to the resulting Blob.
@@ -145,7 +122,6 @@ export async function generateUserKeyPair(): Promise<UserKeyPair> {
  * @returns A Promise that resolves when the key is stored.
  */
 export async function storeUserPublicKey(
-  hashedEmail: string,
   publicKeyJwk: JsonWebKey,
 ): Promise<void> {
   try {
@@ -155,7 +131,6 @@ export async function storeUserPublicKey(
 
     try {
       const data = await apiClient.publicKeys.upsert(
-        hashedEmail,
         JSON.stringify(publicKeyJwk),
       );
       logger.log("Public key stored successfully:", data);
@@ -183,17 +158,17 @@ export async function storeUserPublicKey(
  * @returns A Promise that resolves to the user's public key as a JsonWebKey, or null if not found.
  */
 export async function fetchUserPublicKey(
-  hashedEmail: string,
+  email: string,
 ): Promise<JsonWebKey | null> {
   try {
-    const result = await apiClient.publicKeys.get(hashedEmail);
+    const result = await apiClient.publicKeys.lookup(email);
     if (!result || !result.public_key) {
-      logger.warn(`Public key not found for hashed email: ${hashedEmail}`);
+      logger.warn("Recipient public key not found");
       return null;
     }
     return JSON.parse(result.public_key);
   } catch (error) {
-    logger.warn(`Public key not found for hashed email: ${hashedEmail}`, error);
+    logger.warn("Recipient public key lookup failed", error);
     return null;
   }
 }
@@ -209,10 +184,8 @@ export async function encryptFileKeyForRecipient(
   recipientEmail: string,
 ): Promise<ArrayBuffer> {
   // 1. Hash the recipient's email
-  const hashedRecipientEmail = await hashEmail(recipientEmail);
-
   // 2. Fetch the recipient's public key
-  const recipientPublicKeyJwk = await fetchUserPublicKey(hashedRecipientEmail);
+  const recipientPublicKeyJwk = await fetchUserPublicKey(recipientEmail);
   if (!recipientPublicKeyJwk) {
     throw new Error(
       `Recipient ${recipientEmail} has not registered a public key.`,
@@ -315,7 +288,6 @@ export async function prepareFileForSharing(
   customMessage?: string,
 ): Promise<{
   encryptedFileBlob: Blob;
-  recipientHashedEmail: string;
   recipientEmail: string;
   customMessage?: string;
   fileName: string;
@@ -338,19 +310,12 @@ export async function prepareFileForSharing(
     // as we only need the recipient's public key to encrypt the file key
 
     // Hash the recipient's email
-    const recipientHashedEmail = await hashEmail(recipientEmail);
-
     // Get the recipient's public key from the database
-    // const recipientPublicKey = await fetchUserPublicKey(recipientHashedEmail);
-
     // Fetch the recipient's public key JWK directly for logging and use
-    const publicKeyResult =
-      await apiClient.publicKeys.get(recipientHashedEmail);
+    const publicKeyResult = await apiClient.publicKeys.lookup(recipientEmail);
 
     if (!publicKeyResult || !publicKeyResult.public_key) {
-      logger.error(
-        `[FILE-SHARE] Failed to fetch public key for ${recipientEmail} (hashed: ${recipientHashedEmail})`,
-      );
+      logger.error(`[FILE-SHARE] Failed to fetch recipient public key`);
       throw new Error(
         `Recipient ${recipientEmail} has not registered their public key yet, or an error occurred fetching it.`,
       );
@@ -438,7 +403,6 @@ export async function prepareFileForSharing(
 
     return {
       encryptedFileBlob,
-      recipientHashedEmail,
       recipientEmail,
       customMessage,
       fileName,
@@ -503,7 +467,6 @@ export async function storeFileShare(
 
       const data = await apiClient.sharedFiles.create({
         file_id: fileKey, // Reference to MinIO storage location
-        recipient_user_id: fileData.recipientHashedEmail,
         recipient_email: fileData.recipientEmail, // For email notification
         custom_message: fileData.customMessage, // Optional custom message from sender
         encrypted_file_key: encryptedFileKeyHex, // Store the hex string

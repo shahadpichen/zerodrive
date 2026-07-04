@@ -402,7 +402,7 @@ describe("ApiClient", () => {
         }),
       });
 
-      const result = await publicKeysApi.upsert(testUserId, publicKey);
+      const result = await publicKeysApi.upsert(publicKey);
 
       expect(result.user_id).toBe(testUserId);
       expect(result.public_key).toBe(publicKey);
@@ -418,7 +418,7 @@ describe("ApiClient", () => {
         }),
       });
 
-      const result = await publicKeysApi.get(testUserId);
+      const result = await publicKeysApi.lookup("recipient@example.com");
 
       expect(result).toEqual({ public_key: "test-key" });
     });
@@ -434,26 +434,9 @@ describe("ApiClient", () => {
         }),
       });
 
-      const result = await publicKeysApi.get(testUserId);
+      const result = await publicKeysApi.lookup("recipient@example.com");
 
       expect(result).toBeNull();
-    });
-
-    it("should list all public keys", async () => {
-      const keys = [
-        { id: "1", user_id: "user1", public_key: "key1" },
-        { id: "2", user_id: "user2", public_key: "key2" },
-      ];
-
-      (global.fetch as jest.Mock).mockResolvedValueOnce({
-        ok: true,
-        headers: new Headers({ "content-type": "application/json" }),
-        json: async () => ({ success: true, data: keys }),
-      });
-
-      const result = await publicKeysApi.list();
-
-      expect(result).toEqual(keys);
     });
 
     it("should delete public key successfully", async () => {
@@ -463,14 +446,14 @@ describe("ApiClient", () => {
         json: async () => ({ success: true }),
       });
 
-      await expect(publicKeysApi.delete(testUserId)).resolves.not.toThrow();
+      await expect(publicKeysApi.delete()).resolves.not.toThrow();
     });
   });
 
   describe("Shared Files API", () => {
     const shareData = {
       file_id: "file-123",
-      recipient_user_id: "recipient-456",
+      recipient_email: "recipient@example.com",
       encrypted_file_key: "encrypted-key",
       file_name: "test.txt",
       file_size: 1024,

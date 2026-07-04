@@ -4,7 +4,6 @@ import { MemoryRouter } from "react-router-dom";
 import ShareFilesPage from "../../pages/share-files";
 import {
   fetchUserPublicKey,
-  hashEmail,
   prepareFileForSharing,
   storeFileShare,
 } from "../../utils/fileSharing";
@@ -61,7 +60,6 @@ jest.mock("../../utils/mnemonicManager", () => ({
 jest.mock("../../utils/fileSharing", () => ({
   fetchUserPublicKey: jest.fn(),
   generateUserKeyPair: jest.fn(),
-  hashEmail: jest.fn(),
   prepareFileForSharing: jest.fn(),
   storeFileShare: jest.fn(),
   storeUserPublicKey: jest.fn(),
@@ -105,7 +103,6 @@ const mockRecoverKeys = recoverRsaKeysIfNeeded as jest.MockedFunction<
   typeof recoverRsaKeysIfNeeded
 >;
 const mockGetMnemonic = getMnemonic as jest.MockedFunction<typeof getMnemonic>;
-const mockHashEmail = hashEmail as jest.MockedFunction<typeof hashEmail>;
 const mockFetchPublicKey = fetchUserPublicKey as jest.MockedFunction<
   typeof fetchUserPublicKey
 >;
@@ -179,11 +176,9 @@ describe("ShareFilesPage", () => {
       recovered: false,
       keysExisted: true,
     });
-    mockHashEmail.mockResolvedValue("recipient-hash");
     mockFetchPublicKey.mockResolvedValue({ kty: "RSA" });
     mockPrepareFile.mockResolvedValue({
       encryptedFileBlob: new Blob(["ciphertext"]),
-      recipientHashedEmail: "recipient-hash",
       recipientEmail: "recipient@example.com",
       fileName: "encrypted-file.bin",
       originalFileName: "roadmap.pdf",
@@ -265,8 +260,7 @@ describe("ShareFilesPage", () => {
     fireEvent.click(screen.getByRole("button", { name: /review share/i }));
 
     await screen.findByText("Review before sharing");
-    expect(mockHashEmail).toHaveBeenCalledWith("recipient@example.com");
-    expect(mockFetchPublicKey).toHaveBeenCalledWith("recipient-hash");
+    expect(mockFetchPublicKey).toHaveBeenCalledWith("recipient@example.com");
     expect(screen.getByText("roadmap.pdf")).toBeInTheDocument();
     expect(screen.getByText("recipient@example.com")).toBeInTheDocument();
   });

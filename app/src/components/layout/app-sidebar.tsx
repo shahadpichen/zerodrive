@@ -96,7 +96,7 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
 
     setIsProcessingSharingKeys(true);
     try {
-      const { generateUserKeyPair, storeUserPublicKey, hashEmail } =
+      const { generateUserKeyPair, storeUserPublicKey } =
         await import("../../utils/fileSharing");
       const { storeUserKeyPair } = await import("../../utils/keyStorage");
       const { encryptRsaPrivateKeyWithAesKey } =
@@ -119,8 +119,7 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
       }
       await storeUserKeyPair(userEmail, keyPair, mnemonic);
 
-      const hashedEmail = await hashEmail(userEmail);
-      await storeUserPublicKey(hashedEmail, keyPair.publicKeyJwk);
+      await storeUserPublicKey(keyPair.publicKeyJwk);
 
       const aesKey = await getStoredKey();
       if (!aesKey) {

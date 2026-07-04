@@ -8,22 +8,18 @@ import { query } from "../config/database";
 import { asyncHandler } from "../middleware/errorHandler";
 import { ApiErrors } from "../middleware/errorHandler";
 import { Request, Response } from "express";
-import {
-  PublicKey,
-  CreatePublicKeyRequest,
-  GetPublicKeyRequest,
-} from "../types";
+import { PublicKey } from "../types";
+import { deriveLookupCandidates } from "../utils/identity";
 
 const router = Router();
 
 // Validation schemas
 const createPublicKeySchema = Joi.object({
-  user_id: Joi.string().length(64).hex().required(),
   public_key: Joi.string().required().max(16384),
 });
 
-const getUserPublicKeySchema = Joi.object({
-  user_id: Joi.string().length(64).hex().required(),
+const lookupPublicKeySchema = Joi.object({
+  email: Joi.string().email().required(),
 });
 
 interface PublicEncryptionJwk {
@@ -62,6 +58,11 @@ function validatePublicKeyJwk(serializedKey: string): void {
   }
 }
 
+function toClientPublicKey(record: PublicKey) {
+  const { user_id: _privateLookupId, ...safeRecord } = record;
+  return safeRecord;
+}
+
 /**
  * POST /api/public-keys
  * Store a user's public key
@@ -79,20 +80,15 @@ router.post(
       throw ApiErrors.Unauthorized("Not authenticated");
     }
 
-    const { user_id, public_key } = value;
-    if (user_id !== req.user.emailHash) {
-      throw ApiErrors.Forbidden(
-        "Public keys can only be managed by their authenticated owner",
-      );
-    }
-
+    const { public_key } = value;
+    const userId = req.user.emailHash;
     validatePublicKeyJwk(public_key);
 
     try {
       // Check if public key already exists for this user
       const existingKey = await query<PublicKey>(
         "SELECT * FROM public_keys WHERE user_id = $1",
-        [user_id],
+        [userId],
       );
 
       if (existingKey.rows.length > 0) {
@@ -102,20 +98,27 @@ router.post(
          SET public_key = $2, updated_at = CURRENT_TIMESTAMP 
          WHERE user_id = $1 
          RETURNING *`,
-          [user_id, public_key],
+          [userId, public_key],
         );
 
-        res.apiSuccess(result.rows[0], "Public key updated successfully");
+        res.apiSuccess(
+          toClientPublicKey(result.rows[0]),
+          "Public key updated successfully",
+        );
       } else {
         // Create new public key record
         const result = await query<PublicKey>(
           `INSERT INTO public_keys (user_id, public_key) 
          VALUES ($1, $2) 
          RETURNING *`,
-          [user_id, public_key],
+          [userId, public_key],
         );
 
-        res.apiSuccess(result.rows[0], "Public key stored successfully", 201);
+        res.apiSuccess(
+          toClientPublicKey(result.rows[0]),
+          "Public key stored successfully",
+          201,
+        );
       }
     } catch (error) {
       throw ApiErrors.InternalServer("Failed to store public key");
@@ -124,24 +127,26 @@ router.post(
 );
 
 /**
- * GET /api/public-keys/:user_id
- * Get a user's public key
+ * POST /api/public-keys/lookup
+ * Resolve a recipient public key without exposing internal identifiers.
  */
-router.get(
-  "/:user_id",
+router.post(
+  "/lookup",
   asyncHandler(async (req: Request, res: Response) => {
-    // Validate request parameters
-    const { error, value } = getUserPublicKeySchema.validate(req.params);
+    const { error, value } = lookupPublicKeySchema.validate(req.body);
     if (error) {
       throw ApiErrors.ValidationError(error.details[0].message);
     }
 
-    const { user_id } = value;
-
     try {
+      const lookupIds = deriveLookupCandidates(value.email);
       const result = await query<PublicKey>(
-        "SELECT public_key FROM public_keys WHERE user_id = $1",
-        [user_id],
+        `SELECT public_key
+         FROM public_keys
+         WHERE user_id = ANY($1::varchar[])
+         ORDER BY CASE WHEN user_id = $2 THEN 0 ELSE 1 END
+         LIMIT 1`,
+        [lookupIds, lookupIds[0]],
       );
 
       if (result.rows.length === 0) {
@@ -162,33 +167,19 @@ router.get(
 );
 
 /**
- * DELETE /api/public-keys/:user_id
+ * DELETE /api/public-keys
  * Delete a user's public key
  */
 router.delete(
-  "/:user_id",
+  "/",
   asyncHandler(async (req: Request, res: Response) => {
-    // Validate request parameters
-    const { error, value } = getUserPublicKeySchema.validate(req.params);
-    if (error) {
-      throw ApiErrors.ValidationError(error.details[0].message);
-    }
-
-    const { user_id } = value;
-
     if (!req.user) {
       throw ApiErrors.Unauthorized("Not authenticated");
     }
 
-    if (user_id !== req.user.emailHash) {
-      throw ApiErrors.Forbidden(
-        "Public keys can only be managed by their authenticated owner",
-      );
-    }
-
     try {
       const result = await query("DELETE FROM public_keys WHERE user_id = $1", [
-        user_id,
+        req.user.emailHash,
       ]);
 
       if (result.rowCount === 0) {

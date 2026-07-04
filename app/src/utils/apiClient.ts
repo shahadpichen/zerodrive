@@ -266,9 +266,8 @@ export const publicKeysApi = {
   /**
    * Store or update a user's public key
    */
-  async upsert(userId: string, publicKey: string): Promise<PublicKeyData> {
+  async upsert(publicKey: string): Promise<PublicKeyData> {
     const response = await httpClient.post<PublicKeyData>("/public-keys", {
-      user_id: userId,
       public_key: publicKey,
     });
 
@@ -278,10 +277,11 @@ export const publicKeysApi = {
   /**
    * Get a user's public key by user ID
    */
-  async get(userId: string): Promise<{ public_key: string } | null> {
+  async lookup(email: string): Promise<{ public_key: string } | null> {
     try {
-      const response = await httpClient.get<{ public_key: string }>(
-        `/public-keys/${userId}`,
+      const response = await httpClient.post<{ public_key: string }>(
+        "/public-keys/lookup",
+        { email },
       );
       return response.data!;
     } catch (error) {
@@ -295,16 +295,8 @@ export const publicKeysApi = {
   /**
    * List all public keys (for debugging)
    */
-  async list(): Promise<PublicKeyData[]> {
-    const response = await httpClient.get<PublicKeyData[]>("/public-keys");
-    return response.data!;
-  },
-
-  /**
-   * Delete a user's public key
-   */
-  async delete(userId: string): Promise<void> {
-    await httpClient.delete(`/public-keys/${userId}`);
+  async delete(): Promise<void> {
+    await httpClient.delete("/public-keys");
   },
 };
 
@@ -315,8 +307,7 @@ export const sharedFilesApi = {
    */
   async create(shareData: {
     file_id: string;
-    recipient_user_id: string;
-    recipient_email?: string;
+    recipient_email: string;
     custom_message?: string;
     encrypted_file_key: string;
     file_name: string;

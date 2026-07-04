@@ -7,7 +7,6 @@ import apiClient from "../../utils/apiClient";
 import {
   decryptSharedFile,
   downloadEncryptedFile,
-  hashEmail,
 } from "../../utils/fileSharing";
 import { getStoredKey } from "../../utils/cryptoUtils";
 import { getUserKeyPair, userHasStoredKeys } from "../../utils/keyStorage";
@@ -41,7 +40,6 @@ jest.mock("../../utils/fileSharing", () => ({
   arrayBufferToBase64: jest.fn(() => "base64-key"),
   decryptSharedFile: jest.fn(),
   downloadEncryptedFile: jest.fn(),
-  hashEmail: jest.fn(),
 }));
 
 jest.mock("../../utils/cryptoUtils", () => ({
@@ -86,7 +84,6 @@ jest.mock("sonner", () => ({
 const mockGetUserEmail = getUserEmail as jest.MockedFunction<
   typeof getUserEmail
 >;
-const mockHashEmail = hashEmail as jest.MockedFunction<typeof hashEmail>;
 const mockGetStoredKey = getStoredKey as jest.MockedFunction<
   typeof getStoredKey
 >;
@@ -158,7 +155,6 @@ describe("SharedWithMePage", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockGetUserEmail.mockResolvedValue("recipient@example.com");
-    mockHashEmail.mockResolvedValue("recipient-hash");
     mockGetStoredKey.mockResolvedValue({} as CryptoKey);
     mockDownloadKeyBackup.mockResolvedValue(new Blob(["encrypted key"]));
     mockDecryptKeyBackup.mockResolvedValue({
