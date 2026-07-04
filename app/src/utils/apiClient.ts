@@ -336,23 +336,16 @@ export const sharedFilesApi = {
    * Get shared files for a recipient
    */
   async getForUser(
-    userId: string,
     options: {
-      recipient_user_id?: string;
       limit?: number;
       offset?: number;
     } = {},
   ): Promise<{ files: SharedFileData[]; total: number; hasMore: boolean }> {
-    const params = {
-      recipient_user_id: userId,
-      ...options,
-    };
-
     const response = await httpClient.get<{
       files: SharedFileData[];
       total: number;
       hasMore: boolean;
-    }>("/shared-files", params);
+    }>("/shared-files", options);
     return response.data!;
   },
 

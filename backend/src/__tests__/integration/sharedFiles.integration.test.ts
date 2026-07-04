@@ -8,7 +8,7 @@ import express, { Application } from "express";
 import cookieParser from "cookie-parser";
 import sharedFilesRouter from "../../routes/sharedFiles";
 import { responseHelpers, errorHandler } from "../../middleware/errorHandler";
-import { generateToken } from "../../services/jwtService";
+import { generateToken, verifyToken } from "../../services/jwtService";
 import { requireAuth } from "../../middleware/auth";
 
 // Mock dependencies
@@ -45,6 +45,9 @@ describe("Shared Files Routes Integration", () => {
   const testUserEmail = "sender@example.com";
   const testRecipientEmail = "recipient@example.com";
   const testRecipientEmailHash = "recipient-hash-456";
+  const authenticatedUserHash = verifyToken(
+    generateToken(testUserEmail),
+  ).emailHash;
   const csrfToken = "test-csrf-token";
 
   beforeAll(() => {
@@ -104,7 +107,7 @@ describe("Shared Files Routes Integration", () => {
 
       expect(response.status).toBe(201);
       expect(response.body.success).toBe(true);
-      expect(response.body.data.file_id).toBe(validShareRequest.file_id);
+      expect(response.body.data.file_id).toBeUndefined();
       expect(response.body.message).toBe("File shared successfully");
 
       // Verify existing share check
@@ -654,7 +657,6 @@ describe("Shared Files Routes Integration", () => {
       const response = await request(app)
         .get("/api/shared-files")
         .query({
-          recipient_user_id: testRecipientEmailHash,
           limit: 2,
           offset: 0,
         })
@@ -675,13 +677,12 @@ describe("Shared Files Routes Integration", () => {
 
       const response = await request(app)
         .get("/api/shared-files")
-        .query({ recipient_user_id: testRecipientEmailHash })
         .set("Cookie", [`zerodrive_token=${token}`]);
 
       expect(response.status).toBe(200);
       expect(mockQuery).toHaveBeenCalledWith(
         expect.any(String),
-        [testRecipientEmailHash, 50, 0], // Default limit=50, offset=0
+        [authenticatedUserHash, 50, 0], // Default limit=50, offset=0
       );
     });
 
@@ -693,7 +694,6 @@ describe("Shared Files Routes Integration", () => {
       const response = await request(app)
         .get("/api/shared-files")
         .query({
-          recipient_user_id: testRecipientEmailHash,
           limit: 20,
           offset: 40,
         })
@@ -701,7 +701,7 @@ describe("Shared Files Routes Integration", () => {
 
       expect(response.status).toBe(200);
       expect(mockQuery).toHaveBeenCalledWith(expect.any(String), [
-        testRecipientEmailHash,
+        authenticatedUserHash,
         20,
         40,
       ]);
@@ -714,7 +714,6 @@ describe("Shared Files Routes Integration", () => {
 
       await request(app)
         .get("/api/shared-files")
-        .query({ recipient_user_id: testRecipientEmailHash })
         .set("Cookie", [`zerodrive_token=${token}`]);
 
       // Verify query includes expiration filter
@@ -727,22 +726,24 @@ describe("Shared Files Routes Integration", () => {
     });
 
     it("should return 401 when no auth cookie provided", async () => {
-      const response = await request(app)
-        .get("/api/shared-files")
-        .query({ recipient_user_id: testRecipientEmailHash });
+      const response = await request(app).get("/api/shared-files");
 
       expect(response.status).toBe(401);
     });
 
-    it("should return 422 when recipient_user_id is missing", async () => {
+    it("should derive recipient identity without a query parameter", async () => {
       const token = generateToken(testUserEmail);
+      mockQuery.mockResolvedValueOnce({ rows: [{ count: "0" }] });
+      mockQuery.mockResolvedValueOnce({ rows: [] });
 
       const response = await request(app)
         .get("/api/shared-files")
         .set("Cookie", [`zerodrive_token=${token}`]);
 
-      expect(response.status).toBe(422);
-      expect(response.body.error.message).toContain("recipient_user_id");
+      expect(response.status).toBe(200);
+      expect(mockQuery).toHaveBeenCalledWith(expect.any(String), [
+        authenticatedUserHash,
+      ]);
     });
 
     it("should return 422 when limit exceeds maximum", async () => {
@@ -750,7 +751,7 @@ describe("Shared Files Routes Integration", () => {
 
       const response = await request(app)
         .get("/api/shared-files")
-        .query({ recipient_user_id: testRecipientEmailHash, limit: 101 })
+        .query({ limit: 101 })
         .set("Cookie", [`zerodrive_token=${token}`]);
 
       expect(response.status).toBe(422);
@@ -761,7 +762,7 @@ describe("Shared Files Routes Integration", () => {
 
       const response = await request(app)
         .get("/api/shared-files")
-        .query({ recipient_user_id: testRecipientEmailHash, limit: 0 })
+        .query({ limit: 0 })
         .set("Cookie", [`zerodrive_token=${token}`]);
 
       expect(response.status).toBe(422);
@@ -772,7 +773,7 @@ describe("Shared Files Routes Integration", () => {
 
       const response = await request(app)
         .get("/api/shared-files")
-        .query({ recipient_user_id: testRecipientEmailHash, offset: -1 })
+        .query({ offset: -1 })
         .set("Cookie", [`zerodrive_token=${token}`]);
 
       expect(response.status).toBe(422);
@@ -785,7 +786,6 @@ describe("Shared Files Routes Integration", () => {
 
       const response = await request(app)
         .get("/api/shared-files")
-        .query({ recipient_user_id: testRecipientEmailHash })
         .set("Cookie", [`zerodrive_token=${token}`]);
 
       expect(response.status).toBe(200);
@@ -800,7 +800,6 @@ describe("Shared Files Routes Integration", () => {
 
       const response = await request(app)
         .get("/api/shared-files")
-        .query({ recipient_user_id: testRecipientEmailHash })
         .set("Cookie", [`zerodrive_token=${token}`]);
 
       expect(response.status).toBe(500);
@@ -817,7 +816,6 @@ describe("Shared Files Routes Integration", () => {
       const response = await request(app)
         .get("/api/shared-files")
         .query({
-          recipient_user_id: testRecipientEmailHash,
           limit: 50,
           offset: 0,
         })
@@ -858,6 +856,10 @@ describe("Shared Files Routes Integration", () => {
       expect(response.body.success).toBe(true);
       expect(response.body.data.id).toBe(validUuid);
       expect(response.body.message).toBe("Shared file retrieved successfully");
+      expect(mockQuery).toHaveBeenCalledWith(expect.any(String), [
+        validUuid,
+        authenticatedUserHash,
+      ]);
     });
 
     it("should return 401 when no auth cookie provided", async () => {
@@ -1191,8 +1193,8 @@ describe("Shared Files Routes Integration", () => {
       expect(response.body.data.deleted).toBe(true);
       expect(response.body.message).toBe("File sharing revoked successfully");
       expect(mockQuery).toHaveBeenCalledWith(
-        "DELETE FROM shared_files WHERE id = $1",
-        [validUuid],
+        "DELETE FROM shared_files WHERE id = $1 AND recipient_user_id = $2",
+        [validUuid, authenticatedUserHash],
       );
     });
 

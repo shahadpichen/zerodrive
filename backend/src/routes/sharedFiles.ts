@@ -25,6 +25,11 @@ import {
 
 const router = Router();
 
+function toClientSharedFile(file: SharedFile): Omit<SharedFile, "file_id"> {
+  const { file_id: _privateObjectKey, ...safeFile } = file;
+  return safeFile;
+}
+
 // Validation schemas
 const createSharedFileSchema = Joi.object({
   file_id: Joi.string().required(),
@@ -49,7 +54,6 @@ const getSharedFileSchema = Joi.object({
 });
 
 const getSharedFilesQuerySchema = Joi.object({
-  recipient_user_id: Joi.string().required(), // Must specify recipient
   limit: Joi.number().integer().min(1).max(100).default(50),
   offset: Joi.number().integer().min(0).default(0),
 });
@@ -133,7 +137,11 @@ router.post(
         has_custom_message: !!custom_message,
       }).catch(() => {}); // Don't let analytics fail the request
 
-      res.apiSuccess(result.rows[0], "File shared successfully", 201);
+      res.apiSuccess(
+        toClientSharedFile(result.rows[0]),
+        "File shared successfully",
+        201,
+      );
     } catch (error) {
       // Re-throw known error types with specific messages (Conflict, etc.)
       if (error instanceof ApiError) {
@@ -157,13 +165,21 @@ router.get(
       throw ApiErrors.ValidationError(error.details[0].message);
     }
 
-    const { recipient_user_id, limit, offset } = value;
+    if (!req.user) {
+      throw ApiErrors.Unauthorized("Not authenticated");
+    }
+
+    const { limit, offset } = value;
+    const recipientUserId = req.user.emailHash;
 
     try {
       // Get total count for recipient
       const countResult = await query<{ count: string }>(
-        `SELECT COUNT(*) as count FROM shared_files WHERE recipient_user_id = $1`,
-        [recipient_user_id],
+        `SELECT COUNT(*) as count
+         FROM shared_files
+         WHERE recipient_user_id = $1
+         AND (expires_at IS NULL OR expires_at > CURRENT_TIMESTAMP)`,
+        [recipientUserId],
       );
       const total = parseInt(countResult.rows[0].count);
 
@@ -174,14 +190,14 @@ router.get(
        AND (expires_at IS NULL OR expires_at > CURRENT_TIMESTAMP)
        ORDER BY created_at DESC
        LIMIT $2 OFFSET $3`,
-        [recipient_user_id, limit, offset],
+        [recipientUserId, limit, offset],
       );
 
       const hasMore = offset + limit < total;
 
       res.apiSuccess(
         {
-          files: result.rows,
+          files: result.rows.map(toClientSharedFile),
           total,
           hasMore,
         },
@@ -209,18 +225,26 @@ router.get(
     const { id } = value;
 
     try {
+      if (!req.user) {
+        throw ApiErrors.Unauthorized("Not authenticated");
+      }
+
       const result = await query<SharedFile>(
         `SELECT * FROM shared_files 
-       WHERE id = $1 
+       WHERE id = $1
+       AND recipient_user_id = $2
        AND (expires_at IS NULL OR expires_at > CURRENT_TIMESTAMP)`,
-        [id],
+        [id, req.user.emailHash],
       );
 
       if (result.rows.length === 0) {
         throw ApiErrors.NotFound("Shared file not found or has expired");
       }
 
-      res.apiSuccess(result.rows[0], "Shared file retrieved successfully");
+      res.apiSuccess(
+        toClientSharedFile(result.rows[0]),
+        "Shared file retrieved successfully",
+      );
     } catch (error) {
       if (error instanceof Error && error.message.includes("not found")) {
         throw error;
@@ -255,10 +279,14 @@ router.put(
     const { access_type, expires_at } = bodyValue;
 
     try {
+      if (!req.user) {
+        throw ApiErrors.Unauthorized("Not authenticated");
+      }
+
       // Check if shared file exists
       const existingFile = await query<SharedFile>(
-        "SELECT * FROM shared_files WHERE id = $1",
-        [id],
+        "SELECT * FROM shared_files WHERE id = $1 AND recipient_user_id = $2",
+        [id, req.user.emailHash],
       );
 
       if (existingFile.rows.length === 0) {
@@ -295,7 +323,10 @@ router.put(
         params,
       );
 
-      res.apiSuccess(result.rows[0], "Shared file updated successfully");
+      res.apiSuccess(
+        toClientSharedFile(result.rows[0]),
+        "Shared file updated successfully",
+      );
     } catch (error) {
       if (
         error instanceof Error &&
@@ -325,9 +356,14 @@ router.delete(
     const { id } = value;
 
     try {
-      const result = await query("DELETE FROM shared_files WHERE id = $1", [
-        id,
-      ]);
+      if (!req.user) {
+        throw ApiErrors.Unauthorized("Not authenticated");
+      }
+
+      const result = await query(
+        "DELETE FROM shared_files WHERE id = $1 AND recipient_user_id = $2",
+        [id, req.user.emailHash],
+      );
 
       if (result.rowCount === 0) {
         throw ApiErrors.NotFound("Shared file not found");
@@ -359,12 +395,17 @@ router.post(
     const { id } = value;
 
     try {
+      if (!req.user) {
+        throw ApiErrors.Unauthorized("Not authenticated");
+      }
+
       // Check if shared file exists and is not expired
       const sharedFile = await query<SharedFile>(
         `SELECT * FROM shared_files 
-       WHERE id = $1 
+       WHERE id = $1
+       AND recipient_user_id = $2
        AND (expires_at IS NULL OR expires_at > CURRENT_TIMESTAMP)`,
-        [id],
+        [id, req.user.emailHash],
       );
 
       if (sharedFile.rows.length === 0) {

@@ -21,7 +21,6 @@ import {
   arrayBufferToBase64,
   decryptSharedFile,
   downloadEncryptedFile,
-  hashEmail,
 } from "../utils/fileSharing";
 import { getUserKeyPair, userHasStoredKeys } from "../utils/keyStorage";
 import apiClient from "../utils/apiClient";
@@ -49,7 +48,6 @@ type ActionStage = "downloading" | "decrypting" | "saving";
 
 interface SharedFile {
   id: string;
-  fileId: string;
   name: string;
   createdAt: Date;
   expiresAt: Date | null;
@@ -94,7 +92,6 @@ function normalizeEncryptedKey(rawKey: unknown): string {
 function mapSharedFile(row: any): SharedFile {
   return {
     id: row.id,
-    fileId: row.file_id,
     name: row.file_name,
     createdAt: new Date(row.created_at),
     expiresAt: row.expires_at ? new Date(row.expires_at) : null,
@@ -131,28 +128,24 @@ const SharedWithMePage: React.FC = () => {
     stage: ActionStage;
   } | null>(null);
 
-  const loadSharedFiles = useCallback(
-    async (email: string, showConfirmation = false) => {
-      setIsLoading(true);
-      setLoadError("");
-      try {
-        const hashedEmail = await hashEmail(email);
-        const result = await apiClient.sharedFiles.getForUser(hashedEmail);
-        setSharedFiles((result.files || []).map(mapSharedFile));
-        if (showConfirmation) toast.success("Inbox refreshed");
-      } catch (error) {
-        console.error("[SharedWithMe] Failed to load files:", error);
-        setLoadError(
-          error instanceof Error
-            ? error.message
-            : "Your shared files could not be loaded.",
-        );
-      } finally {
-        setIsLoading(false);
-      }
-    },
-    [],
-  );
+  const loadSharedFiles = useCallback(async (showConfirmation = false) => {
+    setIsLoading(true);
+    setLoadError("");
+    try {
+      const result = await apiClient.sharedFiles.getForUser();
+      setSharedFiles((result.files || []).map(mapSharedFile));
+      if (showConfirmation) toast.success("Inbox refreshed");
+    } catch (error) {
+      console.error("[SharedWithMe] Failed to load files:", error);
+      setLoadError(
+        error instanceof Error
+          ? error.message
+          : "Your shared files could not be loaded.",
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -209,7 +202,7 @@ const SharedWithMePage: React.FC = () => {
           }
         }
 
-        await loadSharedFiles(email);
+        await loadSharedFiles();
       } catch (error) {
         console.error("[SharedWithMe] Initialization failed:", error);
         if (active) {
@@ -235,7 +228,7 @@ const SharedWithMePage: React.FC = () => {
   }, [searchQuery, sharedFiles]);
 
   const refreshInbox = () => {
-    if (userEmail) void loadSharedFiles(userEmail, true);
+    if (userEmail) void loadSharedFiles(true);
   };
 
   const requireReadyKeys = (): boolean => {
@@ -266,7 +259,7 @@ const SharedWithMePage: React.FC = () => {
 
     setProcessing({ fileId: file.id, action, stage: "downloading" });
     try {
-      const encryptedBlob = await downloadEncryptedFile(file.fileId);
+      const encryptedBlob = await downloadEncryptedFile(file.id);
       setProcessing({ fileId: file.id, action, stage: "decrypting" });
       const decrypted = await decryptSharedFile(
         encryptedBlob,

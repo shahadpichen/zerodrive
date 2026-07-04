@@ -711,13 +711,13 @@ export async function uploadEncryptedFile(
 
 /**
  * Download encrypted file using pre-signed URL from backend
- * @param fileKey The file key returned from upload
+ * @param shareId The authorized share record identifier
  * @returns The encrypted file blob
  */
-export async function downloadEncryptedFile(fileKey: string): Promise<Blob> {
+export async function downloadEncryptedFile(shareId: string): Promise<Blob> {
   // Step 1: Request pre-signed download URL from backend
   const response = await apiClient.post("/presigned-url/download", {
-    fileKey,
+    shareId,
   });
 
   const { downloadUrl } = response.data as { downloadUrl: string };
@@ -730,7 +730,7 @@ export async function downloadEncryptedFile(fileKey: string): Promise<Blob> {
   }
 
   const blob = await downloadResponse.blob();
-  logger.log(`File downloaded successfully: ${fileKey}`);
+  logger.log(`Shared file downloaded successfully: ${shareId}`);
   return blob;
 }
 

@@ -508,11 +508,15 @@ describe("ApiClient", () => {
         }),
       });
 
-      const result = await sharedFilesApi.getForUser(testUserId);
+      const result = await sharedFilesApi.getForUser();
 
       expect(result.files).toEqual(files);
       expect(result.total).toBe(2);
       expect(result.hasMore).toBe(false);
+      expect(global.fetch).toHaveBeenCalledWith(
+        expect.not.stringContaining("recipient_user_id"),
+        expect.any(Object),
+      );
     });
 
     it("should get shared file by ID", async () => {
