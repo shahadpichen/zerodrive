@@ -29,7 +29,7 @@ import crypto from "crypto";
 import { accountLimit } from "../middleware/accountLimits";
 
 const router = Router();
-const MAX_ENCRYPTED_FILE_SIZE = 100 * 1024 * 1024 + 28;
+const MAX_ENCRYPTED_FILE_SIZE = 100 * 1024 * 1024 + 64 * 1024;
 
 function validateWrappedFileKey(value: string, helpers: Joi.CustomHelpers) {
   try {

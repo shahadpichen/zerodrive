@@ -12,6 +12,10 @@ import {
   serializeSharedKeyEnvelope,
 } from "./sharedKeyEnvelope";
 import { DirectoryPublicKey } from "./apiClient";
+import {
+  createSharedFileEnvelope,
+  decryptSharedFileEnvelope,
+} from "./sharedFileEnvelope";
 
 /**
  * Represents the result of preparing a file for sharing (Step 1).
@@ -435,45 +439,26 @@ export async function prepareFileForSharing(
     // Read the file as ArrayBuffer
     const fileBuffer = await file.arrayBuffer();
 
-    // Generate a random IV for AES-GCM
-    const iv = crypto.getRandomValues(new Uint8Array(12));
-
-    // Encrypt the file with the symmetric key
-    const encryptedFile = await crypto.subtle.encrypt(
-      {
-        name: "AES-GCM",
-        iv,
-      },
-      fileKey,
-      fileBuffer,
-    );
-
-    // Combine IV and encrypted file
-    const encryptedFileWithIV = new Uint8Array(
-      iv.length + encryptedFile.byteLength,
-    );
-    encryptedFileWithIV.set(iv, 0);
-    encryptedFileWithIV.set(new Uint8Array(encryptedFile), iv.length);
-
-    // Create a Blob from the encrypted file
-    const encryptedFileBlob = new Blob([encryptedFileWithIV], {
-      type: "application/octet-stream",
-    });
-
     // Generate a random file ID
     const fileId = crypto.randomUUID();
 
     // Create a unique encrypted file name
     const fileName = `encrypted_${fileId}.bin`;
-    const encryptedMetadata = await encryptSharedMetadata(
-      {
-        version: 1,
-        name: file.name,
-        mimeType: file.type || "application/octet-stream",
-        ...(customMessage && { message: customMessage }),
-      },
-      fileKey,
-    );
+    const metadata: SharedFileMetadata = {
+      version: 1,
+      name: file.name,
+      mimeType: file.type || "application/octet-stream",
+      ...(customMessage && { message: customMessage }),
+    };
+    const [encryptedMetadata, encryptedFileBlob] = await Promise.all([
+      encryptSharedMetadata(metadata, fileKey),
+      createSharedFileEnvelope(
+        fileBuffer,
+        metadata,
+        fileKey,
+        directoryKey!.key_version,
+      ),
+    ]);
 
     return {
       encryptedFileBlob,
@@ -695,6 +680,18 @@ export async function decryptSharedFile(
 
     // Read the encrypted file as ArrayBuffer
     const encryptedFileWithIV = await encryptedFileBlob.arrayBuffer();
+    const envelope = await decryptSharedFileEnvelope(
+      encryptedFileWithIV,
+      fileKey,
+    );
+    if (envelope) {
+      return {
+        decryptedFile: new Blob([envelope.plaintext], {
+          type: envelope.metadata.mimeType || "application/octet-stream",
+        }),
+        fileName: envelope.metadata.name,
+      };
+    }
 
     // Extract the IV (first 12 bytes) and encrypted file data
     const iv = new Uint8Array(encryptedFileWithIV.slice(0, 12));
