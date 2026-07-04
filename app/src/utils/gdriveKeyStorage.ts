@@ -25,9 +25,12 @@ async function ensureDriveApiLoaded() {
  * @throws Error if upload fails
  */
 export async function uploadEncryptedRsaKeyToDrive(
-  keyBlob: Blob
+  keyBlob: Blob,
+  keyVersion?: number,
 ): Promise<string> {
-  const fileName = RSA_KEY_FILE_NAME;
+  const fileName = keyVersion
+    ? `zerodrive_rsa_key_backup_v${keyVersion}.json`
+    : RSA_KEY_FILE_NAME;
   try {
     await ensureDriveApiLoaded();
     const token = await getGoogleAccessToken();
@@ -48,7 +51,7 @@ export async function uploadEncryptedRsaKeyToDrive(
     if (listResponse.result.files && listResponse.result.files.length > 0) {
       fileIdToUpdate = listResponse.result.files[0].id!;
       logger.log(
-        `Found existing RSA key backup file '${fileName}' in appDataFolder. Will update it.`
+        `Found existing RSA key backup file '${fileName}' in appDataFolder. Will update it.`,
       );
     }
 
@@ -64,7 +67,7 @@ export async function uploadEncryptedRsaKeyToDrive(
     const form = new FormData();
     form.append(
       "metadata",
-      new Blob([JSON.stringify(metadata)], { type: "application/json" })
+      new Blob([JSON.stringify(metadata)], { type: "application/json" }),
     );
     form.append("file", keyBlob);
 
@@ -87,23 +90,23 @@ export async function uploadEncryptedRsaKeyToDrive(
     if (!response.ok) {
       logger.error(
         "Google Drive appDataFolder upload failed:",
-        result.error?.message || response.statusText
+        result.error?.message || response.statusText,
       );
       throw new Error(
         `Google Drive appDataFolder upload failed: ${
           result.error?.message || response.statusText
-        }`
+        }`,
       );
     }
 
     logger.log(
-      `RSA key backup '${fileName}' uploaded/updated to Google Drive appDataFolder successfully. File ID: ${result.id}`
+      `RSA key backup '${fileName}' uploaded/updated to Google Drive appDataFolder successfully. File ID: ${result.id}`,
     );
     return result.id;
-  } catch (error:any) {
+  } catch (error: any) {
     logger.error(
       `Error uploading RSA key backup '${fileName}' to Google Drive appDataFolder:`,
-      error
+      error,
     );
     // Re-throw error so caller can handle it with proper context
     throw error;
@@ -187,19 +190,22 @@ export async function downloadEncryptedRsaKeyFromDrive(): Promise<Blob> {
       {
         method: "GET",
         headers: new Headers({ Authorization: `Bearer ${token}` }),
-      }
+      },
     );
 
     if (!fetchResponse.ok) {
       throw new Error(
-        `Failed to download key file from ${foundLocation}: ${fetchResponse.statusText}`
+        `Failed to download key file from ${foundLocation}: ${fetchResponse.statusText}`,
       );
     }
 
     logger.log(`Successfully downloaded RSA key backup from ${foundLocation}`);
     return await fetchResponse.blob();
   } catch (downloadError: any) {
-    logger.error(`Error downloading RSA key backup from ${foundLocation}:`, downloadError);
+    logger.error(
+      `Error downloading RSA key backup from ${foundLocation}:`,
+      downloadError,
+    );
     throw downloadError;
   }
 }

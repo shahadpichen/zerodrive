@@ -5,11 +5,26 @@ export interface SharedKeyEnvelopeV1 {
   ciphertext: string;
 }
 
-export function serializeSharedKeyEnvelope(ciphertext: string): string {
-  const envelope: SharedKeyEnvelopeV1 = {
-    v: 1,
+export interface SharedKeyEnvelopeV2 {
+  v: 2;
+  keyWrap: "RSA-OAEP-256";
+  contentEncryption: "AES-256-GCM";
+  recipientKeyVersion: number;
+  recipientKeyFingerprint: string;
+  ciphertext: string;
+}
+
+export function serializeSharedKeyEnvelope(
+  ciphertext: string,
+  recipientKeyVersion: number,
+  recipientKeyFingerprint: string,
+): string {
+  const envelope: SharedKeyEnvelopeV2 = {
+    v: 2,
     keyWrap: "RSA-OAEP-256",
     contentEncryption: "AES-256-GCM",
+    recipientKeyVersion,
+    recipientKeyFingerprint,
     ciphertext,
   };
   return JSON.stringify(envelope);
@@ -37,14 +52,14 @@ export function readSharedKeyCiphertext(value: string): string {
 
   if (!value.trim().startsWith("{")) return value;
 
-  let envelope: Partial<SharedKeyEnvelopeV1>;
+  let envelope: Partial<SharedKeyEnvelopeV1> | Partial<SharedKeyEnvelopeV2>;
   try {
     envelope = JSON.parse(value);
   } catch {
     throw new Error("Wrapped file key envelope is malformed");
   }
   if (
-    envelope.v !== 1 ||
+    (envelope.v !== 1 && envelope.v !== 2) ||
     envelope.keyWrap !== "RSA-OAEP-256" ||
     envelope.contentEncryption !== "AES-256-GCM" ||
     typeof envelope.ciphertext !== "string"
@@ -52,4 +67,18 @@ export function readSharedKeyCiphertext(value: string): string {
     throw new Error("Wrapped file key envelope is unsupported");
   }
   return envelope.ciphertext;
+}
+
+export function readRecipientKeyVersion(value: string): number | null {
+  if (!value.trim().startsWith("{")) return null;
+  try {
+    const envelope = JSON.parse(value) as Partial<SharedKeyEnvelopeV2>;
+    return envelope.v === 2 &&
+      Number.isInteger(envelope.recipientKeyVersion) &&
+      (envelope.recipientKeyVersion || 0) > 0
+      ? envelope.recipientKeyVersion!
+      : null;
+  } catch {
+    return null;
+  }
 }

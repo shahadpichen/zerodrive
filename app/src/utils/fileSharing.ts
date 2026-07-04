@@ -140,7 +140,7 @@ export async function generateUserKeyPair(): Promise<UserKeyPair> {
  */
 export async function storeUserPublicKey(
   publicKeyJwk: JsonWebKey,
-): Promise<void> {
+): Promise<{ keyVersion: number; fingerprint: string }> {
   try {
     logger.log("Attempting to store public key");
     logger.log("Target table: user_public_keys");
@@ -151,12 +151,17 @@ export async function storeUserPublicKey(
         JSON.stringify(publicKeyJwk),
       );
       logger.log("Public key stored successfully:", data);
+      if (!data.key_version || !data.fingerprint) {
+        throw new Error("Public key version metadata is missing");
+      }
+      return {
+        keyVersion: data.key_version,
+        fingerprint: data.fingerprint,
+      };
     } catch (error) {
       logger.error("API client error:", error);
       throw new Error(`Failed to store public key: ${error}`);
     }
-
-    logger.log("Public key stored successfully");
   } catch (error) {
     logger.error("Error in storeUserPublicKey:", error);
 
@@ -346,7 +351,7 @@ export async function prepareFileForSharing(
   senderEmail: string,
   mnemonic: string,
   customMessage?: string,
-  pinnedRecipientPublicKey?: JsonWebKey,
+  pinnedRecipientKey?: DirectoryPublicKey,
 ): Promise<{
   encryptedFileBlob: Blob;
   recipientEmail: string;
@@ -358,6 +363,8 @@ export async function prepareFileForSharing(
   fileId: string;
   mimeType: string;
   fileSize: number;
+  recipientKeyVersion: number;
+  recipientKeyFingerprint: string;
 }> {
   try {
     // Get the sender's private key (requires mnemonic to decrypt)
@@ -374,8 +381,11 @@ export async function prepareFileForSharing(
     // Hash the recipient's email
     // Get the recipient's public key from the database
     // Fetch the recipient's public key JWK directly for logging and use
-    const recipientPublicJWKForEncryption =
-      pinnedRecipientPublicKey || (await fetchUserPublicKey(recipientEmail));
+    const directoryKey =
+      pinnedRecipientKey || (await fetchRecipientPublicKey(recipientEmail));
+    const recipientPublicJWKForEncryption = directoryKey
+      ? JSON.parse(directoryKey.public_key)
+      : null;
 
     if (!recipientPublicJWKForEncryption) {
       logger.error(`[FILE-SHARE] Failed to fetch recipient public key`);
@@ -476,6 +486,8 @@ export async function prepareFileForSharing(
       fileId,
       mimeType: file.type,
       fileSize: file.size,
+      recipientKeyVersion: directoryKey!.key_version,
+      recipientKeyFingerprint: directoryKey!.fingerprint,
     };
   } catch (error) {
     logger.error("Error preparing file for sharing:", error);
@@ -523,6 +535,8 @@ export async function storeFileShare(
   try {
     const encryptedFileKeyEnvelope = serializeSharedKeyEnvelope(
       fileData.encryptedFileKey,
+      fileData.recipientKeyVersion,
+      fileData.recipientKeyFingerprint,
     );
 
     const managementCapability = await createManagementCapability();

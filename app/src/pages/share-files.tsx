@@ -254,8 +254,13 @@ const ShareFilesPage: React.FC = () => {
       }
 
       const keyPair = await generateUserKeyPair();
-      await storeUserPublicKey(keyPair.publicKeyJwk);
-      await storeUserKeyPair(senderEmail, keyPair, mnemonic);
+      const storedPublicKey = await storeUserPublicKey(keyPair.publicKeyJwk);
+      await storeUserKeyPair(
+        senderEmail,
+        keyPair,
+        mnemonic,
+        storedPublicKey.keyVersion,
+      );
 
       try {
         const encryptedPrivateKey = await encryptRsaPrivateKeyWithAesKey(
@@ -265,6 +270,10 @@ const ShareFilesPage: React.FC = () => {
         const backupId =
           await uploadEncryptedRsaKeyToDrive(encryptedPrivateKey);
         if (!backupId) throw new Error("Google Drive backup failed");
+        await uploadEncryptedRsaKeyToDrive(
+          encryptedPrivateKey,
+          storedPublicKey.keyVersion,
+        );
       } catch (error) {
         await rollbackKeyGeneration(senderEmail);
         throw error;
@@ -535,9 +544,7 @@ const ShareFilesPage: React.FC = () => {
         senderEmail,
         mnemonic,
         customMessage.trim() || undefined,
-        recipientDirectoryKey
-          ? JSON.parse(recipientDirectoryKey.public_key)
-          : undefined,
+        recipientDirectoryKey || undefined,
       );
 
       setShareStage("uploading");

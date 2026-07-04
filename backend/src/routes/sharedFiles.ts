@@ -36,13 +36,23 @@ function validateWrappedFileKey(value: string, helpers: Joi.CustomHelpers) {
     const fields =
       envelope && typeof envelope === "object" ? Object.keys(envelope) : [];
     if (
-      fields.length !== 4 ||
+      fields.length !== 6 ||
       !fields.every((field) =>
-        ["v", "keyWrap", "contentEncryption", "ciphertext"].includes(field),
+        [
+          "v",
+          "keyWrap",
+          "contentEncryption",
+          "recipientKeyVersion",
+          "recipientKeyFingerprint",
+          "ciphertext",
+        ].includes(field),
       ) ||
-      envelope?.v !== 1 ||
+      envelope?.v !== 2 ||
       envelope?.keyWrap !== "RSA-OAEP-256" ||
       envelope?.contentEncryption !== "AES-256-GCM" ||
+      !Number.isInteger(envelope?.recipientKeyVersion) ||
+      envelope.recipientKeyVersion < 1 ||
+      !/^[0-9a-f]{64}$/.test(envelope?.recipientKeyFingerprint) ||
       typeof envelope?.ciphertext !== "string" ||
       !/^[A-Za-z0-9+/]+={0,2}$/.test(envelope.ciphertext) ||
       Buffer.from(envelope.ciphertext, "base64").byteLength !== 256

@@ -175,10 +175,16 @@ export async function recoverRsaKeysIfNeeded(
       }
 
       // Store in IndexedDB (private key encrypted with mnemonic)
-      await storeUserKeyPair(userEmail, recoveredKeyPair, mnemonic);
-
       // Store public key in PostgreSQL
-      await storeUserPublicKey(recoveredKeyPair.publicKeyJwk);
+      const storedPublicKey = await storeUserPublicKey(
+        recoveredKeyPair.publicKeyJwk,
+      );
+      await storeUserKeyPair(
+        userEmail,
+        recoveredKeyPair,
+        mnemonic,
+        storedPublicKey.keyVersion,
+      );
 
       logger.log(
         "[RSA Recovery] Successfully recovered and stored RSA keys from Google Drive",

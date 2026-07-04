@@ -35,7 +35,7 @@ import {
 import { getMnemonic, setMnemonic } from "../utils/mnemonicManager";
 import { downloadEncryptedRsaKeyFromDrive } from "../utils/gdriveKeyStorage";
 import { decryptRsaPrivateKeyWithAesKey } from "../utils/rsaKeyManager";
-import { readSharedKeyCiphertext } from "../utils/sharedKeyEnvelope";
+import { readRecipientKeyVersion } from "../utils/sharedKeyEnvelope";
 import { toast } from "sonner";
 
 type KeyState =
@@ -59,6 +59,7 @@ interface SharedFile {
   fileSize: number | null;
   mimeType: string;
   message?: string;
+  recipientKeyVersion: number | null;
 }
 
 function formatBytes(bytes: number | null): string {
@@ -73,7 +74,7 @@ function formatBytes(bytes: number | null): string {
 }
 
 function normalizeEncryptedKey(rawKey: unknown): string {
-  if (typeof rawKey === "string") return readSharedKeyCiphertext(rawKey);
+  if (typeof rawKey === "string") return rawKey;
   if (rawKey instanceof ArrayBuffer) return arrayBufferToBase64(rawKey);
   if (ArrayBuffer.isView(rawKey)) {
     return arrayBufferToBase64(
@@ -93,6 +94,10 @@ function mapSharedFile(row: any): SharedFile {
     createdAt: new Date(row.created_at),
     expiresAt: row.expires_at ? new Date(row.expires_at) : null,
     encryptedFileKey: normalizeEncryptedKey(row.encrypted_file_key),
+    recipientKeyVersion:
+      typeof row.encrypted_file_key === "string"
+        ? readRecipientKeyVersion(row.encrypted_file_key)
+        : null,
     encryptedMetadata: row.encrypted_metadata || null,
     metadataDecrypted: !row.encrypted_metadata,
     fileSize:
@@ -157,10 +162,19 @@ const SharedWithMePage: React.FC = () => {
     void Promise.all(
       pending.map(async (file) => {
         try {
+          const mnemonic = getMnemonic();
+          const versionedKeyPair =
+            file.recipientKeyVersion && mnemonic
+              ? await getUserKeyPair(
+                  userEmail,
+                  mnemonic,
+                  file.recipientKeyVersion,
+                )
+              : null;
           const metadata = await decryptSharedMetadata(
             file.encryptedMetadata!,
             file.encryptedFileKey,
-            sharingPrivateKey,
+            versionedKeyPair?.privateKeyJwk || sharingPrivateKey,
           );
           return {
             id: file.id,
@@ -309,6 +323,11 @@ const SharedWithMePage: React.FC = () => {
     try {
       const encryptedBlob = await downloadEncryptedFile(file.id);
       setProcessing({ fileId: file.id, action, stage: "decrypting" });
+      const mnemonic = getMnemonic();
+      const versionedKeyPair =
+        file.recipientKeyVersion && mnemonic
+          ? await getUserKeyPair(userEmail, mnemonic, file.recipientKeyVersion)
+          : null;
       const decrypted = await decryptSharedFile(
         encryptedBlob,
         file.encryptedFileKey,
@@ -316,7 +335,7 @@ const SharedWithMePage: React.FC = () => {
         file.name,
         file.mimeType,
         "",
-        sharingPrivateKey,
+        versionedKeyPair?.privateKeyJwk || sharingPrivateKey,
       );
 
       if (action === "download") {

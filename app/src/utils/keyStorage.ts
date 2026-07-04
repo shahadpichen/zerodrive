@@ -8,14 +8,16 @@ import { openDB, IDBPDatabase } from "idb";
 import logger from "./logger";
 
 const DB_NAME = "zerodrive-keys";
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 const KEY_STORE = "user-keys";
+const VERSIONED_KEY_STORE = "versioned-user-keys";
 
 interface UserKeyData {
   email: string;
   publicKeyJwk: JsonWebKey;
-  encryptedPrivateKey: string;  // RSA private key encrypted with mnemonic
+  encryptedPrivateKey: string; // RSA private key encrypted with mnemonic
   createdAt: number;
+  keyVersion?: number;
 }
 
 let dbPromise: Promise<IDBPDatabase> | null = null;
@@ -30,6 +32,12 @@ const getDb = async (): Promise<IDBPDatabase> => {
           const store = db.createObjectStore(KEY_STORE, { keyPath: "email" });
           store.createIndex("email", "email", { unique: true });
           store.createIndex("createdAt", "createdAt", { unique: false });
+        }
+        if (!db.objectStoreNames.contains(VERSIONED_KEY_STORE)) {
+          const store = db.createObjectStore(VERSIONED_KEY_STORE, {
+            keyPath: ["email", "keyVersion"],
+          });
+          store.createIndex("email", "email", { unique: false });
         }
       },
     });
@@ -46,7 +54,8 @@ const getDb = async (): Promise<IDBPDatabase> => {
 export async function storeUserKeyPair(
   email: string,
   keyPair: { publicKeyJwk: JsonWebKey; privateKeyJwk: JsonWebKey },
-  mnemonic: string
+  mnemonic: string,
+  keyVersion: number = 1,
 ): Promise<void> {
   if (!email) throw new Error("User email is required");
   if (!keyPair?.publicKeyJwk || !keyPair?.privateKeyJwk) {
@@ -54,12 +63,12 @@ export async function storeUserKeyPair(
   }
   if (!mnemonic) throw new Error("Mnemonic is required to encrypt private key");
 
-  const { encryptRsaPrivateKey } = await import('./cryptoUtils');
+  const { encryptRsaPrivateKey } = await import("./cryptoUtils");
 
   // Encrypt private key with mnemonic
   const encryptedPrivateKey = await encryptRsaPrivateKey(
     keyPair.privateKeyJwk,
-    mnemonic
+    mnemonic,
   );
 
   const db = await getDb();
@@ -68,10 +77,14 @@ export async function storeUserKeyPair(
     publicKeyJwk: keyPair.publicKeyJwk,
     encryptedPrivateKey,
     createdAt: Date.now(),
+    keyVersion,
   };
 
   await db.put(KEY_STORE, userData);
-  logger.info('[KeyStorage] RSA keys stored (private key encrypted with PBKDF2)');
+  await db.put(VERSIONED_KEY_STORE, userData);
+  logger.info(
+    "[KeyStorage] RSA keys stored (private key encrypted with PBKDF2)",
+  );
 }
 
 /**
@@ -100,14 +113,17 @@ export async function userHasStoredKeys(email: string): Promise<boolean> {
  */
 export async function getUserKeyPair(
   email: string,
-  mnemonic: string
+  mnemonic: string,
+  keyVersion?: number,
 ): Promise<{ publicKeyJwk: JsonWebKey; privateKeyJwk: JsonWebKey } | null> {
   if (!email) return null;
   if (!mnemonic) throw new Error("Mnemonic is required to decrypt private key");
 
   try {
     const db = await getDb();
-    const userData = await db.get(KEY_STORE, email);
+    const userData = keyVersion
+      ? await db.get(VERSIONED_KEY_STORE, [email, keyVersion])
+      : await db.get(KEY_STORE, email);
 
     if (!userData) return null;
 
@@ -115,12 +131,12 @@ export async function getUserKeyPair(
       throw new Error("No encrypted private key found in IndexedDB");
     }
 
-    const { decryptRsaPrivateKey } = await import('./cryptoUtils');
+    const { decryptRsaPrivateKey } = await import("./cryptoUtils");
 
     // Decrypt private key with mnemonic
     const privateKeyJwk = await decryptRsaPrivateKey(
       userData.encryptedPrivateKey,
-      mnemonic
+      mnemonic,
     );
 
     return {
@@ -129,7 +145,7 @@ export async function getUserKeyPair(
     };
   } catch (error) {
     logger.error("Error retrieving/decrypting RSA keys:", error);
-    throw error;  // Propagate error so caller can handle wrong mnemonic
+    throw error; // Propagate error so caller can handle wrong mnemonic
   }
 }
 
@@ -142,6 +158,18 @@ export async function deleteUserKeyPair(email: string): Promise<void> {
 
   const db = await getDb();
   await db.delete(KEY_STORE, email);
+  const versionedKeys = await db.getAllFromIndex(
+    VERSIONED_KEY_STORE,
+    "email",
+    email,
+  );
+  const transaction = db.transaction(VERSIONED_KEY_STORE, "readwrite");
+  await Promise.all([
+    ...versionedKeys.map((key) =>
+      transaction.store.delete([email, key.keyVersion]),
+    ),
+    transaction.done,
+  ]);
 }
 
 /**
@@ -161,7 +189,7 @@ export async function listUsersWithKeys(): Promise<string[]> {
  */
 export const exportPrivateKeyAsString = async (
   email: string,
-  mnemonic: string
+  mnemonic: string,
 ): Promise<string | null> => {
   const keyPair = await getUserKeyPair(email, mnemonic);
   if (!keyPair) return null;
@@ -175,4 +203,5 @@ export const exportPrivateKeyAsString = async (
 export const clearAllKeys = async (): Promise<void> => {
   const db = await getDb();
   await db.clear(KEY_STORE);
+  await db.clear(VERSIONED_KEY_STORE);
 };

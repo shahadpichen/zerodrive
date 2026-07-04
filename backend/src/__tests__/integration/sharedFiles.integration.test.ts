@@ -47,9 +47,11 @@ jest.mock("../../services/analytics", () => ({
 }));
 
 const validWrappedFileKey = JSON.stringify({
-  v: 1,
+  v: 2,
   keyWrap: "RSA-OAEP-256",
   contentEncryption: "AES-256-GCM",
+  recipientKeyVersion: 1,
+  recipientKeyFingerprint: "f".repeat(64),
   ciphertext: Buffer.alloc(256, 7).toString("base64"),
 });
 

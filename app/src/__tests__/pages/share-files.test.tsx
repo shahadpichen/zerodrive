@@ -194,6 +194,8 @@ describe("ShareFilesPage", () => {
       fileId: "file-id",
       mimeType: "application/pdf",
       fileSize: 15,
+      recipientKeyVersion: 1,
+      recipientKeyFingerprint: "a".repeat(64),
     });
     mockStoreFileShare.mockResolvedValue(undefined);
     (apiClient.invitations.send as jest.Mock).mockResolvedValue({

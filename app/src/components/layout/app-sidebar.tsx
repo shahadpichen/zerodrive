@@ -117,9 +117,13 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
       if (!mnemonic) {
         throw new Error("Mnemonic not found - cannot encrypt RSA private key");
       }
-      await storeUserKeyPair(userEmail, keyPair, mnemonic);
-
-      await storeUserPublicKey(keyPair.publicKeyJwk);
+      const storedPublicKey = await storeUserPublicKey(keyPair.publicKeyJwk);
+      await storeUserKeyPair(
+        userEmail,
+        keyPair,
+        mnemonic,
+        storedPublicKey.keyVersion,
+      );
 
       const aesKey = await getStoredKey();
       if (!aesKey) {
@@ -131,6 +135,10 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
         aesKey,
       );
       await uploadEncryptedRsaKeyToDrive(encryptedPrivateKey);
+      await uploadEncryptedRsaKeyToDrive(
+        encryptedPrivateKey,
+        storedPublicKey.keyVersion,
+      );
 
       toast.success("File sharing enabled successfully!");
       await refreshAll();
