@@ -67,13 +67,13 @@ function LandingPage({ onAuthChange }: LandingPageProps) {
       </div>
 
       {/* App preview */}
-      <div className="mx-auto max-w-6xl mt-[5vh]">
+      {/*<div className="mx-auto max-w-6xl mt-[5vh]">
         <img
           src={`${process.env.PUBLIC_URL}/landing-page.png`}
           alt="ZeroDrive app preview"
           className="w-full h-auto"
         />
-      </div>
+      </div>*/}
 
       {/* <div className="w-full flex justify-center items-center mt-[10vh]">
         <div className="w-fit border-4 pt-10">
