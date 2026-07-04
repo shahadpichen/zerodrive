@@ -508,18 +508,6 @@ export async function storeFileShare(
   onFileUploaded?: () => void,
 ): Promise<void> {
   try {
-    // 1. Upload encrypted file to MinIO using pre-signed URL
-    // Backend generates secure temporary upload URL
-    const fileKey = await uploadEncryptedFile(
-      fileData.fileName,
-      fileData.encryptedFileBlob,
-      fileData.fileMimeType,
-    );
-
-    logger.log(`[FILE-SHARE] File uploaded to MinIO with key: ${fileKey}`);
-    onFileUploaded?.();
-
-    // 2. Store metadata in database, with reference to file in storage
     const encryptedFileKeyArrayBuffer = base64ToArrayBuffer(
       fileData.encryptedFileKey,
     );
@@ -530,39 +518,55 @@ export async function storeFileShare(
       `[FILE-SHARE] Storing encryptedFileKey for share_id ${shareId}. Original base64: "${fileData.encryptedFileKey}", Hex for DB: "${encryptedFileKeyHex}" (length: ${encryptedFileKeyHex.length})`,
     );
 
+    const managementCapability = await createManagementCapability();
+    let pendingShareId: string | null = null;
     try {
-      const managementCapability = await createManagementCapability();
       // Calculate expiration date (7 days from now)
       const expirationDate = new Date(
         Date.now() + 7 * 24 * 60 * 60 * 1000,
       ).toISOString();
 
       const data = await apiClient.sharedFiles.create({
-        file_id: fileKey, // Reference to MinIO storage location
         management_capability_hash: managementCapability.hash,
         recipient_email: fileData.recipientEmail, // For email notification
         encrypted_file_key: encryptedFileKeyHex, // Store the hex string
         encrypted_metadata: fileData.encryptedMetadata,
         file_size: fileData.fileSize || 0,
+        encrypted_size: fileData.encryptedFileBlob.size,
         access_type: "view",
         expires_at: expirationDate, // Auto-delete after 7 days if not claimed
       });
       if (!data.id) {
         throw new Error("Share was created without an identifier");
       }
+      pendingShareId = data.id;
+
+      await uploadEncryptedFile(
+        data.id,
+        managementCapability.plaintext,
+        fileData.encryptedFileBlob,
+      );
+      onFileUploaded?.();
+      await apiClient.sharedFiles.finalize(
+        data.id,
+        managementCapability.plaintext,
+      );
+
       try {
         await storeShareManagementCapability(
           data.id,
           managementCapability.plaintext,
         );
       } catch (backupError) {
-        await apiClient.sharedFiles
-          .delete(data.id, managementCapability.plaintext)
-          .catch(() => {});
         throw backupError;
       }
       logger.log(`[FILE-SHARE] Successfully stored file share:`, data);
     } catch (error) {
+      if (pendingShareId) {
+        await apiClient.sharedFiles
+          .delete(pendingShareId, managementCapability.plaintext)
+          .catch(() => {});
+      }
       logger.error("Error creating shared file:", error);
       throw error;
     }
@@ -772,26 +776,24 @@ export async function decryptSharedMetadata(
 
 /**
  * Upload encrypted file using pre-signed URL from backend
- * @param fileName The name of the file
+ * @param shareId The pending share identifier
+ * @param managementCapability Capability authorizing this upload
  * @param fileBlob The encrypted file blob to upload
- * @param mimeType Optional MIME type
- * @returns The file key for retrieving the file later
  */
 export async function uploadEncryptedFile(
-  fileName: string,
+  shareId: string,
+  managementCapability: string,
   fileBlob: Blob,
-  mimeType?: string,
-): Promise<string> {
+): Promise<void> {
   // Step 1: Request pre-signed upload URL from backend
-  const response = await apiClient.post("/presigned-url/upload", {
-    fileName,
-    fileSize: fileBlob.size,
-    mimeType: mimeType || "application/octet-stream",
-  });
+  const response = await apiClient.post(
+    "/presigned-url/upload",
+    { shareId },
+    { "X-Share-Capability": managementCapability },
+  );
 
-  const { uploadUrl, fileKey } = response.data as {
+  const { uploadUrl } = response.data as {
     uploadUrl: string;
-    fileKey: string;
   };
 
   // Step 2: Upload encrypted file directly to MinIO using pre-signed URL
@@ -799,7 +801,7 @@ export async function uploadEncryptedFile(
     method: "PUT",
     body: fileBlob,
     headers: {
-      "Content-Type": mimeType || "application/octet-stream",
+      "Content-Type": "application/octet-stream",
     },
   });
 
@@ -807,8 +809,7 @@ export async function uploadEncryptedFile(
     throw new Error(`Failed to upload file: ${uploadResponse.statusText}`);
   }
 
-  logger.log(`File uploaded successfully: ${fileKey}`);
-  return fileKey;
+  logger.log(`Encrypted upload completed for share: ${shareId}`);
 }
 
 /**

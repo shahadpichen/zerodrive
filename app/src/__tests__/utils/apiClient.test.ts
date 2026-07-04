@@ -452,12 +452,12 @@ describe("ApiClient", () => {
 
   describe("Shared Files API", () => {
     const shareData = {
-      file_id: "file-123",
       management_capability_hash: "a".repeat(64),
       recipient_email: "recipient@example.com",
       encrypted_file_key: "encrypted-key",
       encrypted_metadata: "encrypted-metadata",
       file_size: 1024,
+      encrypted_size: 1052,
     };
 
     it("should create shared file successfully", async () => {
@@ -473,7 +473,7 @@ describe("ApiClient", () => {
       const result = await sharedFilesApi.create(shareData);
 
       expect(result.id).toBe("share-123");
-      expect(result.file_id).toBe(shareData.file_id);
+      expect(result.file_id).toBeUndefined();
     });
 
     it("should get shared files for user", async () => {

@@ -22,9 +22,13 @@ import {
   getFileSizeBucket,
 } from "../services/analytics";
 import { deriveRecipientLookupId } from "../utils/identity";
+import { shareCapabilityMatches } from "../utils/shareCapability";
+import { DeleteObjectCommand, HeadObjectCommand } from "@aws-sdk/client-s3";
+import { MINIO_BUCKET, s3Client } from "../config/s3";
 import crypto from "crypto";
 
 const router = Router();
+const MAX_ENCRYPTED_FILE_SIZE = 100 * 1024 * 1024 + 28;
 
 function toClientSharedFile(file: SharedFile) {
   const {
@@ -36,30 +40,18 @@ function toClientSharedFile(file: SharedFile) {
   return safeFile;
 }
 
-function capabilityMatches(
-  plaintextCapability: string | undefined,
-  expectedHash: string,
-): boolean {
-  if (!plaintextCapability) return false;
-  const actualHash = crypto
-    .createHash("sha256")
-    .update(plaintextCapability, "utf8")
-    .digest();
-  const expected = Buffer.from(expectedHash, "hex");
-  return (
-    actualHash.length === expected.length &&
-    crypto.timingSafeEqual(actualHash, expected)
-  );
-}
-
 // Validation schemas
 const createSharedFileSchema = Joi.object({
-  file_id: Joi.string().required(),
   management_capability_hash: Joi.string().hex().length(64).required(),
   recipient_email: Joi.string().email().required(),
   encrypted_file_key: Joi.string().required(),
   encrypted_metadata: Joi.string().base64().required().max(32768),
   file_size: Joi.number().integer().min(0).required(),
+  encrypted_size: Joi.number()
+    .integer()
+    .positive()
+    .max(MAX_ENCRYPTED_FILE_SIZE)
+    .required(),
   expires_at: Joi.date().iso().optional(),
   access_type: Joi.string().valid("view", "download").default("view"),
 });
@@ -92,38 +84,40 @@ router.post(
     }
 
     const {
-      file_id,
       management_capability_hash,
       recipient_email,
       encrypted_file_key,
       encrypted_metadata,
       file_size,
+      encrypted_size,
       expires_at,
       access_type,
     } = value;
     const recipientUserId = deriveRecipientLookupId(recipient_email);
+    const objectKey = `shared/${crypto.randomUUID()}`;
 
     try {
-      // Check if file is already shared with this recipient
       const existingShare = await query<SharedFile>(
-        "SELECT id FROM shared_files WHERE file_id = $1 AND recipient_user_id = $2",
-        [file_id, recipientUserId],
+        "SELECT id FROM shared_files WHERE management_capability_hash = $1",
+        [management_capability_hash],
       );
-
       if (existingShare.rows.length > 0) {
-        throw ApiErrors.Conflict("File is already shared with this user");
+        throw ApiErrors.Conflict("Share capability collision");
       }
 
-      // Create new shared file record
+      // Create a pending record before issuing upload authority. This keeps
+      // abandoned objects discoverable and cleanup-safe.
       const result = await query<SharedFile>(
         `INSERT INTO shared_files (
         file_id, recipient_user_id, encrypted_file_key,
         encrypted_metadata, file_size, expires_at, access_type,
-        management_capability_hash
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        management_capability_hash, status, expected_encrypted_size,
+        pending_expires_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'pending', $9,
+        CURRENT_TIMESTAMP + INTERVAL '15 minutes')
       RETURNING *`,
         [
-          file_id,
+          objectKey,
           recipientUserId,
           encrypted_file_key,
           encrypted_metadata,
@@ -131,6 +125,7 @@ router.post(
           expires_at || null,
           access_type,
           management_capability_hash,
+          encrypted_size,
         ],
       );
 
@@ -146,7 +141,7 @@ router.post(
 
       res.apiSuccess(
         toClientSharedFile(result.rows[0]),
-        "File shared successfully",
+        "Pending share created",
         201,
       );
     } catch (error) {
@@ -156,6 +151,71 @@ router.post(
       }
       throw ApiErrors.InternalServer("Failed to share file");
     }
+  }),
+);
+
+router.post(
+  "/:id/finalize",
+  asyncHandler(async (req: Request, res: Response) => {
+    const { error, value } = getSharedFileSchema.validate(req.params);
+    if (error) {
+      throw ApiErrors.ValidationError(error.details[0].message);
+    }
+
+    const pending = await query<SharedFile>(
+      `SELECT * FROM shared_files
+       WHERE id = $1
+       AND status = 'pending'
+       AND pending_expires_at > CURRENT_TIMESTAMP`,
+      [value.id],
+    );
+    if (pending.rows.length === 0) {
+      throw ApiErrors.NotFound("Pending share not found or has expired");
+    }
+
+    const share = pending.rows[0];
+    const capability = req.get("x-share-capability");
+    if (
+      !share.management_capability_hash ||
+      !shareCapabilityMatches(capability, share.management_capability_hash)
+    ) {
+      throw ApiErrors.NotFound("Pending share not found or has expired");
+    }
+
+    let objectSize: number;
+    try {
+      const object = await s3Client.send(
+        new HeadObjectCommand({
+          Bucket: MINIO_BUCKET,
+          Key: share.file_id,
+        }),
+      );
+      objectSize = Number(object.ContentLength);
+    } catch {
+      throw ApiErrors.Conflict("Encrypted upload is not available yet");
+    }
+
+    if (
+      !Number.isSafeInteger(objectSize) ||
+      objectSize !== Number(share.expected_encrypted_size)
+    ) {
+      throw ApiErrors.Conflict("Encrypted upload size does not match");
+    }
+
+    const activated = await query<SharedFile>(
+      `UPDATE shared_files
+       SET status = 'active',
+           pending_expires_at = NULL,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE id = $1 AND status = 'pending'
+       RETURNING *`,
+      [value.id],
+    );
+    if (activated.rows.length === 0) {
+      throw ApiErrors.Conflict("Share could not be finalized");
+    }
+
+    res.apiSuccess(toClientSharedFile(activated.rows[0]), "Share finalized");
   }),
 );
 
@@ -188,6 +248,7 @@ router.get(
         `SELECT COUNT(*) as count
          FROM shared_files
          WHERE recipient_user_id = ANY($1::varchar[])
+         AND status = 'active'
          AND (expires_at IS NULL OR expires_at > CURRENT_TIMESTAMP)`,
         [recipientUserIds],
       );
@@ -197,6 +258,7 @@ router.get(
       const result = await query<SharedFile>(
         `SELECT * FROM shared_files
        WHERE recipient_user_id = ANY($1::varchar[])
+       AND status = 'active'
        AND (expires_at IS NULL OR expires_at > CURRENT_TIMESTAMP)
        ORDER BY created_at DESC
        LIMIT $2 OFFSET $3`,
@@ -243,6 +305,7 @@ router.get(
         `SELECT * FROM shared_files 
        WHERE id = $1
        AND recipient_user_id = $2
+       AND status = 'active'
        AND (expires_at IS NULL OR expires_at > CURRENT_TIMESTAMP)`,
         [id, req.user.emailHash],
       );
@@ -314,7 +377,7 @@ router.put(
       const existing = existingFile.rows[0];
       if (existing.management_capability_hash) {
         if (
-          !capabilityMatches(
+          !shareCapabilityMatches(
             suppliedCapability,
             existing.management_capability_hash,
           )
@@ -394,7 +457,7 @@ router.delete(
       }
 
       const suppliedCapability = req.get("x-share-capability");
-      let result;
+      let share: SharedFile | undefined;
       if (suppliedCapability) {
         const existing = await query<SharedFile>(
           "SELECT * FROM shared_files WHERE id = $1",
@@ -403,35 +466,69 @@ router.delete(
         if (existing.rows.length === 0) {
           throw ApiErrors.NotFound("Shared file not found");
         }
-        const share = existing.rows[0];
+        share = existing.rows[0];
         if (
           !share.management_capability_hash ||
-          !capabilityMatches(
+          !shareCapabilityMatches(
             suppliedCapability,
             share.management_capability_hash,
           )
         ) {
           throw ApiErrors.Forbidden("Invalid share management capability");
         }
-        result = await query("DELETE FROM shared_files WHERE id = $1", [id]);
       } else {
         const recipientIds = [
           req.user.emailHash,
           ...(req.user.legacyEmailHash ? [req.user.legacyEmailHash] : []),
         ];
-        result = await query(
-          `DELETE FROM shared_files
+        const existing = await query<SharedFile>(
+          `SELECT * FROM shared_files
            WHERE id = $1
            AND management_capability_hash IS NULL
            AND recipient_user_id = ANY($2::varchar[])`,
           [id, recipientIds],
         );
+        share = existing.rows[0];
       }
 
-      if (result.rowCount === 0) {
+      if (!share) {
         throw ApiErrors.NotFound("Shared file not found");
       }
 
+      await query(
+        `UPDATE shared_files
+         SET status = 'deleting', updated_at = CURRENT_TIMESTAMP
+         WHERE id = $1`,
+        [id],
+      );
+
+      try {
+        await s3Client.send(
+          new DeleteObjectCommand({
+            Bucket: MINIO_BUCKET,
+            Key: share.file_id,
+          }),
+        );
+      } catch (storageError) {
+        await query(
+          `UPDATE shared_files
+           SET deletion_attempts = deletion_attempts + 1,
+               deletion_last_error = $2,
+               updated_at = CURRENT_TIMESTAMP
+           WHERE id = $1`,
+          [
+            id,
+            storageError instanceof Error
+              ? storageError.message.slice(0, 1000)
+              : "Unknown storage deletion failure",
+          ],
+        );
+        throw ApiErrors.ServiceUnavailable(
+          "Share deletion is queued for retry",
+        );
+      }
+
+      await query("DELETE FROM shared_files WHERE id = $1", [id]);
       res.apiSuccess({ deleted: true }, "File sharing revoked successfully");
     } catch (error) {
       if (error instanceof ApiError) {
@@ -470,6 +567,7 @@ router.post(
         `SELECT * FROM shared_files 
        WHERE id = $1
        AND recipient_user_id = $2
+       AND status = 'active'
        AND (expires_at IS NULL OR expires_at > CURRENT_TIMESTAMP)`,
         [id, req.user.emailHash],
       );

@@ -27,6 +27,12 @@ CREATE TABLE IF NOT EXISTS shared_files (
         OR management_capability_hash ~ '^[0-9a-f]{64}$'
     ),
     encrypted_metadata TEXT,
+    status VARCHAR(20) NOT NULL DEFAULT 'active'
+        CHECK (status IN ('pending', 'active', 'deleting')),
+    expected_encrypted_size BIGINT,
+    pending_expires_at TIMESTAMP WITH TIME ZONE,
+    deletion_attempts INTEGER NOT NULL DEFAULT 0,
+    deletion_last_error TEXT,
     encrypted_file_key TEXT NOT NULL,
     file_name VARCHAR(500),
     file_size BIGINT NOT NULL,
@@ -41,8 +47,11 @@ CREATE TABLE IF NOT EXISTS shared_files (
 -- Create indexes for better query performance
 CREATE INDEX IF NOT EXISTS idx_public_keys_user_id ON public_keys(user_id);
 CREATE INDEX IF NOT EXISTS idx_shared_files_recipient ON shared_files(recipient_user_id);
-CREATE INDEX IF NOT EXISTS idx_shared_files_file_id ON shared_files(file_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_shared_files_file_id_unique ON shared_files(file_id);
 CREATE INDEX IF NOT EXISTS idx_shared_files_expires_at ON shared_files(expires_at);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_shared_files_management_capability_hash_unique
+    ON shared_files(management_capability_hash)
+    WHERE management_capability_hash IS NOT NULL;
 
 -- Create updated_at trigger function
 CREATE OR REPLACE FUNCTION update_updated_at_column()

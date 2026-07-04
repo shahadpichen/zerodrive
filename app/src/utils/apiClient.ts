@@ -44,8 +44,8 @@ interface PublicKeyData {
 
 interface SharedFileData {
   id?: string;
-  file_id: string;
-  recipient_user_id: string;
+  file_id?: string;
+  recipient_user_id?: string;
   encrypted_file_key: string;
   encrypted_metadata?: string;
   file_name?: string;
@@ -240,10 +240,15 @@ class HttpClient {
     return this.request<T>(url, { method: "GET" });
   }
 
-  async post<T>(endpoint: string, data?: any): Promise<ApiResponse<T>> {
+  async post<T>(
+    endpoint: string,
+    data?: any,
+    headers?: HeadersInit,
+  ): Promise<ApiResponse<T>> {
     return this.request<T>(endpoint, {
       method: "POST",
       body: data ? JSON.stringify(data) : undefined,
+      headers,
     });
   }
 
@@ -315,18 +320,30 @@ export const sharedFilesApi = {
    * Create a new file share
    */
   async create(shareData: {
-    file_id: string;
     management_capability_hash: string;
     recipient_email: string;
     encrypted_file_key: string;
     encrypted_metadata: string;
     file_size: number;
+    encrypted_size: number;
     access_type?: "view" | "download";
     expires_at?: string;
   }): Promise<SharedFileData> {
     const response = await httpClient.post<SharedFileData>(
       "/shared-files",
       shareData,
+    );
+    return response.data!;
+  },
+
+  async finalize(
+    id: string,
+    managementCapability: string,
+  ): Promise<SharedFileData> {
+    const response = await httpClient.post<SharedFileData>(
+      `/shared-files/${id}/finalize`,
+      undefined,
+      { "X-Share-Capability": managementCapability },
     );
     return response.data!;
   },

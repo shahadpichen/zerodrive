@@ -10,15 +10,13 @@ import Joi from "joi";
 import { s3Client, MINIO_BUCKET } from "../config/s3";
 import { query } from "../config/database";
 import logger from "../utils/logger";
+import { shareCapabilityMatches } from "../utils/shareCapability";
 
 const router = Router();
 
 // Validation schemas
 const uploadUrlSchema = Joi.object({
-  fileName: Joi.string().required().max(255),
-  fileSize: Joi.number().integer().positive().optional(),
-  mimeType: Joi.string().optional(),
-  recipientEmail: Joi.string().email().optional(),
+  shareId: Joi.string().uuid().required(),
 });
 
 const downloadUrlSchema = Joi.object({
@@ -43,38 +41,55 @@ router.post("/upload", async (req: Request, res: Response) => {
       });
     }
 
-    const { fileName, fileSize, mimeType } = value;
+    const capability = req.get("x-share-capability");
+    const pending = await query<{
+      file_id: string;
+      expected_encrypted_size: string | number;
+      management_capability_hash: string;
+    }>(
+      `SELECT file_id, expected_encrypted_size, management_capability_hash
+       FROM shared_files
+       WHERE id = $1
+       AND status = 'pending'
+       AND pending_expires_at > CURRENT_TIMESTAMP`,
+      [value.shareId],
+    );
+    if (
+      pending.rows.length === 0 ||
+      !shareCapabilityMatches(
+        capability,
+        pending.rows[0].management_capability_hash,
+      )
+    ) {
+      return res.status(404).json({
+        success: false,
+        error: { code: "NOT_FOUND", message: "Pending share not found" },
+      });
+    }
 
-    // Generate unique file key (prevent overwriting)
-    const timestamp = Date.now();
-    const randomId = Math.random().toString(36).substring(2, 15);
-    const fileKey = `shared/${timestamp}-${randomId}-${fileName}`;
-
-    logger.info("Generating upload URL", {
-      fileName,
-      fileKey,
-      fileSize,
-      mimeType,
-    });
+    const fileKey = pending.rows[0].file_id;
+    const expectedSize = Number(pending.rows[0].expected_encrypted_size);
 
     // Create pre-signed URL for upload (expires in 5 minutes)
     const command = new PutObjectCommand({
       Bucket: MINIO_BUCKET,
       Key: fileKey,
-      ContentType: mimeType || "application/octet-stream",
+      ContentType: "application/octet-stream",
+      ContentLength: expectedSize,
     });
 
     const uploadUrl = await getSignedUrl(s3Client, command, {
       expiresIn: 300, // 5 minutes
     });
 
-    logger.info("Upload URL generated", { fileKey });
+    logger.info("Authorized upload URL generated", {
+      shareId: value.shareId,
+    });
 
     return res.json({
       success: true,
       data: {
         uploadUrl,
-        fileKey,
         expiresIn: 300,
       },
       message: "Pre-signed upload URL generated",
@@ -129,6 +144,7 @@ router.post("/download", async (req: Request, res: Response) => {
        FROM shared_files
        WHERE id = $1
        AND recipient_user_id = ANY($2::varchar[])
+       AND status = 'active'
        AND (expires_at IS NULL OR expires_at > CURRENT_TIMESTAMP)`,
       [value.shareId, recipientUserIds],
     );

@@ -17,6 +17,11 @@ export interface SharedFile {
   recipient_user_id: string;
   management_capability_hash?: string | null;
   encrypted_metadata?: string | null;
+  status?: "pending" | "active" | "deleting";
+  expected_encrypted_size?: number | null;
+  pending_expires_at?: Date | null;
+  deletion_attempts?: number;
+  deletion_last_error?: string | null;
   encrypted_file_key: string;
   file_name?: string | null;
   file_size: number;
