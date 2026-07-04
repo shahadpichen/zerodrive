@@ -9,8 +9,12 @@ interface FolderBreadcrumbProps {
   onFileMoved: () => void;
 }
 
-export function FolderBreadcrumb({ userEmail, onFileMoved }: FolderBreadcrumbProps) {
-  const { currentPath, setCurrentPath, navigateToFolder, goToRoot } = useFolderContext();
+export function FolderBreadcrumb({
+  userEmail,
+  onFileMoved,
+}: FolderBreadcrumbProps) {
+  const { currentPath, setCurrentPath, navigateToFolder, goToRoot } =
+    useFolderContext();
   const [dragOverId, setDragOverId] = useState<string | "root" | null>(null);
 
   const handleDrop = async (e: React.DragEvent, folderId: string | null) => {
@@ -26,17 +30,19 @@ export function FolderBreadcrumb({ userEmail, onFileMoved }: FolderBreadcrumbPro
   const isLastItem = (index: number) => index === currentPath.length - 1;
 
   return (
-    <div className="flex items-center gap-2 text-sm overflow-x-auto pb-2">
+    <div className="flex items-center gap-2 text-sm overflow-x-auto">
       <Button
         variant="ghost"
         size="sm"
         onClick={goToRoot}
         className={`flex items-center gap-1 ${dragOverId === "root" ? "ring-2 ring-primary bg-primary/10" : ""}`}
-        onDragOver={(e) => { e.preventDefault(); setDragOverId("root"); }}
+        onDragOver={(e) => {
+          e.preventDefault();
+          setDragOverId("root");
+        }}
         onDragLeave={() => setDragOverId(null)}
         onDrop={(e) => handleDrop(e, null)}
       >
-        <Home className="h-4 w-4" />
         <span>Root</span>
       </Button>
 
@@ -51,11 +57,16 @@ export function FolderBreadcrumb({ userEmail, onFileMoved }: FolderBreadcrumbPro
               navigateToFolder(folder.id);
             }}
             className={`whitespace-nowrap ${!isLastItem(index) && dragOverId === folder.id ? "ring-2 ring-primary bg-primary/10" : ""}`}
-            {...(!isLastItem(index) ? {
-              onDragOver: (e: React.DragEvent) => { e.preventDefault(); setDragOverId(folder.id); },
-              onDragLeave: () => setDragOverId(null),
-              onDrop: (e: React.DragEvent) => handleDrop(e, folder.id),
-            } : {})}
+            {...(!isLastItem(index)
+              ? {
+                  onDragOver: (e: React.DragEvent) => {
+                    e.preventDefault();
+                    setDragOverId(folder.id);
+                  },
+                  onDragLeave: () => setDragOverId(null),
+                  onDrop: (e: React.DragEvent) => handleDrop(e, folder.id),
+                }
+              : {})}
           >
             {folder.name}
           </Button>

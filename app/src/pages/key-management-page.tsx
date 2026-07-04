@@ -1,30 +1,30 @@
-import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import React, { useEffect, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import {
-  generateMnemonic,
+  AlertCircle,
+  AlertTriangle,
+  Check,
+  Clipboard,
+  Download,
+  FileKey,
+  KeyRound,
+  Loader2,
+  ShieldCheck,
+  Upload,
+} from "lucide-react";
+import {
   deriveKeyFromMnemonic,
+  generateMnemonic,
   storeKey,
 } from "../utils/cryptoUtils";
 import { setMnemonic } from "../utils/mnemonicManager";
 import { testEncryptionKey } from "../utils/keyTest";
 import { recoverRsaKeysIfNeeded } from "../utils/rsaKeyRecovery";
-import { hasGoogleTokensInStorage } from "../utils/authService";
-import { gapi } from "gapi-script";
+import { getUserEmail, hasGoogleTokensInStorage } from "../utils/authService";
 import { Button } from "../components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "../components/ui/card";
-import React from "react";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
-import { toast } from "sonner";
 import { Textarea } from "../components/ui/textarea";
-import { AlertCircle } from "lucide-react";
 import { Checkbox } from "../components/ui/checkbox";
 import { DeviceManagement } from "../components/key-management/DeviceManagement";
 import {
@@ -35,269 +35,171 @@ import {
   DialogHeader,
   DialogTitle,
 } from "../components/ui/dialog";
+import { toast } from "sonner";
+
+type KeyMode = "recover" | "generate";
 
 export const KeyManagementPage: React.FC = () => {
   const navigate = useNavigate();
-  const [error, setError] = useState("");
+  const [searchParams] = useSearchParams();
+  const requestedReturnTo = searchParams.get("returnTo");
+  const returnTo =
+    requestedReturnTo === "/share" || requestedReturnTo === "/shared-with-me"
+      ? requestedReturnTo
+      : "/storage";
+  const returnLabel = {
+    "/share": "Continue to Share Files",
+    "/shared-with-me": "Continue to Shared Files",
+    "/storage": "Continue to Storage",
+  }[returnTo];
+
+  const [mode, setMode] = useState<KeyMode>("recover");
+  const [inputMnemonic, setInputMnemonic] = useState("");
   const [generatedMnemonic, setGeneratedMnemonic] = useState<string | null>(
-    null
+    null,
   );
-  const [inputMnemonic, setInputMnemonic] = useState<string>("");
   const [showFileUpload, setShowFileUpload] = useState(false);
-  const [viewMode, setViewMode] = useState<"recover" | "generate">("recover");
-  const [isTesting, setIsTesting] = useState(false);
   const [showGenerateWarning, setShowGenerateWarning] = useState(false);
   const [understandLoss, setUnderstandLoss] = useState(false);
   const [readyToSave, setReadyToSave] = useState(false);
   const [isGapiReady, setIsGapiReady] = useState(false);
+  const [isRecovering, setIsRecovering] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
+  const [isTesting, setIsTesting] = useState(false);
+  const [error, setError] = useState("");
+  const [keyStatusVersion, setKeyStatusVersion] = useState(0);
 
-  // Initialize Google API when page loads
   useEffect(() => {
-    const initGapi = async () => {
+    const initializeDrive = async () => {
       try {
         const { initializeGapi } = await import("../utils/gapiInit");
         await initializeGapi();
         setIsGapiReady(true);
-        console.log('[KeyManagement] GAPI initialized successfully');
-      } catch (error) {
-        console.error('[KeyManagement] GAPI initialization failed:', error);
-        // RSA recovery will be skipped, but key generation still works
-        toast.warning('Google Drive connection unavailable', {
-          description: 'RSA key recovery from backup will not be available.',
-          duration: 5000,
+      } catch (initializationError) {
+        console.error(
+          "[KeyManagement] Google Drive initialization failed:",
+          initializationError,
+        );
+        toast.warning("Google Drive connection unavailable", {
+          description:
+            "Your primary key still works, but sharing-key recovery is unavailable.",
         });
       }
     };
-    initGapi();
+
+    initializeDrive();
   }, []);
 
-  const handleShowWarning = () => {
+  const recoverSharingKeys = async () => {
+    if (!isGapiReady || !hasGoogleTokensInStorage()) return;
+
+    try {
+      const email = await getUserEmail();
+      if (email) await recoverRsaKeysIfNeeded(email, true);
+    } catch (recoveryError) {
+      console.error(
+        "[KeyManagement] Sharing-key recovery failed:",
+        recoveryError,
+      );
+      // The primary key is still valid, so this must not block the user.
+    }
+  };
+
+  const switchMode = (nextMode: KeyMode) => {
+    setMode(nextMode);
+    setError("");
+    setInputMnemonic("");
+    if (nextMode === "recover") setGeneratedMnemonic(null);
+  };
+
+  const openGenerateWarning = () => {
     setShowGenerateWarning(true);
     setUnderstandLoss(false);
     setReadyToSave(false);
   };
 
-  const handleGenerateNewMnemonicAndKey = async () => {
+  const handleGenerateKey = async () => {
     setShowGenerateWarning(false);
+    setIsGenerating(true);
     setError("");
-    setGeneratedMnemonic(null);
+
     try {
-      const newMnemonic = generateMnemonic();
-      setGeneratedMnemonic(newMnemonic);
-      const key = await deriveKeyFromMnemonic(newMnemonic);
-      // Store mnemonic in memory and store key in sessionStorage
-      setMnemonic(newMnemonic);
+      const mnemonic = generateMnemonic();
+      const key = await deriveKeyFromMnemonic(mnemonic);
+      setMnemonic(mnemonic);
       await storeKey(key);
-
-      // Attempt to recover RSA keys from Google Drive if not in IndexedDB
-      if (isGapiReady) {
-        try {
-          // Check if Google tokens exist (better indicator than GAPI sign-in state)
-          if (hasGoogleTokensInStorage()) {
-            const authInstance = gapi.auth2?.getAuthInstance();
-            if (authInstance && authInstance.isSignedIn.get()) {
-              const profile = authInstance.currentUser.get().getBasicProfile();
-              if (profile) {
-                const userEmail = profile.getEmail();
-                await recoverRsaKeysIfNeeded(userEmail);
-              }
-            } else {
-              console.log('[KeyManagement] Google tokens exist but GAPI not fully initialized - recovery will happen on other pages');
-            }
-          } else {
-            console.log('[KeyManagement] Google Drive not connected - RSA key recovery skipped');
-            toast.info('RSA key recovery skipped', {
-              description: 'Google Drive not connected. You can enable file sharing later to create RSA keys.',
-              duration: 5000,
-            });
-          }
-        } catch (recoveryError) {
-          console.error('[KeyManagement] RSA key recovery failed:', recoveryError);
-          toast.error('RSA key recovery failed', {
-            description: String(recoveryError),
-            duration: 5000,
-          });
-        }
-      } else {
-        console.log('[KeyManagement] GAPI not ready - RSA key recovery skipped');
-      }
-
-      toast.success("New Mnemonic & Key Generated!", {
-        description:
-          "Your new mnemonic phrase is displayed below. PLEASE SAVE IT SECURELY. It is the only way to recover your key.",
-        duration: 10000,
-      });
-    } catch (err) {
-      console.error("Error generating new mnemonic and key:", err);
-      setError("Failed to generate new mnemonic and key. Please try again.");
-      toast.error("Key Generation Failed", {
-        description: "Could not generate a new mnemonic and key.",
-      });
+      setGeneratedMnemonic(mnemonic);
+      setKeyStatusVersion((version) => version + 1);
+      await recoverSharingKeys();
+      toast.success("Encryption key created");
+    } catch (generationError) {
+      console.error("[KeyManagement] Key generation failed:", generationError);
+      setError("Your encryption key could not be created. Try again.");
+    } finally {
+      setIsGenerating(false);
     }
   };
 
-  const handleLoadKeyFromMnemonic = async () => {
+  const handleRecoverKey = async () => {
+    const mnemonic = inputMnemonic.trim();
+    if (!mnemonic || isRecovering) return;
+
+    setIsRecovering(true);
     setError("");
-    if (!inputMnemonic.trim()) {
-      setError("Please enter your mnemonic phrase.");
-      return;
-    }
     try {
-      const trimmedMnemonic = inputMnemonic.trim();
-      const key = await deriveKeyFromMnemonic(trimmedMnemonic);
-      // Store mnemonic in memory and store key in sessionStorage
-      setMnemonic(trimmedMnemonic);
+      const key = await deriveKeyFromMnemonic(mnemonic);
+      setMnemonic(mnemonic);
       await storeKey(key);
-
-      // Attempt to recover RSA keys from Google Drive if not in IndexedDB
-      if (isGapiReady) {
-        try {
-          // Check if Google tokens exist (better indicator than GAPI sign-in state)
-          if (hasGoogleTokensInStorage()) {
-            const authInstance = gapi.auth2?.getAuthInstance();
-            if (authInstance && authInstance.isSignedIn.get()) {
-              const profile = authInstance.currentUser.get().getBasicProfile();
-              if (profile) {
-                const userEmail = profile.getEmail();
-                await recoverRsaKeysIfNeeded(userEmail);
-              }
-            } else {
-              console.log('[KeyManagement] Google tokens exist but GAPI not fully initialized - recovery will happen on other pages');
-            }
-          } else {
-            console.log('[KeyManagement] Google Drive not connected - RSA key recovery skipped');
-            toast.info('RSA key recovery skipped', {
-              description: 'Google Drive not connected. You can enable file sharing later to create RSA keys.',
-              duration: 5000,
-            });
-          }
-        } catch (recoveryError) {
-          console.error('[KeyManagement] RSA key recovery failed:', recoveryError);
-          toast.error('RSA key recovery failed', {
-            description: String(recoveryError),
-            duration: 5000,
-          });
-        }
-      } else {
-        console.log('[KeyManagement] GAPI not ready - RSA key recovery skipped');
-      }
-
-      toast.success("Key Loaded Successfully!", {
-        description: "Your encryption key has been loaded from the mnemonic.",
-      });
-      // Navigate to storage instead of reloading
-      setTimeout(() => {
-        navigate("/storage");
-      }, 1500);
-    } catch (err) {
-      console.error("Error loading key from mnemonic:", err);
+      setKeyStatusVersion((version) => version + 1);
+      await recoverSharingKeys();
+      toast.success("Encryption key recovered");
+      navigate(returnTo);
+    } catch (recoveryError) {
+      console.error("Error loading key from mnemonic:", recoveryError);
       setError(
-        "Failed to load key from mnemonic. Ensure the phrase is correct or try generating a new key if this is your first time."
+        "That recovery phrase is not valid. Check the words and their order.",
       );
-      toast.error("Key Load Failed", {
-        description: "Invalid mnemonic phrase or an unexpected error occurred.",
-      });
+    } finally {
+      setIsRecovering(false);
     }
   };
 
   const handleFileUpload = async (
-    event: React.ChangeEvent<HTMLInputElement>
+    event: React.ChangeEvent<HTMLInputElement>,
   ) => {
-    setError("");
     const file = event.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = async (e) => {
-        try {
-          const keyJWK = JSON.parse(e.target?.result as string);
-          if (
-            !keyJWK.kty ||
-            keyJWK.kty !== "oct" ||
-            !keyJWK.k ||
-            !keyJWK.alg ||
-            keyJWK.alg !== "A256GCM"
-          ) {
-            throw new Error("Invalid key format in JSON file.");
-          }
-          const key = await crypto.subtle.importKey(
-            "jwk",
-            keyJWK,
-            { name: "AES-GCM" },
-            true,
-            ["encrypt", "decrypt"]
-          );
+    if (!file || isImporting) return;
 
-          // Generate a mnemonic to encrypt this imported key
-          const mnemonic = generateMnemonic();
-          setGeneratedMnemonic(mnemonic);
-          setMnemonic(mnemonic);
-          await storeKey(key);
+    setIsImporting(true);
+    setError("");
 
-          // Attempt to recover RSA keys from Google Drive if not in IndexedDB
-          if (isGapiReady) {
-            try {
-              // Check if Google tokens exist (better indicator than GAPI sign-in state)
-              if (hasGoogleTokensInStorage()) {
-                const authInstance = gapi.auth2?.getAuthInstance();
-                if (authInstance && authInstance.isSignedIn.get()) {
-                  const profile = authInstance.currentUser.get().getBasicProfile();
-                  if (profile) {
-                    const userEmail = profile.getEmail();
-                    await recoverRsaKeysIfNeeded(userEmail);
-                  }
-                } else {
-                  console.log('[KeyManagement] Google tokens exist but GAPI not fully initialized - recovery will happen on other pages');
-                }
-              } else {
-                console.log('[KeyManagement] Google Drive not connected - RSA key recovery skipped');
-                toast.info('RSA key recovery skipped', {
-                  description: 'Google Drive not connected. You can enable file sharing later to create RSA keys.',
-                  duration: 5000,
-                });
-              }
-            } catch (recoveryError) {
-              console.error('[KeyManagement] RSA key recovery failed:', recoveryError);
-              toast.error('RSA key recovery failed', {
-                description: String(recoveryError),
-                duration: 5000,
-              });
-            }
-          } else {
-            console.log('[KeyManagement] GAPI not ready - RSA key recovery skipped');
-          }
+    try {
+      const keyJwk = JSON.parse(await file.text());
+      if (keyJwk.kty !== "oct" || !keyJwk.k || keyJwk.alg !== "A256GCM") {
+        throw new Error("Invalid AES-GCM key");
+      }
 
-          toast.success("Encryption key added from file!", {
-            description: "A mnemonic has been generated to protect this key. Please save it!",
-            duration: 10000,
-          });
-          // Don't navigate immediately - let user see and save the mnemonic
-          setViewMode("generate");
-        } catch (error) {
-          console.error("Error processing key file:", error);
-          setError(
-            "Invalid key file. Please ensure the file contains a valid AES-GCM key in JSON format."
-          );
-          toast.error("Invalid Key File", {
-            description: "The uploaded file does not contain a valid key.",
-          });
-        }
-      };
-      reader.readAsText(file);
+      const key = await crypto.subtle.importKey(
+        "jwk",
+        keyJwk,
+        { name: "AES-GCM" },
+        true,
+        ["encrypt", "decrypt"],
+      );
+      await storeKey(key);
+      setKeyStatusVersion((version) => version + 1);
+      toast.success("Legacy key imported", {
+        description: "The key is active in this browser tab.",
+      });
+      navigate(returnTo);
+    } catch (importError) {
+      console.error("[KeyManagement] Key import failed:", importError);
+      setError("This is not a valid ZeroDrive AES-GCM JSON key file.");
+    } finally {
+      setIsImporting(false);
+      event.target.value = "";
     }
-  };
-
-  const switchToGenerate = () => {
-    setError("");
-    setInputMnemonic("");
-    setGeneratedMnemonic(null);
-    setViewMode("generate");
-  };
-
-  const switchToRecover = () => {
-    setError("");
-    setInputMnemonic("");
-    setGeneratedMnemonic(null);
-    setViewMode("recover");
   };
 
   const handleDownloadMnemonic = () => {
@@ -305,87 +207,312 @@ export const KeyManagementPage: React.FC = () => {
 
     const blob = new Blob([generatedMnemonic], { type: "text/plain" });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "zerodrive-mnemonic.txt";
-    document.body.appendChild(a); // Required for Firefox
-    a.click();
-    document.body.removeChild(a);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = "zerodrive-recovery-phrase.txt";
+    document.body.appendChild(anchor);
+    anchor.click();
+    document.body.removeChild(anchor);
     URL.revokeObjectURL(url);
-    toast.info("Mnemonic downloaded as zerodrive-mnemonic.txt");
+    toast.success("Recovery phrase downloaded");
+  };
+
+  const handleCopyMnemonic = async () => {
+    if (!generatedMnemonic) return;
+    try {
+      await navigator.clipboard.writeText(generatedMnemonic);
+      toast.success("Recovery phrase copied");
+    } catch {
+      toast.error("Could not copy the recovery phrase");
+    }
   };
 
   const handleTestKey = async () => {
     setIsTesting(true);
     try {
       const result = await testEncryptionKey();
-
       if (result.success) {
-        toast.success(result.message, {
-          description: "Your key is working correctly and ready to use.",
-          duration: 5000,
-        });
+        toast.success("Encryption key verified");
       } else {
-        toast.error(result.message, {
-          description: "Please regenerate your key or check your backup.",
-          duration: 7000,
-        });
+        toast.error(result.message);
       }
-    } catch (error) {
-      toast.error("Test failed", {
-        description: "An unexpected error occurred while testing your key.",
-      });
+    } catch {
+      toast.error("The encryption-key test failed");
     } finally {
       setIsTesting(false);
     }
   };
 
+  const renderError = () =>
+    error ? (
+      <div
+        className="flex items-start gap-2 border border-destructive/50 bg-destructive/5 px-4 py-3 text-sm"
+        role="alert"
+      >
+        <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0 text-destructive" />
+        <span>{error}</span>
+      </div>
+    ) : null;
+
+  const renderRecovery = () => (
+    <div className="border">
+      <div className="border-b p-5 sm:p-6">
+        <div className="flex h-9 w-9 items-center justify-center border">
+          <KeyRound className="h-4 w-4" />
+        </div>
+        <h2 className="mt-4 text-base font-semibold">Recover your key</h2>
+        <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">
+          Enter the recovery phrase you saved when you created your encryption
+          key.
+        </p>
+      </div>
+
+      <div className="space-y-5 p-5 sm:p-6">
+        <div className="space-y-2">
+          <Label htmlFor="mnemonicInput">Recovery phrase</Label>
+          <Textarea
+            id="mnemonicInput"
+            value={inputMnemonic}
+            onChange={(event) => {
+              setInputMnemonic(event.target.value);
+              setError("");
+            }}
+            onKeyDown={(event) => {
+              if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+                handleRecoverKey();
+              }
+            }}
+            placeholder="Enter your 12-word recovery phrase"
+            rows={4}
+            autoComplete="off"
+            spellCheck={false}
+            disabled={isRecovering}
+          />
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <ShieldCheck className="h-3.5 w-3.5" />
+            Processed only in this browser tab and never sent to the server.
+          </div>
+        </div>
+
+        {renderError()}
+
+        <Button
+          onClick={handleRecoverKey}
+          disabled={!inputMnemonic.trim() || isRecovering}
+          className="w-full sm:w-auto"
+        >
+          {isRecovering ? (
+            <>
+              <Loader2 className="animate-spin" />
+              Recovering key
+            </>
+          ) : (
+            <>
+              <KeyRound />
+              Recover and continue
+            </>
+          )}
+        </Button>
+
+        <div className="border-t pt-4">
+          <button
+            type="button"
+            onClick={() => setShowFileUpload((visible) => !visible)}
+            className="flex items-center gap-2 text-xs font-medium hover:underline"
+            aria-expanded={showFileUpload}
+          >
+            <FileKey className="h-4 w-4" />
+            Import a legacy JSON key
+          </button>
+
+          {showFileUpload && (
+            <div className="mt-4 border p-4">
+              <p className="text-xs leading-relaxed text-muted-foreground">
+                Use this only if you previously downloaded an
+                <span className="mx-1 font-medium text-foreground">
+                  encryption-key.json
+                </span>
+                file. Keep that JSON file as your backup.
+              </p>
+              <Label className="mt-3 inline-flex h-9 cursor-pointer items-center gap-2 border px-4 text-xs font-medium hover:bg-muted/40">
+                {isImporting ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Upload className="h-4 w-4" />
+                )}
+                {isImporting ? "Importing key" : "Choose JSON key"}
+                <Input
+                  type="file"
+                  accept=".json,application/json"
+                  onChange={handleFileUpload}
+                  className="sr-only"
+                  disabled={isImporting}
+                  aria-label="Upload your encryption key file"
+                />
+              </Label>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderGeneratedKey = () => {
+    if (!generatedMnemonic) return null;
+    const words = generatedMnemonic.split(" ");
+
+    return (
+      <div className="border">
+        <div className="border-b p-5 sm:p-6">
+          <div className="flex h-10 w-10 items-center justify-center border bg-foreground text-background">
+            <Check className="h-5 w-5" />
+          </div>
+          <h2 className="mt-4 text-lg font-semibold">
+            Your encryption key is ready
+          </h2>
+          <p className="mt-1.5 text-sm text-muted-foreground">
+            Save this recovery phrase now. It is the only way to restore access
+            on another device.
+          </p>
+        </div>
+
+        <div className="space-y-5 p-5 sm:p-6">
+          <div className="grid grid-cols-2 border sm:grid-cols-3">
+            {words.map((word, index) => (
+              <div
+                key={`${word}-${index}`}
+                className="flex items-center gap-2 border-b border-r px-3 py-3 text-sm"
+              >
+                <span className="w-5 text-[10px] text-muted-foreground">
+                  {index + 1}.
+                </span>
+                <span className="font-medium">{word}</span>
+              </div>
+            ))}
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" size="sm" onClick={handleCopyMnemonic}>
+              <Clipboard />
+              Copy phrase
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleDownloadMnemonic}
+            >
+              <Download />
+              Download phrase
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleTestKey}
+              disabled={isTesting}
+            >
+              {isTesting ? (
+                <Loader2 className="animate-spin" />
+              ) : (
+                <ShieldCheck />
+              )}
+              {isTesting ? "Testing key" : "Test key"}
+            </Button>
+          </div>
+
+          <div className="flex items-start gap-2 border border-destructive/40 bg-destructive/5 px-4 py-3 text-xs leading-relaxed">
+            <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0 text-destructive" />
+            <span>
+              Anyone with this phrase can decrypt your files. ZeroDrive cannot
+              recover it if you lose it.
+            </span>
+          </div>
+
+          <Button
+            onClick={() => navigate(returnTo)}
+            className="w-full sm:w-auto"
+          >
+            {returnLabel}
+          </Button>
+        </div>
+      </div>
+    );
+  };
+
+  const renderGeneration = () =>
+    generatedMnemonic ? (
+      renderGeneratedKey()
+    ) : (
+      <div className="border">
+        <div className="border-b p-5 sm:p-6">
+          <div className="flex h-9 w-9 items-center justify-center border">
+            <KeyRound className="h-4 w-4" />
+          </div>
+          <h2 className="mt-4 text-base font-semibold">
+            Create a new encryption key
+          </h2>
+          <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">
+            Use this for a new vault. Creating another key will not decrypt
+            files protected by an older one.
+          </p>
+        </div>
+
+        <div className="space-y-5 p-5 sm:p-6">
+          <div className="grid gap-3 text-sm sm:grid-cols-3">
+            <div className="flex items-start gap-2">
+              <Check className="mt-0.5 h-4 w-4 text-green-600" />
+              <span>Generated locally</span>
+            </div>
+            <div className="flex items-start gap-2">
+              <Check className="mt-0.5 h-4 w-4 text-green-600" />
+              <span>12-word recovery</span>
+            </div>
+            <div className="flex items-start gap-2">
+              <Check className="mt-0.5 h-4 w-4 text-green-600" />
+              <span>No server copy</span>
+            </div>
+          </div>
+
+          {renderError()}
+
+          <Button onClick={openGenerateWarning} disabled={isGenerating}>
+            {isGenerating ? (
+              <>
+                <Loader2 className="animate-spin" />
+                Creating key
+              </>
+            ) : (
+              <>
+                <KeyRound />
+                Create new key
+              </>
+            )}
+          </Button>
+        </div>
+      </div>
+    );
+
   return (
     <>
-      {/* Warning Dialog - Shown before generating mnemonic */}
       <Dialog open={showGenerateWarning} onOpenChange={setShowGenerateWarning}>
-        <DialogContent className="max-w-xl">
+        <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-destructive">
-              <AlertCircle className="h-5 w-5" />
-              IMPORTANT: Read Before Generating Key
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-destructive" />
+              Before you create a new key
             </DialogTitle>
             <DialogDescription>
-              Please understand the consequences before proceeding
+              This recovery phrase cannot be reset or replaced.
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4">
-            {/* Main Warning */}
-            <div className="p-4 border-2 border-destructive rounded-md bg-destructive/10">
-              <p className="text-sm font-bold text-destructive mb-2">
-                ⚠️ Your Files Will Be PERMANENTLY Lost if You Lose This Key
-              </p>
-              <p className="text-sm text-muted-foreground">
-                Unlike a password, we <strong>CANNOT</strong> reset or recover
-                your encryption key. If you lose it, your files are{" "}
-                <strong>gone forever</strong>.
-              </p>
+            <div className="border border-destructive/40 bg-destructive/5 p-4 text-sm leading-relaxed">
+              Files encrypted with this key are permanently inaccessible if the
+              recovery phrase is lost.
             </div>
 
-            {/* What to Expect */}
-            <div className="space-y-3">
-              <p className="text-sm font-semibold">Before you continue:</p>
-              <ul className="text-sm space-y-2 list-disc list-inside text-muted-foreground">
-                <li>You will receive a 12-word backup phrase</li>
-                <li>
-                  You <strong>MUST</strong> write it down or download it
-                </li>
-                <li>Keep it somewhere safe (password manager, safe, etc.)</li>
-                <li>
-                  <strong>NEVER</strong> share it with anyone
-                </li>
-              </ul>
-            </div>
-
-            {/* Confirmation Checkboxes */}
-            <div className="space-y-3 pt-2 border-t">
-              <div className="flex items-start space-x-2">
+            <div className="space-y-3 border-t pt-4">
+              <div className="flex items-start gap-2">
                 <Checkbox
                   id="understand-loss"
                   checked={understandLoss}
@@ -395,13 +522,13 @@ export const KeyManagementPage: React.FC = () => {
                 />
                 <label
                   htmlFor="understand-loss"
-                  className="text-sm leading-tight cursor-pointer select-none"
+                  className="cursor-pointer select-none text-sm leading-tight"
                 >
-                  I understand that losing my backup phrase means permanent loss
-                  of <strong>ALL</strong> my files
+                  I understand that losing this phrase means permanent loss of
+                  access to my files
                 </label>
               </div>
-              <div className="flex items-start space-x-2">
+              <div className="flex items-start gap-2">
                 <Checkbox
                   id="ready-to-save"
                   checked={readyToSave}
@@ -411,28 +538,26 @@ export const KeyManagementPage: React.FC = () => {
                 />
                 <label
                   htmlFor="ready-to-save"
-                  className="text-sm leading-tight cursor-pointer select-none"
+                  className="cursor-pointer select-none text-sm leading-tight"
                 >
-                  I am prepared to save my backup phrase securely right now
+                  I am ready to save the recovery phrase now
                 </label>
               </div>
             </div>
           </div>
 
-          <DialogFooter className="flex-col sm:flex-row gap-2">
+          <DialogFooter className="gap-2">
             <Button
               variant="outline"
               onClick={() => setShowGenerateWarning(false)}
-              className="w-full sm:w-auto"
             >
               Cancel
             </Button>
             <Button
-              onClick={handleGenerateNewMnemonicAndKey}
-              disabled={!understandLoss || !readyToSave}
-              className="w-full sm:w-auto"
+              onClick={handleGenerateKey}
+              disabled={!understandLoss || !readyToSave || isGenerating}
             >
-              I Understand, Generate My Key
+              Create encryption key
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -440,155 +565,48 @@ export const KeyManagementPage: React.FC = () => {
 
       <div className="space-y-6">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Key Management</h1>
-          <p className="text-muted-foreground mt-1">
-            {viewMode === "recover"
-              ? "Recover your encryption key using your mnemonic phrase"
-              : "Create a new encryption key for securing your files"}
+          <h1 className="text-2xl tracking-tight">Key Management</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Recover access or create the key that protects your encrypted files.
           </p>
         </div>
 
-        <div className="flex gap-5">
-          <Card className="sm:max-w-lg w-full h-fit">
-            <CardHeader>
-              <CardTitle>
-                {viewMode === "recover"
-                  ? "Recover Your Key"
-                  : "Create New Key"}
-              </CardTitle>
-              <CardDescription>
-                {viewMode === "recover"
-                  ? "Enter your mnemonic phrase to load your encryption key."
-                  : "Generate a new secure mnemonic phrase to create your encryption key. Save it securely!"}
-              </CardDescription>
-            </CardHeader>
+        {!generatedMnemonic && (
+          <div
+            className="grid grid-cols-2 border"
+            role="tablist"
+            aria-label="Key management mode"
+          >
+            <button
+              type="button"
+              role="tab"
+              aria-selected={mode === "recover"}
+              onClick={() => switchMode("recover")}
+              className={`flex items-center justify-center gap-2 border-r px-4 py-3 text-sm font-medium ${
+                mode === "recover" ? "bg-muted/60" : "hover:bg-muted/30"
+              }`}
+            >
+              <KeyRound className="h-4 w-4" />
+              Recover existing key
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={mode === "generate"}
+              onClick={() => switchMode("generate")}
+              className={`flex items-center justify-center gap-2 px-4 py-3 text-sm font-medium ${
+                mode === "generate" ? "bg-muted/60" : "hover:bg-muted/30"
+              }`}
+            >
+              <FileKey className="h-4 w-4" />
+              Create new key
+            </button>
+          </div>
+        )}
 
-            {viewMode === "recover" && (
-              <>
-                <CardContent className="grid gap-4">
-                  <div className="grid gap-3">
-                    <Textarea
-                      id="mnemonicInput"
-                      placeholder="Enter your 12 or 24 word mnemonic phrase here..."
-                      value={inputMnemonic}
-                      onChange={(e) => setInputMnemonic(e.target.value)}
-                      rows={3}
-                    />
-                    <Button
-                      onClick={handleLoadKeyFromMnemonic}
-                      disabled={!inputMnemonic.trim()}
-                    >
-                      Load Key from Mnemonic
-                    </Button>
-                  </div>
-                  <Button
-                    variant="link"
-                    onClick={switchToGenerate}
-                    className="p-0 h-auto text-sm self-start"
-                  >
-                    Don't have a key? Create new secure mnemonic.
-                  </Button>
-                </CardContent>
-                <CardFooter className="flex flex-col items-start gap-2 pt-4 border-t">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setShowFileUpload(!showFileUpload)}
-                  >
-                    {showFileUpload
-                      ? "Hide File Upload"
-                      : "Advanced: Use Existing Key File (.json)"}
-                  </Button>
-                  {showFileUpload && (
-                    <div className="w-full pt-4 grid gap-3">
-                      <CardDescription>
-                        If you have an existing encryption key file
-                        (`encryption-key.json`), you can upload it here.
-                      </CardDescription>
-                      <Label className="block text-sm bg-secondary text-secondary-foreground hover:bg-secondary/80 border border-input cursor-pointer p-2 text-center rounded-md">
-                        <span>Upload your encryption key file</span>
-                        <Input
-                          type="file"
-                          accept=".json"
-                          onChange={handleFileUpload}
-                          className="hidden"
-                        />
-                      </Label>
-                    </div>
-                  )}
-                </CardFooter>
-              </>
-            )}
-
-            {viewMode === "generate" && (
-              <CardContent className="grid gap-4">
-                <Button
-                  onClick={handleShowWarning}
-                  disabled={!!generatedMnemonic}
-                >
-                  {generatedMnemonic
-                    ? "Mnemonic Generated!"
-                    : "Generate New Secure Mnemonic & Key"}
-                </Button>
-                {generatedMnemonic && (
-                  <>
-                    <div className="mt-3 p-3 border rounded-md bg-muted space-y-3">
-                      <div>
-                        <p className="text-sm text-destructive font-semibold mb-1">
-                          IMPORTANT: Save this mnemonic phrase in a safe place.
-                          Do not share it.
-                        </p>
-                        <Textarea
-                          readOnly
-                          value={generatedMnemonic}
-                          rows={3}
-                          className="font-mono text-sm select-all"
-                        />
-                        <p className="text-xs text-muted-foreground mt-1">
-                          This phrase is the ONLY way to recover your encryption
-                          key.
-                        </p>
-                      </div>
-                      <div className="flex gap-2">
-                        <Button
-                          onClick={handleDownloadMnemonic}
-                          variant="secondary"
-                          size="sm"
-                        >
-                          Download Mnemonic (.txt)
-                        </Button>
-                        <Button
-                          onClick={handleTestKey}
-                          variant="outline"
-                          size="sm"
-                          disabled={isTesting}
-                        >
-                          {isTesting ? "Testing..." : "Test Your Key"}
-                        </Button>
-                      </div>
-                    </div>
-                  </>
-                )}
-                <Button
-                  variant="link"
-                  onClick={switchToRecover}
-                  className="p-0 h-auto text-sm self-start mt-2"
-                >
-                  Already have a key? Enter your mnemonic.
-                </Button>
-              </CardContent>
-            )}
-
-            {error && (
-              <CardContent>
-                <p className="text-red-500 text-sm font-medium p-3 bg-destructive/10 rounded-md mt-4">
-                  {error}
-                </p>
-              </CardContent>
-            )}
-          </Card>
-
-          <DeviceManagement />
+        <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1.5fr)_minmax(280px,0.75fr)]">
+          {mode === "recover" ? renderRecovery() : renderGeneration()}
+          <DeviceManagement refreshKey={keyStatusVersion} />
         </div>
       </div>
     </>

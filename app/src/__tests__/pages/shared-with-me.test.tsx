@@ -1,934 +1,376 @@
-/**
- * UI Component Tests for Shared With Me Page
- *
- * Tests shared file loading, downloads, user interactions, and state management
- */
-
-import React from 'react';
-import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
-import { BrowserRouter } from 'react-router-dom';
-import SharedWithMePage from '../../pages/shared-with-me';
-import '@testing-library/jest-dom';
-
-import { getUserEmail } from '../../utils/authService';
-import apiClient from '../../utils/apiClient';
+import React from "react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
+import SharedWithMePage from "../../pages/shared-with-me";
+import { getUserEmail } from "../../utils/authService";
+import apiClient from "../../utils/apiClient";
 import {
-  hashEmail,
   decryptSharedFile,
-  arrayBufferToBase64,
-  fetchUserPublicKey,
   downloadEncryptedFile,
-  deleteFileFromStorage,
-} from '../../utils/fileSharing';
-import { getStoredKey } from '../../utils/cryptoUtils';
-import { getUserKeyPair } from '../../utils/keyStorage';
-import { uploadAndSyncFile } from '../../utils/fileOperations';
-import { getMnemonic } from '../../utils/mnemonicManager';
-import { recoverRsaKeysIfNeeded } from '../../utils/rsaKeyRecovery';
-import { toast } from 'sonner';
+  hashEmail,
+} from "../../utils/fileSharing";
+import { getStoredKey } from "../../utils/cryptoUtils";
+import { getUserKeyPair, userHasStoredKeys } from "../../utils/keyStorage";
+import { uploadAndSyncFile } from "../../utils/fileOperations";
+import { getMnemonic, setMnemonic } from "../../utils/mnemonicManager";
+import { downloadEncryptedRsaKeyFromDrive } from "../../utils/gdriveKeyStorage";
+import { decryptRsaPrivateKeyWithAesKey } from "../../utils/rsaKeyManager";
 
-// Mock navigation
 const mockNavigate = jest.fn();
-jest.mock('react-router-dom', () => ({
-  ...jest.requireActual('react-router-dom'),
+
+jest.mock("react-router-dom", () => ({
+  ...jest.requireActual("react-router-dom"),
   useNavigate: () => mockNavigate,
 }));
 
-// Mock authService
-jest.mock('../../utils/authService', () => ({
+jest.mock("../../utils/authService", () => ({
   getUserEmail: jest.fn(),
 }));
 
-// Mock apiClient
-jest.mock('../../utils/apiClient', () => ({
+jest.mock("../../utils/apiClient", () => ({
   __esModule: true,
   default: {
     sharedFiles: {
       getForUser: jest.fn(),
-      delete: jest.fn(),
+      recordAccess: jest.fn(),
     },
-    get: jest.fn(),
   },
 }));
 
-// Mock fileSharing utilities
-jest.mock('../../utils/fileSharing', () => ({
-  hashEmail: jest.fn(),
+jest.mock("../../utils/fileSharing", () => ({
+  arrayBufferToBase64: jest.fn(() => "base64-key"),
   decryptSharedFile: jest.fn(),
-  arrayBufferToBase64: jest.fn(),
-  storeUserPublicKey: jest.fn(),
-  deleteFileFromStorage: jest.fn(),
-  fetchUserPublicKey: jest.fn(),
   downloadEncryptedFile: jest.fn(),
+  hashEmail: jest.fn(),
 }));
 
-// Mock cryptoUtils
-jest.mock('../../utils/cryptoUtils', () => ({
+jest.mock("../../utils/cryptoUtils", () => ({
   getStoredKey: jest.fn(),
 }));
 
-// Mock keyStorage
-jest.mock('../../utils/keyStorage', () => ({
+jest.mock("../../utils/keyStorage", () => ({
   getUserKeyPair: jest.fn(),
+  userHasStoredKeys: jest.fn(),
 }));
 
-// Mock fileOperations
-jest.mock('../../utils/fileOperations', () => ({
+jest.mock("../../utils/fileOperations", () => ({
   uploadAndSyncFile: jest.fn(),
 }));
 
-// Mock mnemonicManager
-jest.mock('../../utils/mnemonicManager', () => ({
+jest.mock("../../utils/mnemonicManager", () => ({
   getMnemonic: jest.fn(),
+  setMnemonic: jest.fn(),
 }));
 
-// Mock rsaKeyRecovery
-jest.mock('../../utils/rsaKeyRecovery', () => ({
-  recoverRsaKeysIfNeeded: jest.fn(),
+jest.mock("../../utils/gdriveKeyStorage", () => ({
+  downloadEncryptedRsaKeyFromDrive: jest.fn(),
 }));
 
-// Mock analyticsTracker
-jest.mock('../../utils/analyticsTracker', () => ({
-  trackEvent: jest.fn(),
-  AnalyticsEvent: {
-    SHARED_FILE_ACCESSED: 'shared_file_accessed',
-  },
-  AnalyticsCategory: {
-    SHARING: 'sharing',
-  },
+jest.mock("../../utils/rsaKeyManager", () => ({
+  decryptRsaPrivateKeyWithAesKey: jest.fn(),
 }));
 
-// Mock toast
-jest.mock('sonner', () => ({
+jest.mock("../../utils/analyticsTracker", () => ({
+  trackEvent: jest.fn().mockResolvedValue(undefined),
+  AnalyticsEvent: { SHARED_FILE_ACCESSED: "shared_file_accessed" },
+  AnalyticsCategory: { SHARING: "sharing" },
+}));
+
+jest.mock("sonner", () => ({
   toast: {
     error: jest.fn(),
     success: jest.fn(),
-    loading: jest.fn(),
-    warning: jest.fn(),
-    info: jest.fn(),
-    dismiss: jest.fn(),
   },
 }));
 
-const mockGetUserEmail = getUserEmail as jest.MockedFunction<typeof getUserEmail>;
+const mockGetUserEmail = getUserEmail as jest.MockedFunction<
+  typeof getUserEmail
+>;
 const mockHashEmail = hashEmail as jest.MockedFunction<typeof hashEmail>;
-const mockDecryptSharedFile = decryptSharedFile as jest.MockedFunction<typeof decryptSharedFile>;
-const mockArrayBufferToBase64 = arrayBufferToBase64 as jest.MockedFunction<typeof arrayBufferToBase64>;
-const mockFetchUserPublicKey = fetchUserPublicKey as jest.MockedFunction<typeof fetchUserPublicKey>;
-const mockDownloadEncryptedFile = downloadEncryptedFile as jest.MockedFunction<typeof downloadEncryptedFile>;
-const mockDeleteFileFromStorage = deleteFileFromStorage as jest.MockedFunction<typeof deleteFileFromStorage>;
-const mockGetStoredKey = getStoredKey as jest.MockedFunction<typeof getStoredKey>;
-const mockGetUserKeyPair = getUserKeyPair as jest.MockedFunction<typeof getUserKeyPair>;
-const mockUploadAndSyncFile = uploadAndSyncFile as jest.MockedFunction<typeof uploadAndSyncFile>;
+const mockGetStoredKey = getStoredKey as jest.MockedFunction<
+  typeof getStoredKey
+>;
 const mockGetMnemonic = getMnemonic as jest.MockedFunction<typeof getMnemonic>;
-const mockRecoverRsaKeysIfNeeded = recoverRsaKeysIfNeeded as jest.MockedFunction<typeof recoverRsaKeysIfNeeded>;
+const mockSetMnemonic = setMnemonic as jest.MockedFunction<typeof setMnemonic>;
+const mockGetUserKeyPair = getUserKeyPair as jest.MockedFunction<
+  typeof getUserKeyPair
+>;
+const mockUserHasStoredKeys = userHasStoredKeys as jest.MockedFunction<
+  typeof userHasStoredKeys
+>;
+const mockDownloadKeyBackup =
+  downloadEncryptedRsaKeyFromDrive as jest.MockedFunction<
+    typeof downloadEncryptedRsaKeyFromDrive
+  >;
+const mockDecryptKeyBackup =
+  decryptRsaPrivateKeyWithAesKey as jest.MockedFunction<
+    typeof decryptRsaPrivateKeyWithAesKey
+  >;
+const mockDownloadEncryptedFile = downloadEncryptedFile as jest.MockedFunction<
+  typeof downloadEncryptedFile
+>;
+const mockDecryptSharedFile = decryptSharedFile as jest.MockedFunction<
+  typeof decryptSharedFile
+>;
+const mockUploadAndSyncFile = uploadAndSyncFile as jest.MockedFunction<
+  typeof uploadAndSyncFile
+>;
 
-// Helper to render component with Router
-const renderWithRouter = (component: React.ReactElement) => {
-  return render(<BrowserRouter>{component}</BrowserRouter>);
+const databaseFile = {
+  id: "share-123",
+  file_id: "shared/storage-key",
+  file_name: "project-brief.pdf",
+  created_at: "2026-07-01T10:30:00.000Z",
+  expires_at: "2026-07-08T10:30:00.000Z",
+  encrypted_file_key: "wrapped-key",
+  file_size: 102400,
+  mime_type: "application/pdf",
 };
 
-// Mock shared file data
-const mockSharedFile = {
-  id: 'share-123',
-  fileId: 'file-456',
-  driveFileId: 'drive-789',
-  originalFileName: 'test-document.pdf',
-  sender: 'sender@example.com',
-  createdAt: '2024-01-15T10:30:00.000Z',
-  encryptedFileKey: 'encrypted-key-base64',
-  fileSize: 102400,
-  mimeType: 'application/pdf',
-  encrypted_file_blob_id: 'blob-123',
-};
+function renderPage() {
+  return render(
+    <MemoryRouter>
+      <SharedWithMePage />
+    </MemoryRouter>,
+  );
+}
 
-describe('SharedWithMePage', () => {
-  let consoleErrorMock: jest.SpyInstance;
+function showFiles(files = [databaseFile]) {
+  (apiClient.sharedFiles.getForUser as jest.Mock).mockResolvedValue({
+    files,
+    total: files.length,
+    hasMore: false,
+  });
+}
 
+describe("SharedWithMePage", () => {
   beforeAll(() => {
-    // Suppress React act() warnings and expected async errors in tests
-    consoleErrorMock = jest.spyOn(console, 'error').mockImplementation((message) => {
-      if (
-        typeof message === 'string' &&
-        (message.includes('act(...)') || message.includes('not wrapped in act'))
-      ) {
-        return;
-      }
+    Object.defineProperty(URL, "createObjectURL", {
+      writable: true,
+      value: jest.fn(() => "blob:download"),
     });
-
-    // Mock URL.createObjectURL and revokeObjectURL
-    global.URL.createObjectURL = jest.fn(() => 'blob:mock-url');
-    global.URL.revokeObjectURL = jest.fn();
-  });
-
-  afterAll(() => {
-    consoleErrorMock.mockRestore();
-  });
-
-  afterEach(() => {
-    cleanup();
+    Object.defineProperty(URL, "revokeObjectURL", {
+      writable: true,
+      value: jest.fn(),
+    });
   });
 
   beforeEach(() => {
     jest.clearAllMocks();
-    mockNavigate.mockClear();
-
-    // Default mocks for auth
-    mockGetUserEmail.mockResolvedValue('test@example.com');
-    mockHashEmail.mockResolvedValue('hashed-email');
-
-    // Default mocks for key recovery
-    mockRecoverRsaKeysIfNeeded.mockResolvedValue({
-      success: true,
-      keysExisted: true,
-      recovered: false,
+    mockGetUserEmail.mockResolvedValue("recipient@example.com");
+    mockHashEmail.mockResolvedValue("recipient-hash");
+    mockGetStoredKey.mockResolvedValue({} as CryptoKey);
+    mockDownloadKeyBackup.mockResolvedValue(new Blob(["encrypted key"]));
+    mockDecryptKeyBackup.mockResolvedValue({
+      kty: "RSA",
+      d: "private",
     });
-
-    // Default mocks for empty file list
-    (apiClient.sharedFiles.getForUser as jest.Mock).mockResolvedValue({
-      success: true,
-      files: [],
+    mockUserHasStoredKeys.mockResolvedValue(true);
+    mockGetMnemonic.mockReturnValue("valid recovery phrase");
+    mockGetUserKeyPair.mockResolvedValue({
+      publicKeyJwk: { kty: "RSA" },
+      privateKeyJwk: { kty: "RSA", d: "private" },
     });
-
-    // Reset all other mocks to undefined (not called by default)
-    mockGetStoredKey.mockResolvedValue(undefined as any);
-    mockGetMnemonic.mockReturnValue(undefined as any);
-    mockGetUserKeyPair.mockResolvedValue(undefined as any);
-    mockDownloadEncryptedFile.mockResolvedValue(undefined as any);
-    mockDecryptSharedFile.mockResolvedValue(undefined as any);
-    mockUploadAndSyncFile.mockResolvedValue(undefined as any);
-    mockFetchUserPublicKey.mockResolvedValue(undefined as any);
-    mockDeleteFileFromStorage.mockResolvedValue(undefined as any);
+    mockDownloadEncryptedFile.mockResolvedValue(
+      new Blob(["ciphertext"], { type: "application/octet-stream" }),
+    );
+    mockDecryptSharedFile.mockResolvedValue({
+      decryptedFile: new Blob(["plaintext"], { type: "application/pdf" }),
+      fileName: "project-brief.pdf",
+    });
+    mockUploadAndSyncFile.mockResolvedValue({
+      id: "drive-copy",
+      name: "project-brief.pdf",
+      mimeType: "application/pdf",
+      userEmail: "recipient@example.com",
+      uploadedDate: new Date(),
+      folderId: null,
+    });
+    (apiClient.sharedFiles.recordAccess as jest.Mock).mockResolvedValue({
+      recorded: true,
+    });
+    showFiles([]);
   });
 
-  describe('Initial Render', () => {
-    it('should render the page', async () => {
-      renderWithRouter(<SharedWithMePage />);
+  it("renders a focused empty inbox", async () => {
+    renderPage();
 
-      await waitFor(() => {
-        expect(screen.getByText('Shared With Me')).toBeInTheDocument();
-      });
-    });
-
-    it('should display page description', async () => {
-      renderWithRouter(<SharedWithMePage />);
-
-      await waitFor(() => {
-        expect(
-          screen.getByText('View and access files that have been shared with you')
-        ).toBeInTheDocument();
-      });
-    });
-
-    it('should have refresh button', async () => {
-      renderWithRouter(<SharedWithMePage />);
-
-      await waitFor(() => {
-        const refreshButton = screen.getByRole('button', { name: /refresh/i });
-        expect(refreshButton).toBeInTheDocument();
-      });
-    });
-
-    it('should show loading state initially', () => {
-      renderWithRouter(<SharedWithMePage />);
-
-      expect(screen.getByText(/checking key status/i)).toBeInTheDocument();
-    });
+    expect(await screen.findByText("Your inbox is empty")).toBeInTheDocument();
+    expect(screen.getByText("Shared with me")).toBeInTheDocument();
+    expect(
+      screen.getByText(/files shared with this account/i),
+    ).toBeInTheDocument();
   });
 
-  describe('Authentication', () => {
-    it('should redirect to home if user not authenticated', async () => {
-      mockGetUserEmail.mockResolvedValue(null);
+  it("shows primary-key recovery as a clear prerequisite", async () => {
+    mockGetStoredKey.mockResolvedValue(null);
+    renderPage();
 
-      renderWithRouter(<SharedWithMePage />);
-
-      await waitFor(() => {
-        expect(mockNavigate).toHaveBeenCalledWith('/');
-      });
-    });
-
-    it('should redirect to home on authentication error', async () => {
-      mockGetUserEmail.mockRejectedValue(new Error('Auth failed'));
-
-      renderWithRouter(<SharedWithMePage />);
-
-      await waitFor(() => {
-        expect(mockNavigate).toHaveBeenCalledWith('/');
-      });
-    });
-
-    it('should get user email on mount', async () => {
-      renderWithRouter(<SharedWithMePage />);
-
-      await waitFor(() => {
-        expect(mockGetUserEmail).toHaveBeenCalled();
-      });
-    });
+    expect(
+      await screen.findByText("Recover your encryption key"),
+    ).toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole("button", { name: /open key management/i }),
+    );
+    expect(mockNavigate).toHaveBeenCalledWith(
+      "/key-management?returnTo=%2Fshared-with-me",
+    );
   });
 
-  describe('Key Status Check', () => {
-    it('should check for RSA keys on mount', async () => {
-      renderWithRouter(<SharedWithMePage />);
+  it("directs users to sharing setup when recipient keys are missing", async () => {
+    mockDownloadKeyBackup.mockRejectedValue(new Error("Backup not found"));
+    mockUserHasStoredKeys.mockResolvedValue(false);
+    mockGetMnemonic.mockReturnValue(null);
+    renderPage();
 
-      await waitFor(() => {
-        expect(mockRecoverRsaKeysIfNeeded).toHaveBeenCalledWith(
-          'test@example.com',
-          false
-        );
-      });
-    });
-
-    it('should show warning when keys not found', async () => {
-      mockRecoverRsaKeysIfNeeded.mockResolvedValue({
-        success: false,
-        keysExisted: false,
-        recovered: false,
-      });
-
-      renderWithRouter(<SharedWithMePage />);
-
-      await waitFor(() => {
-        expect(
-          screen.getByText(/Sharing Key Setup Incomplete or Not Found Locally/i)
-        ).toBeInTheDocument();
-      });
-    });
-
-    it('should show key setup buttons when keys missing', async () => {
-      mockRecoverRsaKeysIfNeeded.mockResolvedValue({
-        success: false,
-        keysExisted: false,
-        recovered: false,
-      });
-
-      renderWithRouter(<SharedWithMePage />);
-
-      await waitFor(() => {
-        expect(
-          screen.getByRole('button', { name: /go to key management/i })
-        ).toBeInTheDocument();
-        expect(
-          screen.getByRole('button', { name: /go to share files/i })
-        ).toBeInTheDocument();
-      });
-    });
-
-    it('should navigate to key management when button clicked', async () => {
-      mockRecoverRsaKeysIfNeeded.mockResolvedValue({
-        success: false,
-        keysExisted: false,
-        recovered: false,
-      });
-
-      renderWithRouter(<SharedWithMePage />);
-
-      const keyMgmtButton = await screen.findByRole('button', { name: /go to key management/i });
-      fireEvent.click(keyMgmtButton);
-
-      expect(mockNavigate).toHaveBeenCalledWith('/key-management');
-    });
-
-    it('should navigate to share files when button clicked', async () => {
-      mockRecoverRsaKeysIfNeeded.mockResolvedValue({
-        success: false,
-        keysExisted: false,
-        recovered: false,
-      });
-
-      renderWithRouter(<SharedWithMePage />);
-
-      const shareButton = await screen.findByRole('button', { name: /go to share files/i });
-      fireEvent.click(shareButton);
-
-      expect(mockNavigate).toHaveBeenCalledWith('/share');
-    });
+    expect(
+      await screen.findByText("Enable encrypted sharing"),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /enable sharing/i }));
+    expect(mockNavigate).toHaveBeenCalledWith("/share");
   });
 
-  describe('Shared Files Loading', () => {
-    it('should load shared files on mount', async () => {
-      renderWithRouter(<SharedWithMePage />);
+  it("uses the active AES key to unlock the sharing-key backup", async () => {
+    mockGetMnemonic.mockReturnValue(null);
+    showFiles();
+    renderPage();
 
-      await waitFor(() => {
-        expect(apiClient.sharedFiles.getForUser).toHaveBeenCalledWith(
-          'hashed-email'
-        );
-      });
-    });
-
-    it('should display shared files in table', async () => {
-      (apiClient.sharedFiles.getForUser as jest.Mock).mockResolvedValue({
-        success: true,
-        files: [
-          {
-            id: mockSharedFile.id,
-            file_id: mockSharedFile.fileId,
-            drive_file_id: mockSharedFile.driveFileId,
-            file_name: mockSharedFile.originalFileName,
-            sender_hashed_email: mockSharedFile.sender,
-            created_at: mockSharedFile.createdAt,
-            encrypted_file_key: mockSharedFile.encryptedFileKey,
-            file_size: mockSharedFile.fileSize,
-            file_mime_type: mockSharedFile.mimeType,
-            encrypted_file_blob_id: mockSharedFile.encrypted_file_blob_id,
-          },
-        ],
-      });
-
-      renderWithRouter(<SharedWithMePage />);
-
-      await waitFor(() => {
-        expect(screen.getByText('test-document.pdf')).toBeInTheDocument();
-        expect(screen.getByText('100.0 KB')).toBeInTheDocument();
-      });
-    });
-
-    it('should show empty state when no files shared', async () => {
-      renderWithRouter(<SharedWithMePage />);
-
-      await waitFor(() => {
-        expect(
-          screen.getByText('No files have been shared with you yet.')
-        ).toBeInTheDocument();
-      });
-    });
-
-    it('should show loading state while fetching files', () => {
-      renderWithRouter(<SharedWithMePage />);
-
-      expect(screen.getByText(/checking key status/i)).toBeInTheDocument();
-    });
-
-    it('should display file size in KB', async () => {
-      (apiClient.sharedFiles.getForUser as jest.Mock).mockResolvedValue({
-        success: true,
-        files: [
-          {
-            id: 'file-1',
-            file_id: 'f1',
-            file_name: 'large-file.zip',
-            sender_hashed_email: 'sender@test.com',
-            created_at: '2024-01-15T10:30:00.000Z',
-            encrypted_file_key: 'key',
-            file_size: 512000,
-            file_mime_type: 'application/zip',
-            encrypted_file_blob_id: 'blob-1',
-          },
-        ],
-      });
-
-      renderWithRouter(<SharedWithMePage />);
-
-      await waitFor(() => {
-        expect(screen.getByText('500.0 KB')).toBeInTheDocument();
-      });
-    });
-
-    it('should handle files without size', async () => {
-      (apiClient.sharedFiles.getForUser as jest.Mock).mockResolvedValue({
-        success: true,
-        files: [
-          {
-            id: 'file-1',
-            file_id: 'f1',
-            file_name: 'unknown-size.txt',
-            sender_hashed_email: 'sender@test.com',
-            created_at: '2024-01-15T10:30:00.000Z',
-            encrypted_file_key: 'key',
-            file_mime_type: 'text/plain',
-            encrypted_file_blob_id: 'blob-1',
-          },
-        ],
-      });
-
-      renderWithRouter(<SharedWithMePage />);
-
-      await waitFor(() => {
-        expect(screen.getByText('N/A')).toBeInTheDocument();
-      });
-    });
-
-    it('should handle hex-encoded encrypted keys', async () => {
-      (apiClient.sharedFiles.getForUser as jest.Mock).mockResolvedValue({
-        success: true,
-        files: [
-          {
-            id: 'file-1',
-            file_id: 'f1',
-            file_name: 'hex-key-file.pdf',
-            sender_hashed_email: 'sender@test.com',
-            created_at: '2024-01-15T10:30:00.000Z',
-            encrypted_file_key: '\\x48656c6c6f',
-            file_size: 1024,
-            file_mime_type: 'application/pdf',
-            encrypted_file_blob_id: 'blob-1',
-          },
-        ],
-      });
-
-      mockArrayBufferToBase64.mockReturnValue('SGVsbG8=');
-
-      renderWithRouter(<SharedWithMePage />);
-
-      await waitFor(() => {
-        expect(screen.getByText('hex-key-file.pdf')).toBeInTheDocument();
-      });
-    });
+    expect(await screen.findByText("project-brief.pdf")).toBeInTheDocument();
+    expect(mockDownloadKeyBackup).toHaveBeenCalled();
+    expect(mockDecryptKeyBackup).toHaveBeenCalledWith(
+      expect.any(Blob),
+      expect.any(Object),
+    );
+    expect(
+      screen.queryByText("Unlock your sharing key"),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^download$/i })).toBeEnabled();
   });
 
-  describe('Error Handling', () => {
-    it('should show error toast on load failure', async () => {
-      (apiClient.sharedFiles.getForUser as jest.Mock).mockRejectedValue(
-        new Error('Network error')
-      );
+  it("distinguishes an active file key from a locked sharing key", async () => {
+    mockDownloadKeyBackup.mockRejectedValue(new Error("Legacy local key"));
+    mockGetMnemonic.mockReturnValue(null);
+    showFiles();
+    renderPage();
 
-      renderWithRouter(<SharedWithMePage />);
+    expect(
+      await screen.findByText("Unlock your sharing key"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/file encryption key is active/i),
+    ).toBeInTheDocument();
 
-      await waitFor(() => {
-        expect(toast.error).toHaveBeenCalledWith(
-          'Failed to load shared files',
-          expect.objectContaining({
-            description: 'Network error',
-          })
-        );
-      });
+    fireEvent.change(screen.getByLabelText("Recovery phrase for sharing key"), {
+      target: { value: "valid recovery phrase" },
     });
+    fireEvent.click(
+      screen.getByRole("button", { name: /unlock sharing key/i }),
+    );
 
-    it('should handle unknown errors gracefully', async () => {
-      (apiClient.sharedFiles.getForUser as jest.Mock).mockRejectedValue(
-        'String error'
-      );
-
-      renderWithRouter(<SharedWithMePage />);
-
-      await waitFor(() => {
-        expect(toast.error).toHaveBeenCalledWith(
-          'Failed to load shared files',
-          expect.objectContaining({
-            description: 'Unknown error',
-          })
-        );
-      });
-    });
+    await waitFor(() =>
+      expect(mockSetMnemonic).toHaveBeenCalledWith("valid recovery phrase"),
+    );
+    expect(
+      screen.queryByText("Unlock your sharing key"),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^download$/i })).toBeEnabled();
   });
 
-  describe('Refresh Functionality', () => {
-    it('should reload files when refresh button clicked', async () => {
-      (apiClient.sharedFiles.getForUser as jest.Mock).mockResolvedValue({
-        success: true,
-        files: [],
-      });
+  it("renders current backend metadata and separates file actions", async () => {
+    showFiles();
+    renderPage();
 
-      renderWithRouter(<SharedWithMePage />);
-
-      await waitFor(() => {
-        expect(apiClient.sharedFiles.getForUser).toHaveBeenCalledTimes(1);
-      });
-
-      const refreshButton = screen.getByRole('button', { name: /refresh/i });
-      fireEvent.click(refreshButton);
-
-      await waitFor(() => {
-        expect(apiClient.sharedFiles.getForUser).toHaveBeenCalledTimes(2);
-      });
-    });
-
-    it('should show loading toast while refreshing', async () => {
-      renderWithRouter(<SharedWithMePage />);
-
-      // Wait for initial loading to complete
-      await waitFor(() => {
-        const refreshButton = screen.getByRole('button', { name: /refresh/i });
-        expect(refreshButton).toBeInTheDocument();
-        expect(refreshButton).not.toBeDisabled();
-      });
-
-      const refreshButton = screen.getByRole('button', { name: /refresh/i });
-      fireEvent.click(refreshButton);
-
-      await waitFor(() => {
-        expect(toast.loading).toHaveBeenCalledWith('Refreshing shared files...');
-      });
-    });
-
-    it('should show success toast after refresh', async () => {
-      (apiClient.sharedFiles.getForUser as jest.Mock).mockResolvedValue({
-        success: true,
-        files: [],
-      });
-
-      renderWithRouter(<SharedWithMePage />);
-
-      // Wait for initial loading to complete
-      await waitFor(() => {
-        const refreshButton = screen.getByRole('button', { name: /refresh/i });
-        expect(refreshButton).toBeInTheDocument();
-        expect(refreshButton).not.toBeDisabled();
-      });
-
-      const refreshButton = screen.getByRole('button', { name: /refresh/i });
-      fireEvent.click(refreshButton);
-
-      await waitFor(() => {
-        expect(toast.success).toHaveBeenCalledWith('Shared files refreshed');
-      }, { timeout: 3000 });
-    });
-
-    it('should disable refresh button while loading', async () => {
-      renderWithRouter(<SharedWithMePage />);
-
-      await waitFor(() => {
-        screen.getByRole('button', { name: /refresh/i });
-      });
-
-      const refreshButton = screen.getByRole('button', { name: /refresh/i });
-      fireEvent.click(refreshButton);
-
-      expect(refreshButton).toBeDisabled();
-    });
+    expect(await screen.findByText("project-brief.pdf")).toBeInTheDocument();
+    expect(screen.getByText(/100\.0 KB/)).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /^download$/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /save to storage/i }),
+    ).toBeInTheDocument();
   });
 
-  describe('File Download', () => {
-    beforeEach(() => {
-      const mockCryptoKey = { type: 'secret' } as CryptoKey;
-      mockGetStoredKey.mockResolvedValue(mockCryptoKey);
-      mockGetMnemonic.mockReturnValue('test mnemonic phrase words');
-      mockGetUserKeyPair.mockResolvedValue({
-        publicKeyJwk: { kty: 'RSA', n: 'test', e: 'AQAB' },
-        privateKeyJwk: { kty: 'RSA', n: 'test', e: 'AQAB', d: 'secret' },
-      });
-      mockDownloadEncryptedFile.mockResolvedValue(
-        new Blob(['encrypted'], { type: 'application/octet-stream' })
-      );
-      mockDecryptSharedFile.mockResolvedValue({
-        decryptedFile: new Blob(['decrypted'], { type: 'application/pdf' }),
-        fileName: 'test-document.pdf',
-      });
-      mockUploadAndSyncFile.mockResolvedValue({
-        id: 'file-123',
-        name: 'test-document.pdf',
-        mimeType: 'application/pdf',
-        userEmail: 'test@example.com',
-        uploadedDate: new Date(),
-        folderId: null,
-      });
-      (apiClient.sharedFiles.delete as jest.Mock).mockResolvedValue({
-        success: true,
-      });
+  it("filters the inbox by filename", async () => {
+    showFiles([
+      databaseFile,
+      {
+        ...databaseFile,
+        id: "share-456",
+        file_id: "shared/other-key",
+        file_name: "team-photo.png",
+        mime_type: "image/png",
+      },
+    ]);
+    renderPage();
+    await screen.findByText("project-brief.pdf");
+
+    fireEvent.change(screen.getByLabelText("Search shared files"), {
+      target: { value: "photo" },
     });
 
-    it('should show download button for each file', async () => {
-      (apiClient.sharedFiles.getForUser as jest.Mock).mockResolvedValue({
-        success: true,
-        files: [
-          {
-            id: mockSharedFile.id,
-            file_id: mockSharedFile.fileId,
-            file_name: mockSharedFile.originalFileName,
-            sender_hashed_email: mockSharedFile.sender,
-            created_at: mockSharedFile.createdAt,
-            encrypted_file_key: mockSharedFile.encryptedFileKey,
-            file_size: mockSharedFile.fileSize,
-            file_mime_type: mockSharedFile.mimeType,
-            encrypted_file_blob_id: mockSharedFile.encrypted_file_blob_id,
-          },
-        ],
-      });
-
-      renderWithRouter(<SharedWithMePage />);
-
-      await waitFor(() => {
-        expect(screen.getByRole('button', { name: /download/i })).toBeInTheDocument();
-      });
-    });
-
-    it('should redirect to key management if no primary key', async () => {
-      mockGetStoredKey.mockResolvedValue(null);
-
-      (apiClient.sharedFiles.getForUser as jest.Mock).mockResolvedValue({
-        success: true,
-        files: [
-          {
-            id: mockSharedFile.id,
-            file_id: mockSharedFile.fileId,
-            file_name: mockSharedFile.originalFileName,
-            sender_hashed_email: mockSharedFile.sender,
-            created_at: mockSharedFile.createdAt,
-            encrypted_file_key: mockSharedFile.encryptedFileKey,
-            encrypted_file_blob_id: mockSharedFile.encrypted_file_blob_id,
-          },
-        ],
-      });
-
-      renderWithRouter(<SharedWithMePage />);
-
-      const downloadButton = await screen.findByRole('button', { name: /download/i });
-      fireEvent.click(downloadButton);
-
-      await waitFor(() => {
-        expect(toast.error).toHaveBeenCalledWith(
-          'Primary encryption key required',
-          expect.any(Object)
-        );
-      });
-    });
-
-    it('should show processing state during download', async () => {
-      // Make download operations slow to observe processing state
-      mockDownloadEncryptedFile.mockImplementation(
-        () => new Promise(resolve => setTimeout(() => resolve(
-          new Blob(['encrypted'], { type: 'application/octet-stream' })
-        ), 100))
-      );
-
-      (apiClient.sharedFiles.getForUser as jest.Mock).mockResolvedValue({
-        success: true,
-        files: [
-          {
-            id: mockSharedFile.id,
-            file_id: mockSharedFile.fileId,
-            file_name: mockSharedFile.originalFileName,
-            sender_hashed_email: mockSharedFile.sender,
-            created_at: mockSharedFile.createdAt,
-            encrypted_file_key: mockSharedFile.encryptedFileKey,
-            encrypted_file_blob_id: mockSharedFile.encrypted_file_blob_id,
-          },
-        ],
-      });
-
-      renderWithRouter(<SharedWithMePage />);
-
-      await waitFor(() => {
-        expect(screen.getByRole('button', { name: /download/i })).toBeInTheDocument();
-      });
-
-      const downloadButton = screen.getByRole('button', { name: /download/i });
-      fireEvent.click(downloadButton);
-
-      await waitFor(() => {
-        expect(screen.getByText('Processing...')).toBeInTheDocument();
-      }, { timeout: 500 });
-    });
-
-    it('should download and decrypt file successfully', async () => {
-      (apiClient.sharedFiles.getForUser as jest.Mock).mockResolvedValue({
-        success: true,
-        files: [
-          {
-            id: mockSharedFile.id,
-            file_id: mockSharedFile.fileId,
-            file_name: mockSharedFile.originalFileName,
-            sender_hashed_email: mockSharedFile.sender,
-            created_at: mockSharedFile.createdAt,
-            encrypted_file_key: mockSharedFile.encryptedFileKey,
-            file_size: mockSharedFile.fileSize,
-            file_mime_type: mockSharedFile.mimeType,
-            encrypted_file_blob_id: mockSharedFile.encrypted_file_blob_id,
-          },
-        ],
-      });
-
-      renderWithRouter(<SharedWithMePage />);
-
-      await waitFor(() => {
-        expect(screen.getByRole('button', { name: /download/i })).toBeInTheDocument();
-      });
-
-      // Mock document.createElement for download link AFTER render
-      const mockLink = {
-        href: '',
-        download: '',
-        click: jest.fn(),
-        style: {},
-      };
-      const originalCreateElement = document.createElement.bind(document);
-      const createElementSpy = jest
-        .spyOn(document, 'createElement')
-        .mockImplementation((tagName: string) => {
-          if (tagName === 'a') {
-            return mockLink as any;
-          }
-          return originalCreateElement(tagName);
-        });
-      const appendChildSpy = jest.spyOn(document.body, 'appendChild').mockImplementation(() => mockLink as any);
-      const removeChildSpy = jest.spyOn(document.body, 'removeChild').mockImplementation();
-
-      const downloadButton = screen.getByRole('button', { name: /download/i });
-      fireEvent.click(downloadButton);
-
-      await waitFor(() => {
-        expect(mockDownloadEncryptedFile).toHaveBeenCalledWith(mockSharedFile.fileId);
-        expect(mockDecryptSharedFile).toHaveBeenCalled();
-      }, { timeout: 3000 });
-
-      createElementSpy.mockRestore();
-      appendChildSpy.mockRestore();
-      removeChildSpy.mockRestore();
-    });
-
-    it('should handle download errors gracefully', async () => {
-      mockDownloadEncryptedFile.mockRejectedValue(new Error('Download failed'));
-
-      (apiClient.sharedFiles.getForUser as jest.Mock).mockResolvedValue({
-        success: true,
-        files: [
-          {
-            id: mockSharedFile.id,
-            file_id: mockSharedFile.fileId,
-            file_name: mockSharedFile.originalFileName,
-            sender_hashed_email: mockSharedFile.sender,
-            created_at: mockSharedFile.createdAt,
-            encrypted_file_key: mockSharedFile.encryptedFileKey,
-            encrypted_file_blob_id: mockSharedFile.encrypted_file_blob_id,
-          },
-        ],
-      });
-
-      renderWithRouter(<SharedWithMePage />);
-
-      await waitFor(() => {
-        expect(screen.getByRole('button', { name: /download/i })).toBeInTheDocument();
-      });
-
-      const downloadButton = screen.getByRole('button', { name: /download/i });
-      fireEvent.click(downloadButton);
-
-      await waitFor(() => {
-        expect(toast.error).toHaveBeenCalledWith(
-          'Download or Decryption Failed',
-          expect.any(Object)
-        );
-      }, { timeout: 3000 });
-    });
+    expect(screen.getByText("team-photo.png")).toBeInTheDocument();
+    expect(screen.queryByText("project-brief.pdf")).not.toBeInTheDocument();
   });
 
-  describe('Privacy Information', () => {
-    it('should display secure file download information', async () => {
-      renderWithRouter(<SharedWithMePage />);
+  it("downloads without silently saving a vault copy", async () => {
+    showFiles();
+    const anchorClick = jest
+      .spyOn(HTMLAnchorElement.prototype, "click")
+      .mockImplementation();
+    renderPage();
 
-      await waitFor(() => {
-        expect(
-          screen.getByText(/About Secure File Downloads/i)
-        ).toBeInTheDocument();
-      });
-    });
+    fireEvent.click(await screen.findByRole("button", { name: /^download$/i }));
 
-    it('should explain decryption process', async () => {
-      renderWithRouter(<SharedWithMePage />);
-
-      await waitFor(() => {
-        expect(
-          screen.getByText(/Files are downloaded and decrypted securely in your browser/i)
-        ).toBeInTheDocument();
-      });
-    });
+    await waitFor(() => expect(mockDecryptSharedFile).toHaveBeenCalled());
+    expect(anchorClick).toHaveBeenCalled();
+    expect(mockUploadAndSyncFile).not.toHaveBeenCalled();
+    anchorClick.mockRestore();
   });
 
-  describe('Accessibility', () => {
-    it('should have accessible button labels', async () => {
-      renderWithRouter(<SharedWithMePage />);
+  it("saves an explicit encrypted copy to My Storage", async () => {
+    showFiles();
+    renderPage();
 
-      await waitFor(() => {
-        const refreshButton = screen.getByRole('button', { name: /refresh/i });
-        expect(refreshButton).toBeInTheDocument();
-      });
-    });
+    fireEvent.click(
+      await screen.findByRole("button", { name: /save to storage/i }),
+    );
 
-    it('should have semantic table structure', async () => {
-      (apiClient.sharedFiles.getForUser as jest.Mock).mockResolvedValue({
-        success: true,
-        files: [
-          {
-            id: mockSharedFile.id,
-            file_id: mockSharedFile.fileId,
-            file_name: mockSharedFile.originalFileName,
-            sender_hashed_email: mockSharedFile.sender,
-            created_at: mockSharedFile.createdAt,
-            encrypted_file_key: mockSharedFile.encryptedFileKey,
-            file_size: mockSharedFile.fileSize,
-            file_mime_type: mockSharedFile.mimeType,
-            encrypted_file_blob_id: mockSharedFile.encrypted_file_blob_id,
-          },
-        ],
-      });
-
-      renderWithRouter(<SharedWithMePage />);
-
-      await waitFor(() => {
-        expect(screen.getByRole('table')).toBeInTheDocument();
-        expect(screen.getAllByRole('columnheader').length).toBeGreaterThan(0);
-      });
-    });
+    expect(
+      await screen.findByRole("button", { name: /saved to storage/i }),
+    ).toBeDisabled();
+    expect(mockUploadAndSyncFile).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: "project-brief.pdf",
+        type: "application/pdf",
+      }),
+      "recipient@example.com",
+    );
+    expect(apiClient.sharedFiles.recordAccess).toHaveBeenCalledWith(
+      "share-123",
+    );
   });
 
-  describe('Multiple Files', () => {
-    it('should display multiple shared files', async () => {
-      (apiClient.sharedFiles.getForUser as jest.Mock).mockResolvedValue({
-        success: true,
-        files: [
-          {
-            id: 'file-1',
-            file_id: 'f1',
-            file_name: 'document1.pdf',
-            sender_hashed_email: 'sender1@test.com',
-            created_at: '2024-01-15T10:30:00.000Z',
-            encrypted_file_key: 'key1',
-            file_size: 1024,
-            file_mime_type: 'application/pdf',
-            encrypted_file_blob_id: 'blob-1',
-          },
-          {
-            id: 'file-2',
-            file_id: 'f2',
-            file_name: 'document2.docx',
-            sender_hashed_email: 'sender2@test.com',
-            created_at: '2024-01-16T11:30:00.000Z',
-            encrypted_file_key: 'key2',
-            file_size: 2048,
-            file_mime_type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-            encrypted_file_blob_id: 'blob-2',
-          },
-        ],
-      });
+  it("shows a recoverable inline error when the inbox fails", async () => {
+    (apiClient.sharedFiles.getForUser as jest.Mock).mockRejectedValue(
+      new Error("Network unavailable"),
+    );
+    renderPage();
 
-      renderWithRouter(<SharedWithMePage />);
+    expect(await screen.findByText("Inbox unavailable")).toBeInTheDocument();
+    expect(screen.getByText("Network unavailable")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /try again/i }),
+    ).toBeInTheDocument();
+  });
 
-      await waitFor(() => {
-        expect(screen.getByText('document1.pdf')).toBeInTheDocument();
-        expect(screen.getByText('document2.docx')).toBeInTheDocument();
-      });
-    });
+  it("refreshes the inbox without replacing it with toast-only feedback", async () => {
+    renderPage();
+    await screen.findByText("Your inbox is empty");
 
-    it('should have separate download buttons for each file', async () => {
-      (apiClient.sharedFiles.getForUser as jest.Mock).mockResolvedValue({
-        success: true,
-        files: [
-          {
-            id: 'file-1',
-            file_id: 'f1',
-            file_name: 'document1.pdf',
-            sender_hashed_email: 'sender@test.com',
-            created_at: '2024-01-15T10:30:00.000Z',
-            encrypted_file_key: 'key1',
-            encrypted_file_blob_id: 'blob-1',
-          },
-          {
-            id: 'file-2',
-            file_id: 'f2',
-            file_name: 'document2.pdf',
-            sender_hashed_email: 'sender@test.com',
-            created_at: '2024-01-16T10:30:00.000Z',
-            encrypted_file_key: 'key2',
-            encrypted_file_blob_id: 'blob-2',
-          },
-        ],
-      });
+    fireEvent.click(screen.getByRole("button", { name: /refresh/i }));
 
-      renderWithRouter(<SharedWithMePage />);
-
-      await waitFor(() => {
-        const downloadButtons = screen.getAllByRole('button', { name: /download/i });
-        expect(downloadButtons.length).toBe(2);
-      });
-    });
+    await waitFor(() =>
+      expect(apiClient.sharedFiles.getForUser).toHaveBeenCalledTimes(2),
+    );
   });
 });

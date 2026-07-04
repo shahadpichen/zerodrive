@@ -67,9 +67,7 @@ const deleteFileFromDB = async (fileId: string): Promise<number> => {
 };
 
 const clearUserFilesFromDB = async (userEmail: string): Promise<number> => {
-  logger.log(
-    `[Dexie] Clearing all files for user ${userEmail} from local DB.`
-  );
+  logger.log(`[Dexie] Clearing all files for user ${userEmail} from local DB.`);
   return await db.table("files").where("userEmail").equals(userEmail).delete();
 };
 
@@ -89,7 +87,7 @@ const getFoldersForUser = async (userEmail: string): Promise<FolderMeta[]> => {
 
 const getFilesInFolder = async (
   userEmail: string,
-  folderId: string | null
+  folderId: string | null,
 ): Promise<FileMeta[]> => {
   // Get all files for user, then filter by folderId
   // This avoids issues with null values in compound indexes
@@ -111,9 +109,20 @@ const deleteFolder = async (folderId: string): Promise<number> => {
   return await db.table("folders").where("id").equals(folderId).delete();
 };
 
+const updateFolderName = async (
+  folderId: string,
+  newName: string,
+): Promise<number> => {
+  return await db
+    .table("folders")
+    .where("id")
+    .equals(folderId)
+    .modify({ name: newName });
+};
+
 const moveFileToFolder = async (
   fileId: string,
-  newFolderId: string | null
+  newFolderId: string | null,
 ): Promise<void> => {
   await db
     .table("files")
@@ -124,13 +133,13 @@ const moveFileToFolder = async (
 
 const sendToGoogleDrive = async (
   filesToSync: FileMeta[],
-  foldersToSync: FolderMeta[] = []
+  foldersToSync: FolderMeta[] = [],
 ) => {
   let driveUpdateToastId: string | number | undefined;
   logger.log(
     "[Sync] Starting metadata sync with Google Drive for:",
     filesToSync,
-    foldersToSync
+    foldersToSync,
   );
   try {
     driveUpdateToastId = toast.loading("Syncing metadata with Google Drive...");
@@ -161,12 +170,12 @@ const sendToGoogleDrive = async (
       {
         method: "GET",
         headers: { Authorization: `Bearer ${token}` },
-      }
+      },
     );
 
     if (!findResponse.ok) {
       throw new Error(
-        `[Sync Error] Failed to search for existing metadata file: ${findResponse.status} ${findResponse.statusText}`
+        `[Sync Error] Failed to search for existing metadata file: ${findResponse.status} ${findResponse.statusText}`,
       );
     }
 
@@ -176,7 +185,7 @@ const sendToGoogleDrive = async (
     if (existingFiles.files && existingFiles.files.length > 0) {
       fileIdToUpdate = existingFiles.files[0].id;
       logger.log(
-        `[Sync] Found existing db-list.json with ID: ${fileIdToUpdate}`
+        `[Sync] Found existing db-list.json with ID: ${fileIdToUpdate}`,
       );
     } else {
       logger.log("[Sync] No existing db-list.json found. Will create new.");
@@ -195,13 +204,13 @@ const sendToGoogleDrive = async (
       method = "PATCH";
       form.append(
         "metadata",
-        new Blob([JSON.stringify({})], { type: "application/json" })
+        new Blob([JSON.stringify({})], { type: "application/json" }),
       );
     } else {
       logger.log("[Sync] Preparing POST request to create new file.");
       form.append(
         "metadata",
-        new Blob([JSON.stringify(metadata)], { type: "application/json" })
+        new Blob([JSON.stringify(metadata)], { type: "application/json" }),
       );
     }
 
@@ -224,7 +233,7 @@ const sendToGoogleDrive = async (
           method === "POST" ? "uploading" : "updating"
         } metadata file: ${uploadResponse.status} ${
           uploadResponse.statusText
-        } - ${responseBodyText}`
+        } - ${responseBodyText}`,
       );
     }
 
@@ -243,7 +252,7 @@ const sendToGoogleDrive = async (
   } catch (error: any) {
     logger.error(
       "[Sync Error] Error synchronizing metadata with Google Drive:",
-      error
+      error,
     );
     toast.error("Failed to sync metadata with Google Drive", {
       description: error?.message || "Unknown error",
@@ -254,7 +263,9 @@ const sendToGoogleDrive = async (
   }
 };
 
-const fetchAndStoreFileMetadata = async (retryCount: number = 0): Promise<void> => {
+const fetchAndStoreFileMetadata = async (
+  retryCount: number = 0,
+): Promise<void> => {
   const MAX_RETRIES = 1; // Only retry once to prevent infinite loops
 
   try {
@@ -285,7 +296,7 @@ const fetchAndStoreFileMetadata = async (retryCount: number = 0): Promise<void> 
         {
           method: "GET",
           headers: { Authorization: `Bearer ${token}` },
-        }
+        },
       );
 
       if (!fetchResponse.ok) {
@@ -353,7 +364,7 @@ const fetchAndStoreFileMetadata = async (retryCount: number = 0): Promise<void> 
             ) {
               logger.warn(
                 "Skipping invalid file entry from db-list.json:",
-                file
+                file,
               );
               return;
             }
@@ -369,7 +380,7 @@ const fetchAndStoreFileMetadata = async (retryCount: number = 0): Promise<void> 
             } catch (error) {
               logger.error("Error adding file to IndexedDB:", error, file);
             }
-          })
+          }),
         );
         logger.log("Files stored successfully in IndexedDB.");
       }
@@ -386,7 +397,7 @@ const fetchAndStoreFileMetadata = async (retryCount: number = 0): Promise<void> 
             ) {
               logger.warn(
                 "Skipping invalid folder entry from db-list.json:",
-                folder
+                folder,
               );
               return;
             }
@@ -394,19 +405,23 @@ const fetchAndStoreFileMetadata = async (retryCount: number = 0): Promise<void> 
               await addFolder({
                 id: folder.id,
                 name: folder.name,
-                parentId: folder.parentId !== undefined ? folder.parentId : null,
+                parentId:
+                  folder.parentId !== undefined ? folder.parentId : null,
                 userEmail: folder.userEmail,
                 createdDate: new Date(folder.createdDate),
               });
             } catch (error) {
               logger.error("Error adding folder to IndexedDB:", error, folder);
             }
-          })
+          }),
         );
         logger.log("Folders stored successfully in IndexedDB.");
       }
 
-      if ((!files || files.length === 0) && (!folders || folders.length === 0)) {
+      if (
+        (!files || files.length === 0) &&
+        (!folders || folders.length === 0)
+      ) {
         logger.log("db-list.json file content is empty or invalid.");
       }
     } else {
@@ -418,13 +433,17 @@ const fetchAndStoreFileMetadata = async (retryCount: number = 0): Promise<void> 
   } catch (error: any) {
     if (error?.status === 401) {
       if (retryCount >= MAX_RETRIES) {
-        logger.error("Max retries reached for token refresh. Redirecting to login.");
+        logger.error(
+          "Max retries reached for token refresh. Redirecting to login.",
+        );
         window.location.href = "/";
         return;
       }
 
       try {
-        logger.warn(`Token expired (retry ${retryCount + 1}/${MAX_RETRIES}). Refreshing...`);
+        logger.warn(
+          `Token expired (retry ${retryCount + 1}/${MAX_RETRIES}). Refreshing...`,
+        );
         await refreshGapiToken();
         // Retry the request after token refresh with incremented retry count
         await fetchAndStoreFileMetadata(retryCount + 1);
@@ -453,5 +472,6 @@ export {
   getFoldersForUser,
   getFilesInFolder,
   deleteFolder,
+  updateFolderName,
   moveFileToFolder,
 };

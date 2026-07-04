@@ -7,6 +7,7 @@ import {
 } from "react-router-dom";
 import { Buffer } from "buffer/";
 import PrivateStorage from "./pages/private-storage";
+import Home from "./pages/home";
 import LandingPage from "./pages/landing-page";
 import ProtectedRoute from "./components/protected-route";
 import Privacy from "./pages/privacy";
@@ -42,7 +43,9 @@ const checkEnvironmentVariables = () => {
 
 // Root route component - checks auth when it renders
 const RootRoute: React.FC = () => {
-  const [isAuthenticated, setIsAuthenticated] = React.useState<boolean | null>(null);
+  const [isAuthenticated, setIsAuthenticated] = React.useState<boolean | null>(
+    null,
+  );
 
   React.useEffect(() => {
     checkAuth().then(setIsAuthenticated);
@@ -52,7 +55,7 @@ const RootRoute: React.FC = () => {
     return null;
   }
 
-  return isAuthenticated ? <Navigate to="/storage" replace /> : <LandingPage />;
+  return isAuthenticated ? <Navigate to="/home" replace /> : <LandingPage />;
 };
 
 function App() {
@@ -68,6 +71,14 @@ function App() {
       <Routes>
         <Route path="/" element={<RootRoute />} />
         <Route path="/oauth/callback" element={<OAuthCallback />} />
+        <Route
+          path="/home"
+          element={
+            <ProtectedRoute>
+              <Home />
+            </ProtectedRoute>
+          }
+        />
         <Route
           path="/storage"
           element={

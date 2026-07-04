@@ -1,31 +1,44 @@
 import React from "react";
-import { SidebarProvider } from "../../contexts/sidebar-context";
-import { AppProvider } from "../../contexts/app-context";
-import { AppSidebar } from "./app-sidebar";
-import { useSidebar } from "../../contexts/sidebar-context";
-import Header from "../storage/header";
+import { useNavigate } from "react-router-dom";
+import { ArrowLeft, AlertTriangle } from "lucide-react";
+import { AppProvider, useApp } from "../../contexts/app-context";
 
 function AuthenticatedLayoutContent({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const { isOpen, isMobile } = useSidebar();
+  const navigate = useNavigate();
+  const { hasDecryptionError } = useApp();
 
   return (
-    <div className="flex flex-col h-screen overflow-hidden">
-      <Header />
-
-      <div className="flex flex-1 overflow-hidden">
-        <AppSidebar />
-
-        <main
-          className={`flex-1 overflow-auto transition-all duration-300 ${
-            !isMobile && isOpen ? "md:ml-64" : !isMobile ? "md:ml-16" : ""
-          }`}
+    <div className="min-h-screen bg-background text-foreground">
+      <div className="mx-auto max-w-6xl px-6 py-8">
+        {/* No chrome — just a way back to the hub */}
+        <button
+          onClick={() => navigate("/home")}
+          className="mb-6 inline-flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
         >
-          <div className="mx-auto p-6 max-w-7xl">{children}</div>
-        </main>
+          <ArrowLeft className="h-4 w-4" />
+          Home
+        </button>
+
+        {hasDecryptionError && (
+          <div className="mb-6 flex items-center gap-2 border-2 border-accent-border bg-accent px-4 py-2">
+            <AlertTriangle className="h-4 w-4 text-accent-foreground" />
+            <span className="text-xs font-medium text-accent-foreground">
+              Decryption failed —
+              <button
+                onClick={() => navigate("/key-management")}
+                className="ml-1 underline hover:no-underline"
+              >
+                update encryption key
+              </button>
+            </span>
+          </div>
+        )}
+
+        {children}
       </div>
     </div>
   );
@@ -38,9 +51,7 @@ export function AuthenticatedLayout({
 }) {
   return (
     <AppProvider>
-      <SidebarProvider>
-        <AuthenticatedLayoutContent>{children}</AuthenticatedLayoutContent>
-      </SidebarProvider>
+      <AuthenticatedLayoutContent>{children}</AuthenticatedLayoutContent>
     </AppProvider>
   );
 }

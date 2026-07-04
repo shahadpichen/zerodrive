@@ -2,39 +2,74 @@ import React from "react";
 import { useNavigate } from "react-router-dom";
 import { ModeToggle } from "../../components/mode-toggle";
 
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "../../components/ui/dropdown-menu";
+
 function Header() {
   const navigate = useNavigate();
 
   return (
-    <header className="flex h-[10vh] border-b justify-between pt-5 items-center gap-4 px-10 lg:px-10">
+    <header className="flex h-[10vh] items-center justify-between border-b px-4 sm:px-6 lg:px-10">
+      {/* Logo */}
       <button
         onClick={() => navigate("/")}
-        className="mr-6 flex items-center space-x-1 cursor-pointer bg-transparent border-none p-0"
+        className="flex cursor-pointer items-center space-x-1 border-none bg-transparent p-0"
       >
-        {/* <img src="/logo192.png" alt="ZeroDrive Logo" className="h-10 w-10" /> */}
-        <span className="font-semibold text-lg sm:inline-block">ZeroDrive</span>
+        <span className="text-lg font-semibold">ZeroDrive</span>
       </button>
-      <div className="flex flex-row items-center gap-5">
-        <h1
-          className="flex items-center gap-1 cursor-pointer"
+
+      {/* Desktop Navigation */}
+      <div className="hidden items-center gap-5 md:flex">
+        <button
           onClick={() => navigate("/how-it-works")}
+          className="border-none bg-transparent p-0 text-sm font-medium hover:underline"
         >
-          {/* <AiTwotoneQuestionCircle className="text-xl" /> */}
-          <span className="text-sm font-medium hover:underline">
-            How it works
-          </span>
-        </h1>
+          How it works
+        </button>
+
         <a
-          href="https://github.com/shahadpichen/zerobox"
+          href="https://github.com/shahadpichen/zerodrive"
           target="_blank"
           rel="noopener noreferrer"
+          className="text-sm font-medium hover:underline"
         >
-          <h1 className="flex items-center gap-1">
-            {/* <FaGithub className="text-xl" /> */}
-            <span className="text-sm font-medium hover:underline">Github</span>
-          </h1>
+          Star on GitHub
         </a>
+
         <ModeToggle />
+      </div>
+
+      {/* Mobile Navigation */}
+      <div className="flex items-center gap-3 md:hidden">
+        <ModeToggle />
+
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button className="rounded-md border px-3 py-2 text-sm font-medium">
+              Menu
+            </button>
+          </DropdownMenuTrigger>
+
+          <DropdownMenuContent align="end" className="w-44">
+            <DropdownMenuItem onClick={() => navigate("/how-it-works")}>
+              How it works
+            </DropdownMenuItem>
+
+            <DropdownMenuItem asChild>
+              <a
+                href="https://github.com/shahadpichen/zerodrive"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Star on GitHub
+              </a>
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
     </header>
   );

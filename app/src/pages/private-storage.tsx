@@ -14,14 +14,24 @@ import {
   deleteAllAndSyncFiles,
 } from "../utils/fileOperations";
 import { ConfirmationDialog } from "../components/storage/confirmation-dialog";
-import { Separator } from "../components/ui/separator";
-import { RefreshCw, FolderPlus } from "lucide-react";
+import {
+  RefreshCw,
+  FolderPlus,
+  Upload,
+  MoreVertical,
+  Trash2,
+} from "lucide-react";
 import {
   FolderProvider,
   useFolderContext,
 } from "../components/storage/folder-context";
-import { FolderBreadcrumb } from "../components/storage/folder-breadcrumb";
 import { CreateFolderDialog } from "../components/storage/create-folder-dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "../components/ui/dropdown-menu";
 
 // Imports for sharing key functionality (kept for potential future use)
 import { recoverRsaKeysIfNeeded } from "../utils/rsaKeyRecovery";
@@ -37,6 +47,7 @@ function PrivateStorageContent() {
   const [isLoadingUserFiles, setIsLoadingUserFiles] = useState<boolean>(true);
   const [isRefreshingFiles, setIsRefreshingFiles] = useState<boolean>(false);
   const [showCreateFolder, setShowCreateFolder] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
 
   useEffect(() => {
     const loadInitialData = async () => {
@@ -257,13 +268,17 @@ function PrivateStorageContent() {
     document.getElementById("file-upload")?.click();
   };
 
-  const handleFileChangeAndUpload = async (
-    e: React.ChangeEvent<HTMLInputElement>,
-  ) => {
-    if (!e.target.files || e.target.files.length === 0 || !userEmail) return;
+  const uploadFiles = async (filesToUpload: File[]) => {
+    if (filesToUpload.length === 0 || !userEmail) return;
 
-    const filesToUpload = Array.from(e.target.files);
-    e.target.value = "";
+    // Encryption key is required to upload (files are encrypted client-side)
+    const key = await getStoredKey();
+    if (!key) {
+      toast.error("No encryption key found", {
+        description: "Please generate or upload an encryption key first",
+      });
+      return;
+    }
 
     setUploading(true);
     let successCount = 0;
@@ -280,6 +295,39 @@ function PrivateStorageContent() {
       setUserHasFiles(true);
       await refreshAll(); // Refresh storage after upload
     }
+  };
+
+  const handleFileChangeAndUpload = async (
+    e: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    if (!e.target.files) return;
+    const filesToUpload = Array.from(e.target.files);
+    e.target.value = "";
+    await uploadFiles(filesToUpload);
+  };
+
+  // Only treat external file drags (not internal file-to-folder moves) as uploads
+  const isFileDrag = (e: React.DragEvent) =>
+    Array.from(e.dataTransfer.types || []).includes("Files");
+
+  const handleDragOver = (e: React.DragEvent) => {
+    if (!isFileDrag(e)) return;
+    e.preventDefault();
+    if (!isDragging) setIsDragging(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    // Ignore drag-leave when moving between child elements
+    if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+    setIsDragging(false);
+  };
+
+  const handleDrop = async (e: React.DragEvent) => {
+    if (!isFileDrag(e)) return;
+    e.preventDefault();
+    setIsDragging(false);
+    const dropped = Array.from(e.dataTransfer.files);
+    await uploadFiles(dropped);
   };
 
   const performDeleteAllFiles = async () => {
@@ -319,20 +367,37 @@ function PrivateStorageContent() {
         disabled={uploading}
       />
 
-      <div className="space-y-6">
+      <div
+        className="relative space-y-6"
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+      >
+        {/* Drag-and-drop upload overlay */}
+        {isDragging && (
+          <div className="pointer-events-none absolute inset-0 z-50 flex flex-col items-center justify-center gap-3 border-2 border-dashed border-primary bg-background/85 backdrop-blur-sm">
+            <Upload className="h-10 w-10 text-primary" />
+            <p className="text-sm font-medium">Drop files to upload</p>
+            <p className="text-xs text-muted-foreground">
+              Encrypted on your device before they leave.
+            </p>
+          </div>
+        )}
+
         {/* Page Header */}
         <div className="flex items-center justify-between">
           <div className="flex flex-col gap-2">
-            <h1 className="text-2xl font-bold tracking-tight">Storage</h1>
-            <p className="text-muted-foreground">
-              {!isLoadingUserFiles && userHasFiles
-                ? "Manage your encrypted files. Click file names to download and decrypt."
-                : !isLoadingUserFiles
-                  ? "No files uploaded yet. Use the Upload button in the sidebar to get started."
-                  : "Loading your files..."}
-            </p>
+            <h1 className="text-2xl tracking-tight">Storage</h1>
           </div>
           <div className="flex gap-2">
+            <Button
+              size="sm"
+              onClick={handleUploadTriggerInternal}
+              disabled={uploading || isLoadingUserFiles}
+            >
+              <Upload className="h-4 w-4 mr-2" />
+              Upload
+            </Button>
             <Button
               variant="outline"
               size="sm"
@@ -355,23 +420,44 @@ function PrivateStorageContent() {
               />
               Refresh
             </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="px-2"
+                  aria-label="More actions"
+                  disabled={isLoadingUserFiles}
+                >
+                  <MoreVertical className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem
+                  onClick={() => setShowDeleteConfirm(true)}
+                  className="text-destructive focus:text-destructive"
+                >
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Delete All Files
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
 
-        <Separator />
-
-        {/* Breadcrumb Navigation */}
-        <FolderBreadcrumb
-          userEmail={userEmail}
-          onFileMoved={() => setRefreshFileListKey((prev) => prev + 1)}
-        />
-
-        {/* File List */}
+        {/* File List (toolbar + breadcrumb live inside FileList) */}
         <FileList
           view="full"
           refreshKey={refreshFileListKey}
           userEmail={userEmail}
         />
+
+        {/* Persistent drop hint */}
+        <div className="flex items-center justify-center gap-2 border border-dashed border-border py-4 text-center text-xs text-muted-foreground">
+          <Upload className="h-4 w-4" />
+          Drop files anywhere to upload — encrypted on your device before they
+          leave.
+        </div>
 
         {/* Create Folder Dialog */}
         {userEmail && (
