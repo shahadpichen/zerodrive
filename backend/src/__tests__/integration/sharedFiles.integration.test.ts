@@ -46,6 +46,13 @@ jest.mock("../../services/analytics", () => ({
   getFileTypeCategory: jest.fn((mimeType: string) => "document"),
 }));
 
+const validWrappedFileKey = JSON.stringify({
+  v: 1,
+  keyWrap: "RSA-OAEP-256",
+  contentEncryption: "AES-256-GCM",
+  ciphertext: Buffer.alloc(256, 7).toString("base64"),
+});
+
 describe("Shared Files Routes Integration", () => {
   let app: Application;
   const testUserEmail = "sender@example.com";
@@ -77,7 +84,7 @@ describe("Shared Files Routes Integration", () => {
     const validShareRequest = {
       management_capability_hash: "a".repeat(64),
       recipient_email: testRecipientEmail,
-      encrypted_file_key: "encrypted-key-data",
+      encrypted_file_key: validWrappedFileKey,
       encrypted_metadata: Buffer.from("encrypted-metadata").toString("base64"),
       file_size: 1024000,
       encrypted_size: 1024028,
@@ -279,6 +286,24 @@ describe("Shared Files Routes Integration", () => {
 
       expect(response.status).toBe(422);
       expect(response.body.error.message).toContain("encrypted_file_key");
+    });
+
+    it("should reject an unversioned wrapped file key", async () => {
+      const token = generateToken(testUserEmail);
+      const response = await request(app)
+        .post("/api/shared-files")
+        .set("Cookie", [
+          `zerodrive_token=${token}`,
+          `zerodrive_csrf=${csrfToken}`,
+        ])
+        .set("x-csrf-token", csrfToken)
+        .send({
+          ...validShareRequest,
+          encrypted_file_key: "opaque-unversioned-value",
+        });
+
+      expect(response.status).toBe(422);
+      expect(mockQuery).not.toHaveBeenCalled();
     });
 
     it("should return 422 when encrypted metadata is missing", async () => {

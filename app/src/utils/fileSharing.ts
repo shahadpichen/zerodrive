@@ -7,6 +7,10 @@ import apiClient from "./apiClient";
 import logger from "./logger";
 import { getUserKeyPair } from "./keyStorage";
 import { storeShareManagementCapability } from "./shareCapabilityStorage";
+import {
+  readSharedKeyCiphertext,
+  serializeSharedKeyEnvelope,
+} from "./sharedKeyEnvelope";
 
 /**
  * Represents the result of preparing a file for sharing (Step 1).
@@ -461,15 +465,6 @@ export async function prepareFileForSharing(
   }
 }
 
-function arrayBufferToHex(buffer: ArrayBuffer): string {
-  return (
-    "\\x" +
-    Array.from(new Uint8Array(buffer))
-      .map((b) => b.toString(16).padStart(2, "0"))
-      .join("")
-  );
-}
-
 function bytesToBase64Url(bytes: Uint8Array): string {
   let binary = "";
   bytes.forEach((byte) => {
@@ -508,14 +503,8 @@ export async function storeFileShare(
   onFileUploaded?: () => void,
 ): Promise<void> {
   try {
-    const encryptedFileKeyArrayBuffer = base64ToArrayBuffer(
+    const encryptedFileKeyEnvelope = serializeSharedKeyEnvelope(
       fileData.encryptedFileKey,
-    );
-    // Convert ArrayBuffer to a hex string for BYTEA storage
-    const encryptedFileKeyHex = arrayBufferToHex(encryptedFileKeyArrayBuffer);
-
-    logger.log(
-      `[FILE-SHARE] Storing encryptedFileKey for share_id ${shareId}. Original base64: "${fileData.encryptedFileKey}", Hex for DB: "${encryptedFileKeyHex}" (length: ${encryptedFileKeyHex.length})`,
     );
 
     const managementCapability = await createManagementCapability();
@@ -529,7 +518,7 @@ export async function storeFileShare(
       const data = await apiClient.sharedFiles.create({
         management_capability_hash: managementCapability.hash,
         recipient_email: fileData.recipientEmail, // For email notification
-        encrypted_file_key: encryptedFileKeyHex, // Store the hex string
+        encrypted_file_key: encryptedFileKeyEnvelope,
         encrypted_metadata: fileData.encryptedMetadata,
         file_size: fileData.fileSize || 0,
         encrypted_size: fileData.encryptedFileBlob.size,
@@ -641,7 +630,9 @@ export async function decryptSharedFile(
       ["decrypt"],
     );
 
-    const encryptedFileKeyArray = base64ToArrayBuffer(encryptedFileKey);
+    const encryptedFileKeyArray = base64ToArrayBuffer(
+      readSharedKeyCiphertext(encryptedFileKey),
+    );
     if (!encryptedFileKeyArray || encryptedFileKeyArray.byteLength === 0) {
       throw new Error("Converted encryptedFileKeyArray is empty or invalid.");
     }
@@ -739,7 +730,7 @@ export async function decryptSharedMetadata(
   const rawFileKey = await crypto.subtle.decrypt(
     { name: "RSA-OAEP" },
     privateKey,
-    base64ToArrayBuffer(encryptedFileKey),
+    base64ToArrayBuffer(readSharedKeyCiphertext(encryptedFileKey)),
   );
   const fileKey = await crypto.subtle.importKey(
     "raw",

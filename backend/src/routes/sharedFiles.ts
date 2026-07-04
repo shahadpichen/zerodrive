@@ -30,6 +30,31 @@ import crypto from "crypto";
 const router = Router();
 const MAX_ENCRYPTED_FILE_SIZE = 100 * 1024 * 1024 + 28;
 
+function validateWrappedFileKey(value: string, helpers: Joi.CustomHelpers) {
+  try {
+    const envelope = JSON.parse(value);
+    const fields =
+      envelope && typeof envelope === "object" ? Object.keys(envelope) : [];
+    if (
+      fields.length !== 4 ||
+      !fields.every((field) =>
+        ["v", "keyWrap", "contentEncryption", "ciphertext"].includes(field),
+      ) ||
+      envelope?.v !== 1 ||
+      envelope?.keyWrap !== "RSA-OAEP-256" ||
+      envelope?.contentEncryption !== "AES-256-GCM" ||
+      typeof envelope?.ciphertext !== "string" ||
+      !/^[A-Za-z0-9+/]+={0,2}$/.test(envelope.ciphertext) ||
+      Buffer.from(envelope.ciphertext, "base64").byteLength !== 256
+    ) {
+      return helpers.error("any.invalid");
+    }
+    return value;
+  } catch {
+    return helpers.error("any.invalid");
+  }
+}
+
 function toClientSharedFile(file: SharedFile) {
   const {
     file_id: _privateObjectKey,
@@ -44,7 +69,10 @@ function toClientSharedFile(file: SharedFile) {
 const createSharedFileSchema = Joi.object({
   management_capability_hash: Joi.string().hex().length(64).required(),
   recipient_email: Joi.string().email().required(),
-  encrypted_file_key: Joi.string().required(),
+  encrypted_file_key: Joi.string()
+    .max(2048)
+    .custom(validateWrappedFileKey, "versioned wrapped file key")
+    .required(),
   encrypted_metadata: Joi.string().base64().required().max(32768),
   file_size: Joi.number().integer().min(0).required(),
   encrypted_size: Joi.number()

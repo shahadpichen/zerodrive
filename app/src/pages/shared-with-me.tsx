@@ -35,6 +35,7 @@ import {
 import { getMnemonic, setMnemonic } from "../utils/mnemonicManager";
 import { downloadEncryptedRsaKeyFromDrive } from "../utils/gdriveKeyStorage";
 import { decryptRsaPrivateKeyWithAesKey } from "../utils/rsaKeyManager";
+import { readSharedKeyCiphertext } from "../utils/sharedKeyEnvelope";
 import { toast } from "sonner";
 
 type KeyState =
@@ -72,15 +73,7 @@ function formatBytes(bytes: number | null): string {
 }
 
 function normalizeEncryptedKey(rawKey: unknown): string {
-  if (typeof rawKey === "string" && rawKey.startsWith("\\x")) {
-    const hex = rawKey.slice(2);
-    const bytes = new Uint8Array(hex.length / 2);
-    for (let index = 0; index < hex.length; index += 2) {
-      bytes[index / 2] = Number.parseInt(hex.slice(index, index + 2), 16);
-    }
-    return arrayBufferToBase64(bytes.buffer);
-  }
-  if (typeof rawKey === "string") return rawKey;
+  if (typeof rawKey === "string") return readSharedKeyCiphertext(rawKey);
   if (rawKey instanceof ArrayBuffer) return arrayBufferToBase64(rawKey);
   if (ArrayBuffer.isView(rawKey)) {
     return arrayBufferToBase64(
