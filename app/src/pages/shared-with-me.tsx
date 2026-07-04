@@ -1,629 +1,628 @@
-import React, { useState, useEffect, FC } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import {
+  AlertCircle,
+  Check,
+  Download,
+  Eye,
+  EyeOff,
+  HardDrive,
+  Inbox,
+  KeyRound,
+  Loader2,
+  RefreshCw,
+  Search,
+  ShieldCheck,
+} from "lucide-react";
 import { Button } from "../components/ui/button";
-import { FileIcon, Download, RefreshCw } from "lucide-react";
-import { toast } from "sonner";
+import { Input } from "../components/ui/input";
+import { getFileIconPath } from "../lib/mime-types";
 import {
-  Card,
-  CardContent,
-} from "../components/ui/card";
-import { Separator } from "../components/ui/separator";
-import {
-  decryptSharedFile,
-  hashEmail,
   arrayBufferToBase64,
-  storeUserPublicKey,
-  deleteFileFromStorage,
-  fetchUserPublicKey,
+  decryptSharedFile,
   downloadEncryptedFile,
+  hashEmail,
 } from "../utils/fileSharing";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "../components/ui/table";
-import { getUserKeyPair } from "../utils/keyStorage";
+import { getUserKeyPair, userHasStoredKeys } from "../utils/keyStorage";
 import apiClient from "../utils/apiClient";
 import { getStoredKey } from "../utils/cryptoUtils";
 import { uploadAndSyncFile } from "../utils/fileOperations";
-import { trackEvent, AnalyticsEvent, AnalyticsCategory } from "../utils/analyticsTracker";
-import { getMnemonic } from "../utils/mnemonicManager";
-import { recoverRsaKeysIfNeeded } from "../utils/rsaKeyRecovery";
+import {
+  AnalyticsCategory,
+  AnalyticsEvent,
+  trackEvent,
+} from "../utils/analyticsTracker";
+import { getMnemonic, setMnemonic } from "../utils/mnemonicManager";
+import { downloadEncryptedRsaKeyFromDrive } from "../utils/gdriveKeyStorage";
+import { decryptRsaPrivateKeyWithAesKey } from "../utils/rsaKeyManager";
+import { toast } from "sonner";
+
+type KeyState =
+  | "checking"
+  | "ready"
+  | "primary-missing"
+  | "sharing-missing"
+  | "mnemonic-missing";
+
+type FileAction = "download" | "save";
+type ActionStage = "downloading" | "decrypting" | "saving";
 
 interface SharedFile {
   id: string;
   fileId: string;
-  driveFileId?: string;
-  originalFileName: string;
-  sender: string;
-  createdAt: string;
+  name: string;
+  createdAt: Date;
+  expiresAt: Date | null;
   encryptedFileKey: string;
-  fileSize?: number;
-  mimeType?: string;
-  encrypted_file_blob_id: string;
+  fileSize: number | null;
+  mimeType: string;
 }
 
-const SharedWithMePage: FC = () => {
-  const navigate = useNavigate();
+function formatBytes(bytes: number | null): string {
+  if (bytes === null) return "Unknown size";
+  if (bytes === 0) return "0 B";
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  const index = Math.min(
+    Math.floor(Math.log(bytes) / Math.log(1024)),
+    units.length - 1,
+  );
+  return `${(bytes / 1024 ** index).toFixed(index === 0 ? 0 : 1)} ${units[index]}`;
+}
 
-  const [userEmail, setUserEmail] = useState<string>("");
-  const [isLoading, setIsLoading] = useState<boolean>(true);
-  const [sharedFiles, setSharedFiles] = useState<SharedFile[]>([]);
-  const [isDownloading, setIsDownloading] = useState<string | null>(null);
-  const [hasKeys, setHasKeys] = useState<boolean>(false);
-  const [isCheckingKeys, setIsCheckingKeys] = useState<boolean>(true);
-
-  // Get the user's email from Google auth
-  useEffect(() => {
-    const getUserEmail = async () => {
-      try {
-        // Use authService to get email (more reliable than GAPI)
-        const { getUserEmail: getEmail } = await import("../utils/authService");
-        const email = await getEmail();
-
-        if (email) {
-          setUserEmail(email);
-        } else {
-          console.warn("User not authenticated");
-          navigate("/");
-        }
-      } catch (error) {
-        console.error("Error getting user email:", error);
-        navigate("/");
-      }
-    };
-
-    getUserEmail();
-  }, [navigate]);
-
-  // Check if user has generated keys and recover if needed
-  useEffect(() => {
-    const checkForKeys = async () => {
-      if (!userEmail) return;
-
-      setIsCheckingKeys(true);
-      try {
-        // Use centralized recovery utility
-        const result = await recoverRsaKeysIfNeeded(userEmail, false);
-
-        if (result.keysExisted || result.recovered) {
-          setHasKeys(true);
-
-          // Auto-repair: Ensure public key is synced to server
-          if (result.keysExisted) {
-            const hashedEmail = await hashEmail(userEmail);
-            try {
-              const serverKey = await fetchUserPublicKey(hashedEmail);
-              if (!serverKey) {
-                const mnemonic = getMnemonic();
-                if (mnemonic) {
-                  const localKeyPair = await getUserKeyPair(userEmail, mnemonic);
-                  if (localKeyPair?.publicKeyJwk) {
-                    await storeUserPublicKey(hashedEmail, localKeyPair.publicKeyJwk);
-                    console.log('Public key synced to server');
-                  }
-                }
-              }
-            } catch (syncError) {
-              console.error('Error syncing public key to server:', syncError);
-            }
-          }
-        } else {
-          setHasKeys(false);
-        }
-      } catch (error) {
-        console.error("Error checking for keys:", error);
-        setHasKeys(false);
-      } finally {
-        setIsCheckingKeys(false);
-      }
-    };
-
-    if (userEmail) {
-      checkForKeys();
+function normalizeEncryptedKey(rawKey: unknown): string {
+  if (typeof rawKey === "string" && rawKey.startsWith("\\x")) {
+    const hex = rawKey.slice(2);
+    const bytes = new Uint8Array(hex.length / 2);
+    for (let index = 0; index < hex.length; index += 2) {
+      bytes[index / 2] = Number.parseInt(hex.slice(index, index + 2), 16);
     }
-  }, [userEmail]);
+    return arrayBufferToBase64(bytes.buffer);
+  }
+  if (typeof rawKey === "string") return rawKey;
+  if (rawKey instanceof ArrayBuffer) return arrayBufferToBase64(rawKey);
+  if (ArrayBuffer.isView(rawKey)) {
+    return arrayBufferToBase64(
+      rawKey.buffer.slice(
+        rawKey.byteOffset,
+        rawKey.byteOffset + rawKey.byteLength,
+      ) as ArrayBuffer,
+    );
+  }
+  return "";
+}
 
-  // Load shared files
-  useEffect(() => {
-    const loadSharedFiles = async () => {
-      if (!userEmail) return;
+function mapSharedFile(row: any): SharedFile {
+  return {
+    id: row.id,
+    fileId: row.file_id,
+    name: row.file_name,
+    createdAt: new Date(row.created_at),
+    expiresAt: row.expires_at ? new Date(row.expires_at) : null,
+    encryptedFileKey: normalizeEncryptedKey(row.encrypted_file_key),
+    fileSize:
+      typeof row.file_size === "number"
+        ? row.file_size
+        : row.file_size
+          ? Number(row.file_size)
+          : null,
+    mimeType: row.mime_type || row.file_mime_type || "application/octet-stream",
+  };
+}
 
+const SharedWithMePage: React.FC = () => {
+  const navigate = useNavigate();
+  const [userEmail, setUserEmail] = useState("");
+  const [sharedFiles, setSharedFiles] = useState<SharedFile[]>([]);
+  const [sharingPrivateKey, setSharingPrivateKey] = useState<JsonWebKey | null>(
+    null,
+  );
+  const [keyState, setKeyState] = useState<KeyState>("checking");
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [savedFileIds, setSavedFileIds] = useState<Set<string>>(new Set());
+  const [mnemonicInput, setMnemonicInput] = useState("");
+  const [showMnemonic, setShowMnemonic] = useState(false);
+  const [isUnlocking, setIsUnlocking] = useState(false);
+  const [unlockError, setUnlockError] = useState("");
+  const [processing, setProcessing] = useState<{
+    fileId: string;
+    action: FileAction;
+    stage: ActionStage;
+  } | null>(null);
+
+  const loadSharedFiles = useCallback(
+    async (email: string, showConfirmation = false) => {
       setIsLoading(true);
+      setLoadError("");
       try {
-        const hashedEmail = await hashEmail(userEmail);
+        const hashedEmail = await hashEmail(email);
         const result = await apiClient.sharedFiles.getForUser(hashedEmail);
-        const data = result.files;
-
-        if (data) {
-          const mappedFiles: SharedFile[] = data.map((dbRow: any) => {
-            let finalEncryptedFileKey = "";
-            const rawKey = dbRow.encrypted_file_key;
-            if (typeof rawKey === "string" && rawKey.startsWith("\\x")) {
-              const hex = rawKey.substring(2);
-              const tempBytes = new Uint8Array(hex.length / 2);
-              for (let i = 0; i < hex.length; i += 2) {
-                tempBytes[i / 2] = parseInt(hex.substring(i, i + 2), 16);
-              }
-              finalEncryptedFileKey = arrayBufferToBase64(tempBytes.buffer);
-            } else if (typeof rawKey === "string") {
-              finalEncryptedFileKey = rawKey;
-            } else if (
-              rawKey &&
-              typeof rawKey === "object" &&
-              rawKey.buffer instanceof ArrayBuffer
-            ) {
-              finalEncryptedFileKey = arrayBufferToBase64(rawKey);
-            } else {
-            }
-            return {
-              id: dbRow.id,
-              fileId: dbRow.file_id,
-              driveFileId: dbRow.drive_file_id,
-              originalFileName: dbRow.file_name,
-              sender: dbRow.sender_hashed_email,
-              createdAt: new Date(dbRow.created_at).toLocaleString(),
-              encryptedFileKey: finalEncryptedFileKey,
-              fileSize: dbRow.file_size,
-              mimeType: dbRow.file_mime_type,
-              encrypted_file_blob_id: dbRow.encrypted_file_blob_id,
-            };
-          });
-          setSharedFiles(mappedFiles);
-        }
+        setSharedFiles((result.files || []).map(mapSharedFile));
+        if (showConfirmation) toast.success("Inbox refreshed");
       } catch (error) {
-        console.error("Error loading shared files:", error);
-        toast.error("Failed to load shared files", {
-          description: error instanceof Error ? error.message : "Unknown error",
-        });
+        console.error("[SharedWithMe] Failed to load files:", error);
+        setLoadError(
+          error instanceof Error
+            ? error.message
+            : "Your shared files could not be loaded.",
+        );
       } finally {
         setIsLoading(false);
       }
+    },
+    [],
+  );
+
+  useEffect(() => {
+    let active = true;
+
+    const initialize = async () => {
+      try {
+        const { getUserEmail } = await import("../utils/authService");
+        const email = await getUserEmail();
+        if (!email) {
+          navigate("/");
+          return;
+        }
+        if (!active) return;
+        setUserEmail(email);
+
+        const primaryKey = await getStoredKey();
+        if (!active) return;
+
+        if (!primaryKey) {
+          setKeyState("primary-missing");
+        } else {
+          try {
+            const encryptedBackup = await downloadEncryptedRsaKeyFromDrive();
+            const privateKey = await decryptRsaPrivateKeyWithAesKey(
+              encryptedBackup,
+              primaryKey,
+            );
+            if (!active) return;
+            setSharingPrivateKey(privateKey);
+            setKeyState("ready");
+          } catch (backupError) {
+            console.warn(
+              "[SharedWithMe] AES sharing-key recovery unavailable:",
+              backupError,
+            );
+
+            const mnemonic = getMnemonic();
+            if (mnemonic) {
+              const localKeyPair = await getUserKeyPair(email, mnemonic);
+              if (!active) return;
+              if (localKeyPair?.privateKeyJwk) {
+                setSharingPrivateKey(localKeyPair.privateKeyJwk);
+                setKeyState("ready");
+              } else {
+                setKeyState("sharing-missing");
+              }
+            } else {
+              const hasLegacyLocalKey = await userHasStoredKeys(email);
+              if (!active) return;
+              setKeyState(
+                hasLegacyLocalKey ? "mnemonic-missing" : "sharing-missing",
+              );
+            }
+          }
+        }
+
+        await loadSharedFiles(email);
+      } catch (error) {
+        console.error("[SharedWithMe] Initialization failed:", error);
+        if (active) {
+          setKeyState("primary-missing");
+          setIsLoading(false);
+          setLoadError("The shared-file inbox could not be initialized.");
+        }
+      }
     };
 
-    if (userEmail) loadSharedFiles();
-  }, [userEmail]);
+    initialize();
+    return () => {
+      active = false;
+    };
+  }, [loadSharedFiles, navigate]);
 
-  const handleRefresh = async () => {
-    if (!userEmail) return;
+  const filteredFiles = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    if (!query) return sharedFiles;
+    return sharedFiles.filter((file) =>
+      file.name.toLowerCase().includes(query),
+    );
+  }, [searchQuery, sharedFiles]);
 
-    setIsLoading(true);
-    toast.loading("Refreshing shared files...");
+  const refreshInbox = () => {
+    if (userEmail) void loadSharedFiles(userEmail, true);
+  };
 
+  const requireReadyKeys = (): boolean => {
+    if (keyState === "ready") return true;
+
+    if (keyState === "sharing-missing") {
+      navigate("/share");
+    } else if (keyState === "primary-missing") {
+      navigate("/key-management?returnTo=%2Fshared-with-me");
+    }
+    return false;
+  };
+
+  const downloadDecryptedFile = (blob: Blob, fileName: string) => {
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = fileName;
+    document.body.appendChild(anchor);
+    anchor.click();
+    document.body.removeChild(anchor);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleFileAction = async (file: SharedFile, action: FileAction) => {
+    if (!userEmail || !sharingPrivateKey || processing || !requireReadyKeys())
+      return;
+
+    setProcessing({ fileId: file.id, action, stage: "downloading" });
     try {
-      const hashedEmail = await hashEmail(userEmail);
-      const result = await apiClient.sharedFiles.getForUser(hashedEmail);
-      const data = result.files;
+      const encryptedBlob = await downloadEncryptedFile(file.fileId);
+      setProcessing({ fileId: file.id, action, stage: "decrypting" });
+      const decrypted = await decryptSharedFile(
+        encryptedBlob,
+        file.encryptedFileKey,
+        userEmail,
+        file.name,
+        file.mimeType,
+        "",
+        sharingPrivateKey,
+      );
 
-      if (data) {
-        const mappedFiles: SharedFile[] = data.map((dbRow: any) => {
-          let finalEncryptedFileKey = "";
-          const rawKey = dbRow.encrypted_file_key;
-          if (typeof rawKey === "string" && rawKey.startsWith("\\x")) {
-            const hex = rawKey.substring(2);
-            const tempBytes = new Uint8Array(hex.length / 2);
-            for (let i = 0; i < hex.length; i += 2) {
-              tempBytes[i / 2] = parseInt(hex.substring(i, i + 2), 16);
-            }
-            finalEncryptedFileKey = arrayBufferToBase64(tempBytes.buffer);
-          } else if (typeof rawKey === "string") {
-            finalEncryptedFileKey = rawKey;
-          } else if (
-            rawKey &&
-            typeof rawKey === "object" &&
-            rawKey.buffer instanceof ArrayBuffer
-          ) {
-            finalEncryptedFileKey = arrayBufferToBase64(rawKey);
-          } else {
-          }
-          return {
-            id: dbRow.id,
-            fileId: dbRow.file_id,
-            driveFileId: dbRow.drive_file_id,
-            encrypted_file_blob_id: dbRow.encrypted_file_blob_id,
-            originalFileName: dbRow.file_name,
-            sender: dbRow.sender_hashed_email,
-            createdAt: new Date(dbRow.created_at).toLocaleString(),
-            encryptedFileKey: finalEncryptedFileKey,
-            fileSize: dbRow.file_size,
-            mimeType: dbRow.file_mime_type,
-          };
-        });
-        setSharedFiles(mappedFiles);
+      if (action === "download") {
+        downloadDecryptedFile(decrypted.decryptedFile, decrypted.fileName);
+        toast.success(`${decrypted.fileName} downloaded`);
+      } else {
+        setProcessing({ fileId: file.id, action, stage: "saving" });
+        const fileForVault = new File(
+          [decrypted.decryptedFile],
+          decrypted.fileName,
+          { type: file.mimeType },
+        );
+        const saved = await uploadAndSyncFile(fileForVault, userEmail);
+        if (!saved) throw new Error("The file could not be saved to storage.");
+
+        setSavedFileIds((current) => new Set(current).add(file.id));
+        toast.success(`${decrypted.fileName} saved to My Storage`);
       }
 
-      toast.success("Shared files refreshed");
+      void Promise.resolve(apiClient.sharedFiles.recordAccess(file.id)).catch(
+        () => {},
+      );
+      void Promise.resolve(
+        trackEvent(
+          AnalyticsEvent.SHARED_FILE_ACCESSED,
+          AnalyticsCategory.SHARING,
+        ),
+      ).catch(() => {});
     } catch (error) {
-      console.error("Error refreshing shared files:", error);
-      toast.error("Failed to refresh shared files", {
-        description: error instanceof Error ? error.message : "Unknown error",
-      });
+      console.error("[SharedWithMe] File action failed:", error);
+      toast.error(
+        action === "download"
+          ? "File could not be downloaded"
+          : "File could not be saved",
+        {
+          description: error instanceof Error ? error.message : "Unknown error",
+        },
+      );
     } finally {
-      setIsLoading(false);
+      setProcessing(null);
     }
   };
 
-  const handleDownloadFile = async (file: SharedFile) => {
-    if (!userEmail) {
-      toast.error("User email not available");
-      return;
-    }
+  const unlockSharingKey = async () => {
+    const mnemonic = mnemonicInput.trim();
+    if (!mnemonic || !userEmail || isUnlocking) return;
 
-    // Check for primary key BEFORE allowing download
-    const primaryKey = await getStoredKey();
-    if (!primaryKey) {
-      toast.error("Primary encryption key required", {
-        description: "You must set up your encryption key before downloading shared files. Redirecting to Key Management...",
-        duration: 5000,
-      });
-      setTimeout(() => {
-        navigate("/key-management");
-      }, 2000);
-      return;
-    }
-
-    setIsDownloading(file.id);
-    const downloadToastId = toast.loading(
-      `Downloading ${file.originalFileName}...`
-    );
-
-    let encryptedFileBlob: Blob | undefined;
-    let currentHasKeys = hasKeys;
-
+    setIsUnlocking(true);
+    setUnlockError("");
     try {
-      if (!currentHasKeys) {
-        toast.dismiss(downloadToastId);
-
-        // Attempt recovery using centralized utility
-        const result = await recoverRsaKeysIfNeeded(userEmail, false);
-
-        if (result.recovered || result.keysExisted) {
-          setHasKeys(true);
-          currentHasKeys = true;
-          toast.loading(`Downloading ${file.originalFileName}...`, {
-            id: downloadToastId,
-          });
-        } else {
-          // Recovery failed or no backup found
-          toast.error("Sharing keys not available", {
-            description:
-              "Please enable file sharing in the storage page to generate your sharing keys.",
-            duration: 5000,
-          });
-          setIsDownloading(null);
-          return;
-        }
+      const keyPair = await getUserKeyPair(userEmail, mnemonic);
+      if (!keyPair?.privateKeyJwk) {
+        throw new Error("Sharing key not found");
       }
-
-      const mnemonic = getMnemonic();
-      if (!mnemonic) {
-        throw new Error("Mnemonic not available. Cannot decrypt RSA private key.");
-      }
-
-      const userKeyPair = await getUserKeyPair(userEmail, mnemonic);
-      if (!userKeyPair || !userKeyPair.privateKeyJwk) {
-        throw new Error(
-          "Private key JWK not found even after checks/recovery. Please ensure keys are generated and retrieved correctly."
-        );
-      }
-
-      let finalEncryptedFileKey = file.encryptedFileKey;
-      if (finalEncryptedFileKey.startsWith("\\x")) {
-        const hex = finalEncryptedFileKey.substring(2);
-        const bytes = new Uint8Array(hex.length / 2);
-        for (let i = 0; i < hex.length; i += 2) {
-          bytes[i / 2] = parseInt(hex.substring(i, i + 2), 16);
-        }
-        finalEncryptedFileKey = arrayBufferToBase64(bytes.buffer);
-      }
-
-      // Download encrypted file from MinIO using pre-signed URL
-      encryptedFileBlob = await downloadEncryptedFile(file.fileId);
-      if (!encryptedFileBlob) {
-        throw new Error("Failed to retrieve file from storage.");
-      }
-
-      toast.loading("Decrypting file...", { id: downloadToastId });
-      const decryptedData = await decryptSharedFile(
-        encryptedFileBlob,
-        finalEncryptedFileKey,
-        userEmail,
-        file.originalFileName,
-        file.mimeType || "application/octet-stream",
-        mnemonic
+      setMnemonic(mnemonic);
+      setSharingPrivateKey(keyPair.privateKeyJwk);
+      setMnemonicInput("");
+      setKeyState("ready");
+      toast.success("Sharing key unlocked");
+    } catch (error) {
+      console.error("[SharedWithMe] Sharing-key unlock failed:", error);
+      setUnlockError(
+        "That recovery phrase could not unlock your sharing key. Check it and try again.",
       );
-
-      const downloadUrl = URL.createObjectURL(decryptedData.decryptedFile);
-      const downloadLink = document.createElement("a");
-      downloadLink.href = downloadUrl;
-      downloadLink.download = decryptedData.fileName;
-      document.body.appendChild(downloadLink);
-      downloadLink.click();
-      document.body.removeChild(downloadLink);
-      URL.revokeObjectURL(downloadUrl);
-
-      toast.success(`Successfully downloaded ${decryptedData.fileName}`, {
-        id: downloadToastId,
-      });
-
-      // Track analytics for shared file access
-      await trackEvent(
-        AnalyticsEvent.SHARED_FILE_ACCESSED,
-        AnalyticsCategory.SHARING
-      );
-
-      // ---- Add to user's own vault ----
-      const saveToVaultToastId = toast.loading(
-        `Attempting to save ${decryptedData.fileName} to your ZeroDrive vault...`
-      );
-      let savedToVaultSuccessfully = false;
-      try {
-        const primaryAesKeyForVault = await getStoredKey();
-        if (!primaryAesKeyForVault) {
-          toast.warning(
-            "Primary key not found. Cannot save copy to your vault.",
-            {
-              id: saveToVaultToastId,
-              description: "Please set up your main key in Key Management.",
-              duration: 7000,
-            }
-          );
-        } else {
-          const decryptedFileObject = new File(
-            [decryptedData.decryptedFile],
-            decryptedData.fileName,
-            { type: file.mimeType || "application/octet-stream" }
-          );
-
-          // Assuming userEmail is the email of the current user (recipient)
-          const uploadResult = await uploadAndSyncFile(
-            decryptedFileObject,
-            userEmail
-          );
-
-          if (uploadResult) {
-            toast.success(
-              `${decryptedData.fileName} also saved to your ZeroDrive vault.`,
-              { id: saveToVaultToastId }
-            );
-            savedToVaultSuccessfully = true;
-          } else {
-            toast.error(
-              `Failed to save copy of ${decryptedData.fileName} to your vault.`,
-              { id: saveToVaultToastId }
-            );
-          }
-        }
-      } catch (vaultError) {
-        console.error("Error saving to vault:", vaultError);
-        toast.error(`Error saving ${decryptedData.fileName} to your vault.`, {
-          id: saveToVaultToastId,
-          description:
-            vaultError instanceof Error ? vaultError.message : "Unknown error.",
-        });
-      }
-      // ---- End Add to user's own vault ----
-
-      // If download and save to vault were successful, delete the original share
-      if (savedToVaultSuccessfully) {
-        const deleteShareToastId = toast.loading(
-          `Removing original share for ${file.originalFileName}...`
-        );
-        try {
-          // Delete from MinIO storage (note: auto-deletion after 7 days)
-          await deleteFileFromStorage(file.encrypted_file_blob_id);
-
-          // Delete from shared_files table via API
-          await apiClient.sharedFiles.delete(file.id);
-
-          toast.success(
-            `Original share for ${file.originalFileName} removed successfully.`,
-            {
-              id: deleteShareToastId,
-            }
-          );
-          handleRefresh(); // Refresh the list of shared files
-        } catch (deleteError) {
-          console.error("Error removing original share:", deleteError);
-          toast.error(
-            `Failed to remove original share for ${file.originalFileName}.`,
-            {
-              id: deleteShareToastId,
-              description:
-                deleteError instanceof Error
-                  ? deleteError.message
-                  : "Please check console or try manually if needed.",
-            }
-          );
-        }
-      }
-    } catch (error: any) {
-      console.error("Error downloading or decrypting file:", error);
-      toast.error("Download or Decryption Failed", {
-        description: error instanceof Error ? error.message : "Unknown error",
-        id: downloadToastId,
-      });
-
-      if (
-        encryptedFileBlob &&
-        (error.name === "OperationError" ||
-          (error instanceof Error &&
-            error.message.includes("Decryption failed")))
-      ) {
-        try {
-          toast.info(
-            "Decryption failed. Offering raw encrypted file for download.",
-            { id: downloadToastId }
-          );
-          const rawDownloadUrl = URL.createObjectURL(encryptedFileBlob);
-          const rawDownloadLink = document.createElement("a");
-          rawDownloadLink.href = rawDownloadUrl;
-          rawDownloadLink.download = `ENCRYPTED_${file.originalFileName}.bin`;
-          document.body.appendChild(rawDownloadLink);
-          rawDownloadLink.click();
-          document.body.removeChild(rawDownloadLink);
-          URL.revokeObjectURL(rawDownloadUrl);
-          toast.success(
-            `Raw encrypted file ENCRYPTED_${file.originalFileName}.bin downloaded.`,
-            { id: downloadToastId }
-          );
-        } catch (rawDownloadError) {
-          console.error(
-            "Error downloading raw encrypted file:",
-            rawDownloadError
-          );
-          toast.error("Could not download raw encrypted file.", {
-            id: downloadToastId,
-          });
-        }
-      }
     } finally {
-      setIsDownloading(null);
+      setIsUnlocking(false);
     }
+  };
+
+  const renderKeyStatus = () => {
+    if (keyState === "checking" || keyState === "ready") return null;
+
+    if (keyState === "mnemonic-missing") {
+      return (
+        <div className="border p-5">
+          <div className="flex items-start gap-3">
+            <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center border">
+              <KeyRound className="h-4 w-4" />
+            </span>
+            <div className="min-w-0 flex-1">
+              <h2 className="text-sm font-semibold">Unlock your sharing key</h2>
+              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                Your file encryption key is active. Enter the same recovery
+                phrase to unlock the private sharing key used for files sent to
+                you.
+              </p>
+
+              <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+                <div className="relative min-w-0 flex-1">
+                  <Input
+                    type={showMnemonic ? "text" : "password"}
+                    value={mnemonicInput}
+                    onChange={(event) => {
+                      setMnemonicInput(event.target.value);
+                      setUnlockError("");
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") void unlockSharingKey();
+                    }}
+                    placeholder="Enter your recovery phrase"
+                    aria-label="Recovery phrase for sharing key"
+                    className="pr-10"
+                    autoComplete="off"
+                    disabled={isUnlocking}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowMnemonic((visible) => !visible)}
+                    className="absolute inset-y-0 right-0 flex w-10 items-center justify-center text-muted-foreground hover:text-foreground"
+                    aria-label={
+                      showMnemonic
+                        ? "Hide recovery phrase"
+                        : "Show recovery phrase"
+                    }
+                  >
+                    {showMnemonic ? <EyeOff /> : <Eye />}
+                  </button>
+                </div>
+                <Button
+                  size="sm"
+                  onClick={unlockSharingKey}
+                  disabled={!mnemonicInput.trim() || isUnlocking}
+                >
+                  {isUnlocking ? (
+                    <Loader2 className="animate-spin" />
+                  ) : (
+                    <KeyRound />
+                  )}
+                  {isUnlocking ? "Unlocking" : "Unlock sharing key"}
+                </Button>
+              </div>
+
+              {unlockError && (
+                <p className="mt-2 text-xs text-destructive" role="alert">
+                  {unlockError}
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    const content = {
+      "primary-missing": {
+        title: "Recover your encryption key",
+        description:
+          "Your primary recovery phrase is required before shared files can be decrypted.",
+        action: "Open Key Management",
+        onClick: () => navigate("/key-management?returnTo=%2Fshared-with-me"),
+      },
+      "sharing-missing": {
+        title: "Enable encrypted sharing",
+        description:
+          "This account does not have a recipient sharing key yet. Complete the one-time setup first.",
+        action: "Enable sharing",
+        onClick: () => navigate("/share"),
+      },
+    }[keyState];
+
+    return (
+      <div className="flex flex-col gap-4 border p-5 sm:flex-row sm:items-center">
+        <div className="flex min-w-0 flex-1 items-start gap-3">
+          <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center border">
+            <KeyRound className="h-4 w-4" />
+          </span>
+          <div>
+            <h2 className="text-sm font-semibold">{content.title}</h2>
+            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+              {content.description}
+            </p>
+          </div>
+        </div>
+        <Button onClick={content.onClick} size="sm">
+          {content.action}
+        </Button>
+      </div>
+    );
+  };
+
+  const actionLabel = (fileId: string, action: FileAction) => {
+    if (processing?.fileId !== fileId || processing.action !== action) {
+      return action === "download" ? "Download" : "Save to Storage";
+    }
+    if (processing.stage === "downloading") return "Downloading";
+    if (processing.stage === "decrypting") return "Decrypting";
+    return "Saving";
   };
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Shared With Me</h1>
-          <p className="text-muted-foreground mt-1">
-            View and access files that have been shared with you
+          <h1 className="text-2xl tracking-tight">Shared with me</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Encrypted files sent to this ZeroDrive account.
           </p>
         </div>
         <Button
           variant="outline"
           size="sm"
-          onClick={handleRefresh}
-          disabled={isLoading}
+          onClick={refreshInbox}
+          disabled={isLoading || !userEmail}
         >
-          <RefreshCw
-            className={`h-4 w-4 mr-2 ${isLoading ? "animate-spin" : ""}`}
-          />
+          <RefreshCw className={isLoading ? "animate-spin" : ""} />
           Refresh
         </Button>
       </div>
 
-      <Card>
-        <CardContent className="pt-6 space-y-6">
-          {isCheckingKeys ? (
-            <div className="flex justify-center py-4">
-              <p className="text-sm text-muted-foreground">
-                Checking key status...
-              </p>
+      {renderKeyStatus()}
+
+      <div className="border">
+        <div className="flex flex-col gap-3 border-b p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-2">
+            <Inbox className="h-4 w-4" />
+            <span className="text-sm font-medium">Inbox</span>
+            {!isLoading && (
+              <span className="text-xs text-muted-foreground">
+                {sharedFiles.length}{" "}
+                {sharedFiles.length === 1 ? "file" : "files"}
+              </span>
+            )}
+          </div>
+          {sharedFiles.length > 0 && (
+            <div className="relative w-full sm:w-64">
+              <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input
+                value={searchQuery}
+                onChange={(event) => setSearchQuery(event.target.value)}
+                placeholder="Search shared files"
+                aria-label="Search shared files"
+                className="pl-9"
+              />
             </div>
-          ) : !hasKeys ? (
-            <div className="p-4 bg-amber-50 dark:bg-amber-950 rounded-md border border-amber-200 dark:border-amber-800 mb-4">
-              <h3 className="text-sm font-medium text-amber-800 dark:text-amber-300 mb-2">
-                Sharing Key Setup Incomplete or Not Found Locally
-              </h3>
-              <p className="text-xs text-amber-700 dark:text-amber-400 mb-2">
-                To download and decrypt shared files, your sharing keys are
-                required. If you've used ZeroDrive on another device, ensure
-                your primary key is set up here (via Key Management) to attempt
-                recovery of your sharing keys from Google Drive backup.
-              </p>
-              <p className="text-xs text-amber-700 dark:text-amber-400 mb-4">
-                If this is your first time or a new setup for this email (
-                {userEmail}), you might need to generate sharing keys first.
-              </p>
-              <div className="flex flex-col sm:flex-row gap-2">
-                <Button
-                  size="sm"
-                  onClick={() => navigate("/key-management")}
-                  className="flex-1"
-                >
-                  Go to Key Management (for primary key)
-                </Button>
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  onClick={() => navigate("/share")}
-                  className="flex-1"
-                >
-                  Go to Share Files (to generate sharing keys)
-                </Button>
-              </div>
-            </div>
-          ) : isLoading ? (
-            <div className="flex justify-center items-center py-8">
-              <p className="text-sm text-muted-foreground">
-                Loading shared files...
-              </p>
-            </div>
-          ) : sharedFiles.length === 0 ? (
-            <div className="py-8 text-center">
-              <p className="text-sm text-muted-foreground">
-                No files have been shared with you yet.
-              </p>
-            </div>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>File Name</TableHead>
-                  <TableHead>Shared On</TableHead>
-                  <TableHead>Size</TableHead>
-                  <TableHead>Action</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {sharedFiles.map((file) => (
-                  <TableRow key={file.id}>
-                    <TableCell className="font-medium flex items-center gap-2">
-                      <FileIcon className="h-4 w-4" />
-                      {file.originalFileName}
-                    </TableCell>
-                    <TableCell>{file.createdAt}</TableCell>
-                    <TableCell>
-                      {file.fileSize
-                        ? (file.fileSize / 1024).toFixed(1) + " KB"
-                        : "N/A"}
-                    </TableCell>
-                    <TableCell>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleDownloadFile(file)}
-                        disabled={isDownloading === file.id}
-                        className="flex items-center gap-1"
-                      >
-                        {isDownloading === file.id ? (
-                          "Processing..."
-                        ) : (
-                          <>
-                            <Download className="h-4 w-4" />
-                            Download
-                          </>
-                        )}
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
           )}
+        </div>
 
-          <Separator />
-
-          <div className="bg-muted p-4 rounded-md">
-            <h3 className="text-sm font-medium mb-2">
-              About Secure File Downloads
-            </h3>
-            <p className="text-xs text-muted-foreground">
-              Files are downloaded and decrypted securely in your browser using
-              your private sharing key. If not found locally, the app will
-              attempt to recover it from your Google Drive backup, provided your
-              primary encryption key is set up. Successfully downloaded files
-              are also automatically saved to your personal ZeroDrive vault if
-              your primary key is configured.
+        {loadError ? (
+          <div className="flex min-h-52 flex-col items-center justify-center px-6 text-center">
+            <AlertCircle className="h-7 w-7 text-destructive" />
+            <p className="mt-3 text-sm font-medium">Inbox unavailable</p>
+            <p className="mt-1 max-w-md text-xs text-muted-foreground">
+              {loadError}
+            </p>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={refreshInbox}
+              className="mt-4"
+            >
+              Try again
+            </Button>
+          </div>
+        ) : isLoading ? (
+          <div className="flex min-h-52 items-center justify-center gap-2 text-sm text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            Loading shared files
+          </div>
+        ) : filteredFiles.length === 0 ? (
+          <div className="flex min-h-52 flex-col items-center justify-center px-6 text-center">
+            <Inbox className="h-8 w-8 text-muted-foreground" />
+            <p className="mt-3 text-sm font-medium">
+              {searchQuery ? "No matching files" : "Your inbox is empty"}
+            </p>
+            <p className="mt-1 max-w-sm text-xs text-muted-foreground">
+              {searchQuery
+                ? "Try a different filename."
+                : "Files shared with this account will appear here."}
             </p>
           </div>
-        </CardContent>
-      </Card>
+        ) : (
+          <div className="divide-y">
+            {filteredFiles.map((file) => {
+              const isProcessing = processing?.fileId === file.id;
+              const isSaved = savedFileIds.has(file.id);
+
+              return (
+                <article
+                  key={file.id}
+                  className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center"
+                >
+                  <div className="flex min-w-0 flex-1 items-center gap-3">
+                    <img
+                      src={getFileIconPath(file.mimeType)}
+                      alt=""
+                      className="h-9 w-9 flex-shrink-0 object-contain"
+                    />
+                    <div className="min-w-0">
+                      <h2 className="truncate text-sm font-medium">
+                        {file.name}
+                      </h2>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {formatBytes(file.fileSize)} · Shared{" "}
+                        {file.createdAt.toLocaleDateString()}
+                        {file.expiresAt
+                          ? ` · Expires ${file.expiresAt.toLocaleDateString()}`
+                          : ""}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col gap-2 sm:flex-row">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleFileAction(file, "download")}
+                      disabled={Boolean(processing) || keyState !== "ready"}
+                    >
+                      {isProcessing && processing.action === "download" ? (
+                        <Loader2 className="animate-spin" />
+                      ) : (
+                        <Download />
+                      )}
+                      {actionLabel(file.id, "download")}
+                    </Button>
+                    <Button
+                      size="sm"
+                      onClick={() => handleFileAction(file, "save")}
+                      disabled={
+                        Boolean(processing) || keyState !== "ready" || isSaved
+                      }
+                    >
+                      {isSaved ? (
+                        <Check />
+                      ) : isProcessing && processing.action === "save" ? (
+                        <Loader2 className="animate-spin" />
+                      ) : (
+                        <HardDrive />
+                      )}
+                      {isSaved
+                        ? "Saved to Storage"
+                        : actionLabel(file.id, "save")}
+                    </Button>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      <div className="flex items-start gap-2 text-xs leading-relaxed text-muted-foreground">
+        <ShieldCheck className="mt-0.5 h-4 w-4 flex-shrink-0" />
+        Files are downloaded and decrypted in this browser. Saving creates a
+        separately encrypted copy in your personal Google Drive; the original
+        share remains available until it expires.
+      </div>
     </div>
   );
 };

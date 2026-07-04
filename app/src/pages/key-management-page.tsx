@@ -42,10 +42,16 @@ type KeyMode = "recover" | "generate";
 export const KeyManagementPage: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const requestedReturnTo = searchParams.get("returnTo");
   const returnTo =
-    searchParams.get("returnTo") === "/share" ? "/share" : "/storage";
-  const returnLabel =
-    returnTo === "/share" ? "Continue to Share Files" : "Continue to Storage";
+    requestedReturnTo === "/share" || requestedReturnTo === "/shared-with-me"
+      ? requestedReturnTo
+      : "/storage";
+  const returnLabel = {
+    "/share": "Continue to Share Files",
+    "/shared-with-me": "Continue to Shared Files",
+    "/storage": "Continue to Storage",
+  }[returnTo];
 
   const [mode, setMode] = useState<KeyMode>("recover");
   const [inputMnemonic, setInputMnemonic] = useState("");

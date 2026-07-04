@@ -533,6 +533,7 @@ export async function storeFileShare(
  * @param originalFileName The original file name
  * @param mimeType The original MIME type
  * @param mnemonic The user's mnemonic phrase for decrypting the private key
+ * @param privateKeyOverride An already-unlocked private sharing key
  */
 export async function decryptSharedFile(
   encryptedFileBlob: Blob,
@@ -541,22 +542,26 @@ export async function decryptSharedFile(
   originalFileName: string,
   mimeType: string,
   mnemonic: string,
+  privateKeyOverride?: JsonWebKey,
 ): Promise<{
   decryptedFile: Blob;
   fileName: string;
 }> {
   try {
-    // Get the user's private key
-    const userKeyPair = await getUserKeyPair(userEmail, mnemonic);
-    if (!userKeyPair || !userKeyPair.privateKeyJwk) {
-      throw new Error(
-        "Private key JWK not found. Please ensure keys are generated and retrieved correctly.",
-      );
+    let privateKeyJwk = privateKeyOverride;
+
+    if (!privateKeyJwk) {
+      const userKeyPair = await getUserKeyPair(userEmail, mnemonic);
+      privateKeyJwk = userKeyPair?.privateKeyJwk;
+    }
+
+    if (!privateKeyJwk) {
+      throw new Error("Private sharing key not found.");
     }
 
     // Decryption attempt - sensitive data not logged for security
 
-    const jwk = userKeyPair.privateKeyJwk;
+    const jwk = privateKeyJwk;
     let importParams;
     let decryptParams;
 
