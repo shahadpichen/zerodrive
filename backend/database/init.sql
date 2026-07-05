@@ -44,7 +44,13 @@ CREATE TABLE IF NOT EXISTS shared_files (
     expires_at TIMESTAMP WITH TIME ZONE,
     last_accessed_at TIMESTAMP WITH TIME ZONE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT shared_files_expiry_after_creation
+        CHECK (expires_at IS NULL OR expires_at > created_at),
+    CONSTRAINT shared_files_expected_size_positive
+        CHECK (expected_encrypted_size IS NULL OR expected_encrypted_size > 0),
+    CONSTRAINT shared_files_deletion_attempts_nonnegative
+        CHECK (deletion_attempts >= 0)
 );
 
 -- Create indexes for better query performance

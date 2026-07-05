@@ -94,56 +94,6 @@ export interface PaginationMeta {
   hasPrev: boolean;
 }
 
-// Database Query Results
-export interface UserPublicKeyRow {
-  id: string;
-  hashed_email_identifier: string;
-  public_key_jwk: any; // JSON from PostgreSQL
-  created_at: string;
-  updated_at: string;
-}
-
-export interface SharedFileRow {
-  id: string;
-  share_id: string;
-  encrypted_file_blob_id: string;
-  recipient_email_hash: string;
-  encrypted_file_key: Buffer | string; // Can be Buffer or hex string
-  sender_proof: string;
-  file_name: string;
-  file_mime_type: string;
-  file_size: number | null;
-  created_at: string;
-  updated_at: string;
-  expires_at: string | null;
-  is_claimed: boolean;
-}
-
-// Service Layer Types
-export interface CreatePublicKeyData {
-  hashedEmail: string;
-  publicKeyJwk: string;
-}
-
-export interface CreateSharedFileData {
-  shareId: string;
-  encryptedFileBlobId: string;
-  recipientEmailHash: string;
-  encryptedFileKey: string;
-  senderProof: string;
-  fileName: string;
-  fileMimeType: string;
-  fileSize?: number;
-  expiresAt?: Date;
-}
-
-export interface GetSharedFilesOptions {
-  recipientEmailHash: string;
-  page?: number;
-  limit?: number;
-  claimed?: boolean;
-}
-
 // Health Check Types
 export interface HealthCheckResponse {
   status: "ok" | "error";
