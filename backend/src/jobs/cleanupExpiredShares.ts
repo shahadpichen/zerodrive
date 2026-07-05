@@ -56,19 +56,14 @@ export const cleanupExpiredShares = async (): Promise<CleanupResult> => {
           [share.id],
         );
         deletedCount += deleted.rowCount;
-      } catch (error) {
+      } catch {
         await query(
           `UPDATE shared_files
            SET deletion_attempts = deletion_attempts + 1,
                deletion_last_error = $2,
                updated_at = CURRENT_TIMESTAMP
            WHERE id = $1`,
-          [
-            share.id,
-            error instanceof Error
-              ? error.message.slice(0, 1000)
-              : "Unknown storage deletion failure",
-          ],
+          [share.id, "OBJECT_DELETE_FAILED"],
         );
         logger.warn("Share storage deletion will be retried", {
           shareId: share.id,

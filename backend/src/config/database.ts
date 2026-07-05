@@ -65,8 +65,11 @@ export function normalizeMigrationSql(sql: string): string {
  * Apply every migration exactly once before the HTTP server starts.
  * A PostgreSQL advisory lock serializes startup across backend instances.
  */
-export const runMigrations = async (): Promise<void> => {
-  const client = await pool.connect();
+export const runMigrationsWithPool = async (
+  targetPool: Pick<Pool, "connect">,
+  migrationsDirectory: string,
+): Promise<void> => {
+  const client = await targetPool.connect();
   try {
     await client.query("SELECT pg_advisory_lock($1)", [MIGRATION_LOCK_ID]);
     await client.query(`
@@ -78,7 +81,7 @@ export const runMigrations = async (): Promise<void> => {
     `);
 
     const files = fs
-      .readdirSync(MIGRATIONS_DIRECTORY)
+      .readdirSync(migrationsDirectory)
       .filter((file) => /^\d+_.+\.sql$/.test(file))
       .sort();
     const applied = await client.query<{
@@ -90,10 +93,7 @@ export const runMigrations = async (): Promise<void> => {
     );
 
     for (const file of files) {
-      const sql = fs.readFileSync(
-        path.join(MIGRATIONS_DIRECTORY, file),
-        "utf8",
-      );
+      const sql = fs.readFileSync(path.join(migrationsDirectory, file), "utf8");
       const checksum = crypto.createHash("sha256").update(sql).digest("hex");
       const previousChecksum = appliedByName.get(file);
       if (previousChecksum) {
@@ -126,6 +126,9 @@ export const runMigrations = async (): Promise<void> => {
     }
   }
 };
+
+export const runMigrations = async (): Promise<void> =>
+  runMigrationsWithPool(pool, MIGRATIONS_DIRECTORY);
 
 /**
  * Test database connection

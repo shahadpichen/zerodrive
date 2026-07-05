@@ -69,7 +69,7 @@ describe("share lifecycle cleanup", () => {
     expect(result.deletedCount).toBe(0);
     expect(query).toHaveBeenLastCalledWith(
       expect.stringContaining("deletion_attempts = deletion_attempts + 1"),
-      ["share-1", "storage unavailable"],
+      ["share-1", "OBJECT_DELETE_FAILED"],
     );
   });
 });

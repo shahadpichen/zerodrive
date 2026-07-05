@@ -1378,7 +1378,7 @@ describe("Shared Files Routes Integration", () => {
 
       expect(mockQuery).toHaveBeenLastCalledWith(
         expect.stringContaining("deletion_attempts = deletion_attempts + 1"),
-        [validUuid, "MinIO unavailable"],
+        [validUuid, "OBJECT_DELETE_FAILED"],
       );
       expect(mockQuery).not.toHaveBeenCalledWith(
         "DELETE FROM shared_files WHERE id = $1",

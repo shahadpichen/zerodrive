@@ -102,6 +102,16 @@ describe("JWTService", () => {
 
       expect(() => verifyToken(malformedToken)).toThrow();
     });
+
+    it("rejects a valid signature made with an unapproved algorithm", () => {
+      const token = jwt.sign(
+        { email: "test@example.com", emailHash: "a".repeat(64) },
+        process.env.JWT_SECRET!,
+        { algorithm: "HS512", expiresIn: "1h" },
+      );
+
+      expect(() => verifyToken(token)).toThrow("Invalid token");
+    });
   });
 
   describe("generateRefreshToken", () => {

@@ -564,19 +564,14 @@ router.delete(
             Key: share.file_id,
           }),
         );
-      } catch (storageError) {
+      } catch {
         await query(
           `UPDATE shared_files
            SET deletion_attempts = deletion_attempts + 1,
                deletion_last_error = $2,
                updated_at = CURRENT_TIMESTAMP
            WHERE id = $1`,
-          [
-            id,
-            storageError instanceof Error
-              ? storageError.message.slice(0, 1000)
-              : "Unknown storage deletion failure",
-          ],
+          [id, "OBJECT_DELETE_FAILED"],
         );
         throw ApiErrors.ServiceUnavailable(
           "Share deletion is queued for retry",

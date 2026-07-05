@@ -48,6 +48,7 @@ export function generateToken(email: string): string {
 
     const token = jwt.sign(payload, JWT_SECRET, {
       expiresIn: JWT_EXPIRY,
+      algorithm: "HS256",
     } as any);
 
     logger.info("[JWT] Token generated");
@@ -63,7 +64,9 @@ export function generateToken(email: string): string {
  */
 export function verifyToken(token: string): JWTPayload {
   try {
-    const decoded = jwt.verify(token, JWT_SECRET) as JWTPayload;
+    const decoded = jwt.verify(token, JWT_SECRET, {
+      algorithms: ["HS256"],
+    }) as JWTPayload;
     return decoded;
   } catch (error) {
     if (error instanceof jwt.TokenExpiredError) {
@@ -93,6 +96,7 @@ export function generateRefreshToken(email: string): string {
 
     const token = jwt.sign(payload, JWT_SECRET, {
       expiresIn: REFRESH_TOKEN_EXPIRY,
+      algorithm: "HS256",
     } as any);
 
     logger.info("[JWT] Refresh token generated");
@@ -108,7 +112,9 @@ export function generateRefreshToken(email: string): string {
  */
 export function verifyRefreshToken(token: string): JWTPayload {
   try {
-    const decoded = jwt.verify(token, JWT_SECRET) as JWTPayload;
+    const decoded = jwt.verify(token, JWT_SECRET, {
+      algorithms: ["HS256"],
+    }) as JWTPayload;
     return decoded;
   } catch (error) {
     if (error instanceof jwt.TokenExpiredError) {
