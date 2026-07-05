@@ -952,7 +952,7 @@ describe("Shared Files Routes Integration", () => {
       expect(response.body.message).toBe("Shared file retrieved successfully");
       expect(mockQuery).toHaveBeenCalledWith(expect.any(String), [
         validUuid,
-        authenticatedUserHash,
+        expect.arrayContaining([authenticatedUserHash]),
       ]);
     });
 

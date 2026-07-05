@@ -159,11 +159,12 @@ describe("Auth Routes Integration", () => {
       ).toBe(true);
 
       // Google tokens are NO LONGER stored in database (zero-knowledge architecture)
-      // They are passed once via URL redirect to frontend, which encrypts them client-side
-      // Verify that we only query for existing user (public_keys check), not insert tokens
+      // They are passed once through the authenticated exchange endpoint.
+      // Identity migration and the existing-user check are one atomic statement.
+      const lookupIds = deriveLookupCandidates(mockUserEmail);
       expect(mockQuery).toHaveBeenCalledWith(
-        expect.stringContaining("SELECT user_id FROM public_keys"),
-        [deriveLookupCandidates(mockUserEmail)],
+        expect.stringContaining("migrated_shares"),
+        [lookupIds[0], lookupIds[1], lookupIds],
       );
 
       // Verify analytics tracked

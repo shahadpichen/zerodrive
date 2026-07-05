@@ -155,7 +155,7 @@ export interface RequestLogMeta extends LogMeta {
   status: number;
   duration: string;
   userAgent?: string;
-  ip: string;
+  ip?: string;
 }
 
 // Database Connection Types

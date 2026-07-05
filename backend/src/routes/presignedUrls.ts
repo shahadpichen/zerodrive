@@ -183,7 +183,9 @@ router.post("/download", async (req: Request, res: Response) => {
       expiresIn: 300, // 5 minutes
     });
 
-    logger.info("Download URL generated", { fileKey });
+    logger.info("Authorized download URL generated", {
+      requestId: req.requestId,
+    });
 
     return res.json({
       success: true,

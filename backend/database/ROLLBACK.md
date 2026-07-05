@@ -18,3 +18,8 @@ deployed in a version compatible with the resulting schema.
 Security migrations should normally be rolled forward. A rollback that would
 restore plaintext identity, metadata, arbitrary object-key signing, or
 sender-linked authorization is prohibited.
+
+Migration `007_purge_legacy_plaintext_metadata.sql` is intentionally
+irreversible. PostgreSQL cannot reconstruct legacy filenames or MIME types
+after they are removed, and the backend must not receive the client-side file
+key needed to encrypt them.

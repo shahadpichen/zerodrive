@@ -13,6 +13,12 @@ Recipient public-key fingerprints are pinned after first contact. First-contact
 trust still depends on the directory service; changed fingerprints require
 explicit sender confirmation.
 
+The authenticated public-key directory necessarily reveals whether a submitted
+email address has registered a sharing key. Per-account and per-IP rate limits
+reduce bulk probing but do not provide private contact discovery. Avoid treating
+directory membership as confidential until a capability-based or OPRF-based
+discovery protocol replaces direct email lookup.
+
 Browser key material is cleared on logout and account changes. Google refresh
 tokens use HTTP-only cookies. An active same-origin XSS can still access
 decrypted files, short-lived access tokens, and keys currently in JavaScript

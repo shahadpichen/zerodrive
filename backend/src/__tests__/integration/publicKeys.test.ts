@@ -182,8 +182,8 @@ describe("privacy-preserving public key directory", () => {
 
     await request(app).delete("/api/public-keys").expect(200);
     expect(query).toHaveBeenCalledWith(
-      "DELETE FROM public_keys WHERE user_id = $1",
-      [ownerLookupId],
+      "DELETE FROM public_keys WHERE user_id = ANY($1::varchar[])",
+      [[ownerLookupId]],
     );
   });
 

@@ -352,13 +352,17 @@ router.get(
         throw ApiErrors.Unauthorized("Not authenticated");
       }
 
+      const recipientIds = [
+        req.user.emailHash,
+        ...(req.user.legacyEmailHash ? [req.user.legacyEmailHash] : []),
+      ];
       const result = await query<SharedFile>(
         `SELECT * FROM shared_files 
        WHERE id = $1
-       AND recipient_user_id = $2
+       AND recipient_user_id = ANY($2::varchar[])
        AND status = 'active'
        AND (expires_at IS NULL OR expires_at > CURRENT_TIMESTAMP)`,
-        [id, req.user.emailHash],
+        [id, recipientIds],
       );
 
       if (result.rows.length === 0) {
@@ -614,13 +618,17 @@ router.post(
       }
 
       // Check if shared file exists and is not expired
+      const recipientIds = [
+        req.user.emailHash,
+        ...(req.user.legacyEmailHash ? [req.user.legacyEmailHash] : []),
+      ];
       const sharedFile = await query<SharedFile>(
         `SELECT * FROM shared_files 
        WHERE id = $1
-       AND recipient_user_id = $2
+       AND recipient_user_id = ANY($2::varchar[])
        AND status = 'active'
        AND (expires_at IS NULL OR expires_at > CURRENT_TIMESTAMP)`,
-        [id, req.user.emailHash],
+        [id, recipientIds],
       );
 
       if (sharedFile.rows.length === 0) {

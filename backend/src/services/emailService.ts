@@ -5,24 +5,24 @@
  * Privacy-focused: No sender information is disclosed in emails.
  */
 
-import formData from 'form-data';
-import Mailgun from 'mailgun.js';
+import formData from "form-data";
+import Mailgun from "mailgun.js";
 import {
   getPlainTextTemplate,
   getHtmlTemplate,
   getSubject,
   getPlainTextInvitationTemplate,
   getHtmlInvitationTemplate,
-  getInvitationSubject
-} from './emailTemplates';
+  getInvitationSubject,
+} from "./emailTemplates";
 
 // Environment configuration
-const MAILGUN_API_KEY = process.env.MAILGUN_API_KEY || '';
-const MAILGUN_DOMAIN = process.env.MAILGUN_DOMAIN || '';
-const MAILGUN_FROM_NAME = process.env.MAILGUN_FROM_NAME || 'ZeroDrive';
-const MAILGUN_FROM_EMAIL = process.env.MAILGUN_FROM_EMAIL || '';
-const APP_URL = process.env.APP_URL || 'http://localhost:5173';
-const NODE_ENV = process.env.NODE_ENV || 'development';
+const MAILGUN_API_KEY = process.env.MAILGUN_API_KEY || "";
+const MAILGUN_DOMAIN = process.env.MAILGUN_DOMAIN || "";
+const MAILGUN_FROM_NAME = process.env.MAILGUN_FROM_NAME || "ZeroDrive";
+const MAILGUN_FROM_EMAIL = process.env.MAILGUN_FROM_EMAIL || "";
+const APP_URL = process.env.APP_URL || "http://localhost:5173";
+const NODE_ENV = process.env.NODE_ENV || "development";
 
 // Initialize Mailgun client
 const mailgun = new Mailgun(formData);
@@ -34,11 +34,13 @@ let mg: ReturnType<typeof mailgun.client> | null = null;
 function getMailgunClient() {
   if (!mg) {
     if (!MAILGUN_API_KEY || !MAILGUN_DOMAIN) {
-      throw new Error('Mailgun configuration missing. Set MAILGUN_API_KEY and MAILGUN_DOMAIN in .env');
+      throw new Error(
+        "Mailgun configuration missing. Set MAILGUN_API_KEY and MAILGUN_DOMAIN in .env",
+      );
     }
 
     mg = mailgun.client({
-      username: 'api',
+      username: "api",
       key: MAILGUN_API_KEY,
     });
   }
@@ -53,12 +55,19 @@ function getMailgunClient() {
  * @param customMessage - Optional custom message from sender
  * @returns Promise that resolves when email is sent
  */
-export async function sendFileShareNotification(recipientEmail: string, customMessage?: string): Promise<void> {
+export async function sendFileShareNotification(
+  recipientEmail: string,
+  customMessage?: string,
+): Promise<void> {
   try {
     const client = getMailgunClient();
 
     // Prepare email data
-    const emailData: { recipientEmail: string; appUrl: string; customMessage?: string } = {
+    const emailData: {
+      recipientEmail: string;
+      appUrl: string;
+      customMessage?: string;
+    } = {
       recipientEmail,
       appUrl: APP_URL,
       ...(customMessage && { customMessage }),
@@ -76,23 +85,20 @@ export async function sendFileShareNotification(recipientEmail: string, customMe
       subject: subject,
       text: plainText,
       html: html,
-      'o:tracking': 'no', // Disable tracking for privacy
-      'o:tag': ['file-share-notification'],
-      'o:dkim': 'yes', // Enable DKIM signature
+      "o:tracking": "no", // Disable tracking for privacy
+      "o:tag": ["file-share-notification"],
+      "o:dkim": "yes", // Enable DKIM signature
     });
 
-    if (NODE_ENV === 'development') {
-      console.log('[EmailService] Email sent successfully:', {
+    if (NODE_ENV === "development") {
+      console.log("[EmailService] Email sent successfully:", {
         messageId: result.id,
-        recipient: recipientEmail,
         status: result.message,
       });
     }
   } catch (error: any) {
-    console.error('[EmailService] Failed to send email:', {
-      recipient: recipientEmail,
+    console.error("[EmailService] Failed to send email:", {
       error: error.message,
-      details: error.details || error,
     });
 
     // Don't throw error - we don't want to fail file sharing if email fails
@@ -111,25 +117,30 @@ export async function sendFileShareNotification(recipientEmail: string, customMe
 export function verifyWebhookSignature(
   timestamp: string,
   token: string,
-  signature: string
+  signature: string,
 ): boolean {
   try {
-    const crypto = require('crypto');
-    const signingKey = process.env.MAILGUN_WEBHOOK_SIGNING_KEY || '';
+    const crypto = require("crypto");
+    const signingKey = process.env.MAILGUN_WEBHOOK_SIGNING_KEY || "";
 
     if (!signingKey) {
-      console.error('[EmailService] MAILGUN_WEBHOOK_SIGNING_KEY not configured');
+      console.error(
+        "[EmailService] MAILGUN_WEBHOOK_SIGNING_KEY not configured",
+      );
       return false;
     }
 
     const encodedToken = crypto
-      .createHmac('sha256', signingKey)
+      .createHmac("sha256", signingKey)
       .update(timestamp.concat(token))
-      .digest('hex');
+      .digest("hex");
 
     return encodedToken === signature;
   } catch (error: any) {
-    console.error('[EmailService] Webhook signature verification failed:', error.message);
+    console.error(
+      "[EmailService] Webhook signature verification failed:",
+      error.message,
+    );
     return false;
   }
 }
@@ -141,12 +152,19 @@ export function verifyWebhookSignature(
  * @param senderMessage - Optional personal message from inviter
  * @returns Promise that resolves when email is sent
  */
-export async function sendInvitationEmail(recipientEmail: string, senderMessage?: string): Promise<void> {
+export async function sendInvitationEmail(
+  recipientEmail: string,
+  senderMessage?: string,
+): Promise<void> {
   try {
     const client = getMailgunClient();
 
     // Prepare email data
-    const emailData: { recipientEmail: string; appUrl: string; senderMessage?: string } = {
+    const emailData: {
+      recipientEmail: string;
+      appUrl: string;
+      senderMessage?: string;
+    } = {
       recipientEmail,
       appUrl: APP_URL,
       ...(senderMessage && { senderMessage }),
@@ -164,23 +182,20 @@ export async function sendInvitationEmail(recipientEmail: string, senderMessage?
       subject: subject,
       text: plainText,
       html: html,
-      'o:tracking': 'no', // Disable tracking for privacy
-      'o:tag': ['invitation'],
-      'o:dkim': 'yes', // Enable DKIM signature
+      "o:tracking": "no", // Disable tracking for privacy
+      "o:tag": ["invitation"],
+      "o:dkim": "yes", // Enable DKIM signature
     });
 
-    if (NODE_ENV === 'development') {
-      console.log('[EmailService] Invitation sent successfully:', {
+    if (NODE_ENV === "development") {
+      console.log("[EmailService] Invitation sent successfully:", {
         messageId: result.id,
-        recipient: recipientEmail,
         status: result.message,
       });
     }
   } catch (error: any) {
-    console.error('[EmailService] Failed to send invitation:', {
-      recipient: recipientEmail,
+    console.error("[EmailService] Failed to send invitation:", {
       error: error.message,
-      details: error.details || error,
     });
 
     // Don't throw error - we don't want to fail the operation if email fails
@@ -199,8 +214,8 @@ export async function testEmailConfiguration(): Promise<boolean> {
     // Validate domain
     const domainInfo = await client.domains.get(MAILGUN_DOMAIN);
 
-    if (NODE_ENV === 'development') {
-      console.log('[EmailService] Mailgun configuration valid:', {
+    if (NODE_ENV === "development") {
+      console.log("[EmailService] Mailgun configuration valid:", {
         domain: MAILGUN_DOMAIN,
         state: domainInfo.state,
       });
@@ -208,7 +223,7 @@ export async function testEmailConfiguration(): Promise<boolean> {
 
     return true;
   } catch (error: any) {
-    console.error('[EmailService] Configuration test failed:', error.message);
+    console.error("[EmailService] Configuration test failed:", error.message);
     return false;
   }
 }

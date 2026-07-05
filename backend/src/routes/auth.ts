@@ -119,17 +119,30 @@ router.get(
       const userInfo = await getUserInfo(accessToken);
 
       if (!userInfo.verified) {
-        logger.warn("[Auth] Unverified email attempted login", {
-          email: userInfo.email,
-        });
+        logger.warn("[Auth] Unverified account attempted login");
         return res.redirect(`${FRONTEND_URL}?error=email_not_verified`);
       }
 
       // Check if user is new (no public key in database)
       const lookupIds = deriveLookupCandidates(userInfo.email);
       const publicKeyResult = await query(
-        "SELECT user_id FROM public_keys WHERE user_id = ANY($1::varchar[])",
-        [lookupIds],
+        `WITH migrated_shares AS (
+           UPDATE shared_files
+           SET recipient_user_id = $1
+           WHERE recipient_user_id = $2
+         ),
+         migrated_keys AS (
+           UPDATE public_keys
+           SET user_id = $1
+           WHERE user_id = $2
+             AND NOT EXISTS (
+               SELECT 1 FROM public_keys WHERE user_id = $1
+             )
+         )
+         SELECT user_id
+         FROM public_keys
+         WHERE user_id = ANY($3::varchar[])`,
+        [lookupIds[0], lookupIds[1], lookupIds],
       );
       const isNewUser = publicKeyResult.rows.length === 0;
 
@@ -141,7 +154,6 @@ router.get(
       const tokenExpiry = new Date(Date.now() + 3600 * 1000); // Access tokens typically expire in 1 hour
 
       logger.info("[Auth] Google tokens obtained (not storing in database)", {
-        email: userInfo.email,
         hasRefreshToken: !!refreshToken,
       });
 
@@ -181,7 +193,6 @@ router.get(
       const csrfToken = crypto.randomBytes(32).toString("hex");
 
       logger.info("[Auth] User authenticated successfully", {
-        email: userInfo.email,
         isNewUser,
         hasLimitedScope,
       });

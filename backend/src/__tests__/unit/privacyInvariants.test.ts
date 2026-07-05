@@ -1,6 +1,9 @@
 import fs from "fs";
 import path from "path";
-import { deriveRecipientLookupId } from "../../utils/identity";
+import {
+  deriveLegacyRecipientLookupId,
+  deriveRecipientLookupId,
+} from "../../utils/identity";
 
 describe("database privacy invariants", () => {
   const initSql = fs.readFileSync(
@@ -10,6 +13,13 @@ describe("database privacy invariants", () => {
   const sharedFilesSchema = initSql.match(
     /CREATE TABLE IF NOT EXISTS shared_files \(([\s\S]*?)\n\);/,
   )?.[1];
+  const plaintextPurgeMigration = fs.readFileSync(
+    path.resolve(
+      __dirname,
+      "../../../database/migrations/007_purge_legacy_plaintext_metadata.sql",
+    ),
+    "utf8",
+  );
 
   it("has no sender identity or plaintext recipient columns", () => {
     expect(sharedFilesSchema).toBeDefined();
@@ -46,5 +56,23 @@ describe("database privacy invariants", () => {
     expect(first).not.toContain("person");
     if (previousSecret) process.env.DIRECTORY_HMAC_SECRET = previousSecret;
     else delete process.env.DIRECTORY_HMAC_SECRET;
+  });
+
+  it("uses the original salt only for legacy identifier compatibility", () => {
+    const previousDirectorySecret = process.env.DIRECTORY_HMAC_SECRET;
+    const previousLegacySecret = process.env.EMAIL_HASH_SALT;
+    process.env.DIRECTORY_HMAC_SECRET = "new-independent-secret";
+    process.env.EMAIL_HASH_SALT = "actual-legacy-secret";
+    const legacy = deriveLegacyRecipientLookupId("person@example.com");
+    process.env.DIRECTORY_HMAC_SECRET = "different-new-secret";
+
+    expect(deriveLegacyRecipientLookupId("person@example.com")).toBe(legacy);
+    process.env.DIRECTORY_HMAC_SECRET = previousDirectorySecret;
+    process.env.EMAIL_HASH_SALT = previousLegacySecret;
+  });
+
+  it("purges legacy plaintext metadata during deployment migration", () => {
+    expect(plaintextPurgeMigration).toContain("SET file_name = NULL");
+    expect(plaintextPurgeMigration).toContain("mime_type = NULL");
   });
 });

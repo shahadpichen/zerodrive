@@ -65,8 +65,6 @@ export const ApiErrors = {
  * Handle PostgreSQL database errors
  */
 const handleDatabaseError = (error: any): ApiError => {
-  logger.error("Database error", error);
-
   // PostgreSQL error codes
   switch (error.code) {
     case "23505": // Unique violation
@@ -133,19 +131,15 @@ export const errorHandler = (
     apiError = ApiErrors.InternalServer("An unexpected error occurred");
   }
 
-  // Log error details
+  // Never copy request bodies, query values, headers, cookies, IP addresses, or
+  // user identifiers into logs. These can contain recipient emails, OAuth
+  // exchange codes, capabilities, and other sensitive values.
   const logData = {
     method: req.method,
-    url: req.url,
+    path: req.route?.path || req.path,
+    requestId: req.requestId,
     statusCode: apiError.statusCode,
     code: apiError.code,
-    message: apiError.message,
-    stack: process.env.NODE_ENV === "development" ? apiError.stack : undefined,
-    body: req.body,
-    query: req.query,
-    params: req.params,
-    userAgent: req.get("User-Agent"),
-    ip: req.ip,
   };
 
   if (apiError.statusCode >= 500) {

@@ -214,9 +214,14 @@ router.delete(
     }
 
     try {
-      const result = await query("DELETE FROM public_keys WHERE user_id = $1", [
+      const ownerIds = [
         req.user.emailHash,
-      ]);
+        ...(req.user.legacyEmailHash ? [req.user.legacyEmailHash] : []),
+      ];
+      const result = await query(
+        "DELETE FROM public_keys WHERE user_id = ANY($1::varchar[])",
+        [ownerIds],
+      );
 
       if (result.rowCount === 0) {
         throw ApiErrors.NotFound("Public key not found for this user");

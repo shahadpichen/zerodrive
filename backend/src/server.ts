@@ -23,6 +23,7 @@ import {
 import router from "./routes";
 import logger from "./utils/logger";
 import { cleanupExpiredShares } from "./jobs/cleanupExpiredShares";
+import { validateIdentitySecrets } from "./utils/identity";
 
 // Initialize Express app
 const app: Application = express();
@@ -134,7 +135,10 @@ app.use((req: Request, res: Response, next: NextFunction) => {
 
   res.on("finish", () => {
     const duration = Date.now() - start;
-    logger.info(`${req.method} ${req.url} - ${res.statusCode} - ${duration}ms`);
+    logger.info(
+      `${req.method} ${req.route?.path || req.path} - ${res.statusCode} - ${duration}ms`,
+      { requestId: req.requestId },
+    );
   });
 
   next();
@@ -202,6 +206,7 @@ process.on("uncaughtException", (error: Error) => {
 // Start server
 const startServer = async (): Promise<void> => {
   try {
+    validateIdentitySecrets();
     // Test database connection
     const dbConnected = await testConnection();
     if (!dbConnected) {

@@ -10,9 +10,19 @@ import {
   deriveRecipientLookupId,
 } from "../utils/identity";
 
-const JWT_SECRET = process.env.JWT_SECRET || "your-jwt-secret-here";
 const JWT_EXPIRY = process.env.JWT_EXPIRY || "15m"; // Short-lived access token
 const REFRESH_TOKEN_EXPIRY = process.env.REFRESH_TOKEN_EXPIRY || "7d"; // Long-lived refresh token
+
+export function validateJwtSecret(secret: string | undefined): string {
+  if (!secret || secret.length < 32 || secret.includes("your-jwt-secret")) {
+    throw new Error(
+      "JWT_SECRET must be configured with at least 32 non-placeholder characters",
+    );
+  }
+  return secret;
+}
+
+const JWT_SECRET = validateJwtSecret(process.env.JWT_SECRET);
 
 interface JWTPayload {
   email: string;
