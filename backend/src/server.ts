@@ -24,6 +24,7 @@ import router from "./routes";
 import logger from "./utils/logger";
 import { cleanupExpiredShares } from "./jobs/cleanupExpiredShares";
 import { validateIdentitySecrets } from "./utils/identity";
+import { enforceHttps } from "./middleware/httpsEnforcement";
 
 // Initialize Express app
 const app: Application = express();
@@ -32,6 +33,16 @@ const app: Application = express();
 const PORT = parseInt(process.env.PORT || "3001");
 const HOST = process.env.HOST || "localhost";
 const NODE_ENV = process.env.NODE_ENV || "development";
+
+// Honor X-Forwarded-Proto only from explicitly trusted reverse proxies. The
+// secure default is a proxy on the same host.
+app.set(
+  "trust proxy",
+  (process.env.TRUST_PROXY || "loopback")
+    .split(",")
+    .map((proxy) => proxy.trim())
+    .filter(Boolean),
+);
 
 // Security middleware with strict CSP
 app.use(
@@ -64,18 +75,9 @@ app.use(
   }),
 );
 
-// HTTPS enforcement middleware (production only)
-if (NODE_ENV === "production") {
-  app.use((req: Request, res: Response, next: NextFunction) => {
-    if (
-      req.headers["x-forwarded-proto"] !== "https" &&
-      req.header("host")?.indexOf("localhost") === -1
-    ) {
-      return res.redirect(301, `https://${req.headers.host}${req.url}`);
-    }
-    next();
-  });
-}
+// The reverse proxy owns canonical redirects. The application never builds a
+// redirect from an untrusted Host header.
+app.use(enforceHttps(NODE_ENV));
 
 // Request parsing middleware
 app.use(express.json({ limit: "10mb" }));
