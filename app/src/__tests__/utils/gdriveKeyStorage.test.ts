@@ -6,13 +6,13 @@
 import {
   uploadEncryptedRsaKeyToDrive,
   downloadEncryptedRsaKeyFromDrive,
-} from '../../utils/gdriveKeyStorage';
-import { getGoogleAccessToken } from '../../utils/gapiInit';
-import { gapi } from 'gapi-script';
+} from "../../utils/gdriveKeyStorage";
+import { getGoogleAccessToken } from "../../utils/gapiInit";
+import { gapi } from "gapi-script";
 
 // Mock dependencies
-jest.mock('../../utils/gapiInit');
-jest.mock('gapi-script', () => ({
+jest.mock("../../utils/gapiInit");
+jest.mock("gapi-script", () => ({
   gapi: {
     client: {
       load: jest.fn(),
@@ -29,7 +29,7 @@ jest.mock('gapi-script', () => ({
 global.fetch = jest.fn();
 
 // Mock logger to avoid console spam
-jest.mock('../../utils/logger', () => ({
+jest.mock("../../utils/logger", () => ({
   __esModule: true,
   default: {
     log: jest.fn(),
@@ -38,25 +38,27 @@ jest.mock('../../utils/logger', () => ({
   },
 }));
 
-describe('gdriveKeyStorage', () => {
-  const mockAccessToken = 'mock-access-token';
-  const mockBlob = new Blob(['encrypted-key-data'], { type: 'application/json' });
+describe("gdriveKeyStorage", () => {
+  const mockAccessToken = "mock-access-token";
+  const mockBlob = new Blob(["encrypted-key-data"], {
+    type: "application/json",
+  });
 
   beforeEach(() => {
     jest.clearAllMocks();
     (global.fetch as jest.Mock).mockClear();
   });
 
-  describe('uploadEncryptedRsaKeyToDrive', () => {
-    it('should throw error when no access token available', async () => {
+  describe("uploadEncryptedRsaKeyToDrive", () => {
+    it("should throw error when no access token available", async () => {
       (getGoogleAccessToken as jest.Mock).mockResolvedValue(null);
 
       await expect(uploadEncryptedRsaKeyToDrive(mockBlob)).rejects.toThrow(
-        'User not authenticated for Google Drive upload'
+        "User not authenticated for Google Drive upload",
       );
     });
 
-    it('should throw error on 403 Forbidden response', async () => {
+    it("should throw error on 403 Forbidden response", async () => {
       (getGoogleAccessToken as jest.Mock).mockResolvedValue(mockAccessToken);
       (gapi.client.load as jest.Mock).mockResolvedValue(undefined);
 
@@ -73,11 +75,12 @@ describe('gdriveKeyStorage', () => {
       (global.fetch as jest.Mock).mockResolvedValue({
         ok: false,
         status: 403,
-        statusText: 'Forbidden',
+        statusText: "Forbidden",
         json: async () => ({
           error: {
             code: 403,
-            message: 'The granted scopes do not give access to all of the requested spaces',
+            message:
+              "The granted scopes do not give access to all of the requested spaces",
           },
         }),
       });
@@ -85,7 +88,7 @@ describe('gdriveKeyStorage', () => {
       await expect(uploadEncryptedRsaKeyToDrive(mockBlob)).rejects.toThrow();
     });
 
-    it('should successfully upload and return file ID', async () => {
+    it("should successfully upload and return file ID", async () => {
       (getGoogleAccessToken as jest.Mock).mockResolvedValue(mockAccessToken);
       (gapi.client.load as jest.Mock).mockResolvedValue(undefined);
 
@@ -98,7 +101,7 @@ describe('gdriveKeyStorage', () => {
         },
       };
 
-      const mockFileId = 'mock-file-id-123';
+      const mockFileId = "mock-file-id-123";
       (global.fetch as jest.Mock).mockResolvedValue({
         ok: true,
         status: 200,
@@ -109,18 +112,18 @@ describe('gdriveKeyStorage', () => {
 
       expect(result).toBe(mockFileId);
       expect(global.fetch).toHaveBeenCalledWith(
-        expect.stringContaining('googleapis.com/upload/drive/v3/files'),
+        expect.stringContaining("googleapis.com/upload/drive/v3/files"),
         expect.objectContaining({
-          method: 'POST',
+          method: "POST",
           headers: expect.objectContaining({
             Authorization: `Bearer ${mockAccessToken}`,
           }),
-        })
+        }),
       );
     });
 
-    it('should update existing file instead of creating new one', async () => {
-      const existingFileId = 'existing-file-id';
+    it("should update existing file instead of creating new one", async () => {
+      const existingFileId = "existing-file-id";
       (getGoogleAccessToken as jest.Mock).mockResolvedValue(mockAccessToken);
       (gapi.client.load as jest.Mock).mockResolvedValue(undefined);
 
@@ -147,12 +150,12 @@ describe('gdriveKeyStorage', () => {
       expect(global.fetch).toHaveBeenCalledWith(
         expect.stringContaining(`files/${existingFileId}`),
         expect.objectContaining({
-          method: 'PATCH',
-        })
+          method: "PATCH",
+        }),
       );
     });
 
-    it('should propagate error with details when upload fails', async () => {
+    it("should propagate error with details when upload fails", async () => {
       (getGoogleAccessToken as jest.Mock).mockResolvedValue(mockAccessToken);
       (gapi.client.load as jest.Mock).mockResolvedValue(undefined);
 
@@ -164,23 +167,25 @@ describe('gdriveKeyStorage', () => {
         },
       };
 
-      const errorMessage = 'Network error';
+      const errorMessage = "Network error";
       (global.fetch as jest.Mock).mockRejectedValue(new Error(errorMessage));
 
-      await expect(uploadEncryptedRsaKeyToDrive(mockBlob)).rejects.toThrow(errorMessage);
+      await expect(uploadEncryptedRsaKeyToDrive(mockBlob)).rejects.toThrow(
+        errorMessage,
+      );
     });
   });
 
-  describe('downloadEncryptedRsaKeyFromDrive', () => {
-    it('should throw error when no access token available', async () => {
+  describe("downloadEncryptedRsaKeyFromDrive", () => {
+    it("should throw error when no access token available", async () => {
       (getGoogleAccessToken as jest.Mock).mockResolvedValue(null);
 
       await expect(downloadEncryptedRsaKeyFromDrive()).rejects.toThrow(
-        'User not authenticated for Google Drive download'
+        "User not authenticated for Google Drive download",
       );
     });
 
-    it('should throw error when file not found in appDataFolder or root Drive', async () => {
+    it("should throw error when file not found in appDataFolder or root Drive", async () => {
       (getGoogleAccessToken as jest.Mock).mockResolvedValue(mockAccessToken);
       (gapi.client.load as jest.Mock).mockResolvedValue(undefined);
 
@@ -194,12 +199,12 @@ describe('gdriveKeyStorage', () => {
       };
 
       await expect(downloadEncryptedRsaKeyFromDrive()).rejects.toThrow(
-        'not found in appDataFolder or root Google Drive'
+        "not found in appDataFolder or root Google Drive",
       );
     });
 
-    it('should successfully download and return Blob', async () => {
-      const mockFileId = 'mock-file-id';
+    it("should successfully download and return Blob", async () => {
+      const mockFileId = "mock-file-id";
       (getGoogleAccessToken as jest.Mock).mockResolvedValue(mockAccessToken);
       (gapi.client.load as jest.Mock).mockResolvedValue(undefined);
 
@@ -208,13 +213,17 @@ describe('gdriveKeyStorage', () => {
         files: {
           list: jest.fn().mockResolvedValue({
             result: {
-              files: [{ id: mockFileId, name: 'zerodrive_rsa_key_backup.json' }],
+              files: [
+                { id: mockFileId, name: "zerodrive_rsa_key_backup.json" },
+              ],
             },
           }),
         },
       };
 
-      const mockDownloadedBlob = new Blob(['downloaded-key'], { type: 'application/json' });
+      const mockDownloadedBlob = new Blob(["downloaded-key"], {
+        type: "application/json",
+      });
       (global.fetch as jest.Mock).mockResolvedValue({
         ok: true,
         blob: async () => mockDownloadedBlob,
@@ -226,14 +235,35 @@ describe('gdriveKeyStorage', () => {
       expect(global.fetch).toHaveBeenCalledWith(
         expect.stringContaining(`files/${mockFileId}?alt=media`),
         expect.objectContaining({
-          method: 'GET',
+          method: "GET",
           headers: expect.any(Headers),
-        })
+        }),
       );
     });
 
-    it('should throw error when download request fails', async () => {
-      const mockFileId = 'mock-file-id';
+    it("downloads the requested historical key version", async () => {
+      (getGoogleAccessToken as jest.Mock).mockResolvedValue(mockAccessToken);
+      const list = jest.fn().mockResolvedValue({
+        result: { files: [{ id: "historical-key-id" }] },
+      });
+      (gapi.client as any).drive = { files: { list } };
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: true,
+        blob: async () => new Blob(["historical-key"]),
+      });
+
+      await downloadEncryptedRsaKeyFromDrive(3);
+
+      expect(list).toHaveBeenCalledWith(
+        expect.objectContaining({
+          q: "name='zerodrive_rsa_key_backup_v3.json' and trashed=false",
+          spaces: "appDataFolder",
+        }),
+      );
+    });
+
+    it("should throw error when download request fails", async () => {
+      const mockFileId = "mock-file-id";
       (getGoogleAccessToken as jest.Mock).mockResolvedValue(mockAccessToken);
       (gapi.client.load as jest.Mock).mockResolvedValue(undefined);
 
@@ -241,7 +271,9 @@ describe('gdriveKeyStorage', () => {
         files: {
           list: jest.fn().mockResolvedValue({
             result: {
-              files: [{ id: mockFileId, name: 'zerodrive_rsa_key_backup.json' }],
+              files: [
+                { id: mockFileId, name: "zerodrive_rsa_key_backup.json" },
+              ],
             },
           }),
         },
@@ -249,16 +281,16 @@ describe('gdriveKeyStorage', () => {
 
       (global.fetch as jest.Mock).mockResolvedValue({
         ok: false,
-        statusText: 'Not Found',
+        statusText: "Not Found",
       });
 
       await expect(downloadEncryptedRsaKeyFromDrive()).rejects.toThrow(
-        'Failed to download key file from appDataFolder (hidden)'
+        "Failed to download key file from appDataFolder (hidden)",
       );
     });
 
-    it('should propagate network errors', async () => {
-      const mockFileId = 'mock-file-id';
+    it("should propagate network errors", async () => {
+      const mockFileId = "mock-file-id";
       (getGoogleAccessToken as jest.Mock).mockResolvedValue(mockAccessToken);
       (gapi.client.load as jest.Mock).mockResolvedValue(undefined);
 
@@ -272,22 +304,24 @@ describe('gdriveKeyStorage', () => {
         },
       };
 
-      const networkError = new Error('Network connection failed');
+      const networkError = new Error("Network connection failed");
       (global.fetch as jest.Mock).mockRejectedValue(networkError);
 
-      await expect(downloadEncryptedRsaKeyFromDrive()).rejects.toThrow('Network connection failed');
+      await expect(downloadEncryptedRsaKeyFromDrive()).rejects.toThrow(
+        "Network connection failed",
+      );
     });
   });
 
-  describe('Error Propagation', () => {
-    it('uploadEncryptedRsaKeyToDrive should never return null', async () => {
+  describe("Error Propagation", () => {
+    it("uploadEncryptedRsaKeyToDrive should never return null", async () => {
       (getGoogleAccessToken as jest.Mock).mockResolvedValue(null);
 
       // Should throw, not return null
       await expect(uploadEncryptedRsaKeyToDrive(mockBlob)).rejects.toThrow();
     });
 
-    it('downloadEncryptedRsaKeyFromDrive should never return null', async () => {
+    it("downloadEncryptedRsaKeyFromDrive should never return null", async () => {
       (getGoogleAccessToken as jest.Mock).mockResolvedValue(null);
 
       // Should throw, not return null

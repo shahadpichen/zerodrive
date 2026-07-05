@@ -88,6 +88,9 @@ jest.mock("../../utils/cryptoUtils", () => ({
 jest.mock("../../utils/apiClient", () => ({
   __esModule: true,
   default: {
+    get: jest.fn().mockResolvedValue({
+      data: { email: "sender@example.com", emailHash: "f".repeat(64) },
+    }),
     publicKeys: { delete: jest.fn() },
     invitations: { send: jest.fn() },
   },
@@ -162,6 +165,9 @@ describe("ShareFilesPage", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     localStorage.clear();
+    (apiClient.get as jest.Mock).mockResolvedValue({
+      data: { email: "sender@example.com", emailHash: "f".repeat(64) },
+    });
     mockGetUserEmail.mockResolvedValue("sender@example.com");
     mockHasGoogleTokens.mockReturnValue(true);
     mockInitializeGapi.mockResolvedValue(undefined);
@@ -276,7 +282,7 @@ describe("ShareFilesPage", () => {
   });
 
   it("blocks a changed recipient key until the sender confirms it", async () => {
-    pinRecipientKey("recipient@example.com", "b".repeat(64), 1);
+    pinRecipientKey("f".repeat(64), "recipient@example.com", "b".repeat(64), 1);
     mockFetchPublicKey.mockResolvedValue({
       public_key: JSON.stringify({ kty: "RSA", n: "new-key" }),
       key_version: 2,

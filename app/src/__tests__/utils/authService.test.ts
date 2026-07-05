@@ -8,6 +8,7 @@ import {
   getUserEmail,
   logout,
   getCsrfToken,
+  getGoogleTokenFromStorage,
   storeGoogleTokens,
 } from "../../utils/authService";
 
@@ -44,6 +45,11 @@ describe("AuthService", () => {
       (global.fetch as jest.Mock).mockResolvedValue({
         ok: true,
         status: 200,
+        headers: new Headers({ "content-type": "application/json" }),
+        json: async () => ({
+          success: true,
+          data: { email: "test@example.com", emailHash: "a".repeat(64) },
+        }),
       });
 
       const result = await isAuthenticated();
@@ -84,7 +90,9 @@ describe("AuthService", () => {
       const email = "test@example.com";
       (global.fetch as jest.Mock).mockResolvedValue({
         ok: true,
+        headers: new Headers({ "content-type": "application/json" }),
         json: async () => ({
+          success: true,
           data: { email },
         }),
       });
@@ -259,6 +267,41 @@ describe("AuthService", () => {
       expect(stored).toContain("short-lived-access");
       expect(stored).not.toContain("must-remain-http-only");
       expect(JSON.parse(stored).refreshToken).toBeUndefined();
+    });
+
+    it("uses the authenticated cookie and CSRF token to refresh an expired token", async () => {
+      document.cookie = "zerodrive_csrf=test-csrf-token";
+      sessionStorage.setItem(
+        "google-tokens",
+        JSON.stringify({
+          accessToken: "expired-access-token",
+          expiresAt: new Date(Date.now() - 60_000).toISOString(),
+          scope: "drive.file",
+          userEmail: "user@example.com",
+        }),
+      );
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          accessToken: "refreshed-access-token",
+          expiresAt: new Date(Date.now() + 60_000).toISOString(),
+        }),
+      });
+
+      await expect(getGoogleTokenFromStorage("user@example.com")).resolves.toBe(
+        "refreshed-access-token",
+      );
+      expect(global.fetch).toHaveBeenCalledWith(
+        expect.stringContaining("/auth/google/refresh"),
+        expect.objectContaining({
+          method: "POST",
+          credentials: "include",
+          headers: expect.objectContaining({
+            "X-CSRF-Token": "test-csrf-token",
+          }),
+          body: "{}",
+        }),
+      );
     });
   });
 

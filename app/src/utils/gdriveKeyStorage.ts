@@ -121,8 +121,12 @@ export async function uploadEncryptedRsaKeyToDrive(
  * @returns A Promise that resolves to a Blob containing the key data.
  * @throws Error if download fails or file not found in any location
  */
-export async function downloadEncryptedRsaKeyFromDrive(): Promise<Blob> {
-  const fileName = RSA_KEY_FILE_NAME;
+export async function downloadEncryptedRsaKeyFromDrive(
+  keyVersion?: number,
+): Promise<Blob> {
+  const fileName = keyVersion
+    ? `zerodrive_rsa_key_backup_v${keyVersion}.json`
+    : RSA_KEY_FILE_NAME;
 
   await ensureDriveApiLoaded();
   const token = await getGoogleAccessToken();
@@ -154,7 +158,7 @@ export async function downloadEncryptedRsaKeyFromDrive(): Promise<Blob> {
   }
 
   // SECOND: If not found, try root of Google Drive
-  if (!fileId) {
+  if (!fileId && !keyVersion) {
     try {
       logger.log(`Searching for RSA key backup in root Google Drive...`);
       const query = `name='${fileName}' and 'root' in parents and trashed=false`;

@@ -12,6 +12,47 @@ import { storeUserPublicKey, UserKeyPair } from "./fileSharing";
 import { getMnemonic } from "./mnemonicManager";
 import logger from "./logger";
 
+function publicKeyFromPrivate(privateKeyJwk: JsonWebKey): JsonWebKey {
+  const publicKeyJwk: JsonWebKey = {
+    kty: privateKeyJwk.kty,
+    n: privateKeyJwk.n,
+    e: privateKeyJwk.e,
+    alg: "RSA-OAEP-256",
+    key_ops: ["encrypt"],
+    ext: true,
+  };
+  if (!publicKeyJwk.n || !publicKeyJwk.e || !publicKeyJwk.kty) {
+    throw new Error("Failed to reconstruct public key from private key backup");
+  }
+  return publicKeyJwk;
+}
+
+export async function recoverRsaKeyVersion(
+  userEmail: string,
+  keyVersion: number,
+  mnemonic: string,
+): Promise<UserKeyPair | null> {
+  const primaryAesKey = await getStoredKey();
+  if (!primaryAesKey) return null;
+  try {
+    const encrypted = await downloadEncryptedRsaKeyFromDrive(keyVersion);
+    const privateKeyJwk = await decryptRsaPrivateKeyWithAesKey(
+      encrypted,
+      primaryAesKey,
+    );
+    privateKeyJwk.key_ops = ["decrypt"];
+    const keyPair = {
+      publicKeyJwk: publicKeyFromPrivate(privateKeyJwk),
+      privateKeyJwk,
+    };
+    await storeUserKeyPair(userEmail, keyPair, mnemonic, keyVersion);
+    return keyPair;
+  } catch (error) {
+    logger.warn(`[RSA Recovery] Key version ${keyVersion} unavailable`, error);
+    return null;
+  }
+}
+
 export interface RsaRecoveryResult {
   success: boolean;
   recovered: boolean;
@@ -140,21 +181,7 @@ export async function recoverRsaKeysIfNeeded(
 
       // Construct public key from private key
       // RSA private JWK contains public components (n, e)
-      const publicKeyJwk: JsonWebKey = {
-        kty: privateKeyJwk.kty,
-        n: privateKeyJwk.n,
-        e: privateKeyJwk.e,
-        alg: privateKeyJwk.alg?.replace("PS", "RS") || "RSA-OAEP-256",
-        key_ops: ["encrypt"],
-        ext: true,
-      };
-
-      // Validate essential components
-      if (!publicKeyJwk.n || !publicKeyJwk.e || !publicKeyJwk.kty) {
-        throw new Error(
-          "Failed to reconstruct public key from private key backup",
-        );
-      }
+      const publicKeyJwk = publicKeyFromPrivate(privateKeyJwk);
 
       // Ensure private key has correct key_ops
       if (!privateKeyJwk.key_ops) {

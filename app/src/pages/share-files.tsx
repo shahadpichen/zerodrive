@@ -148,6 +148,7 @@ const ShareFilesPage: React.FC = () => {
 
   const [pageState, setPageState] = useState<PageState>("checking");
   const [senderEmail, setSenderEmail] = useState("");
+  const [senderLookupId, setSenderLookupId] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [storedFile, setStoredFile] = useState<FileMeta | null>(null);
   const [fileSource, setFileSource] = useState<FileSource>("device");
@@ -184,6 +185,10 @@ const ShareFilesPage: React.FC = () => {
         const { getUserEmail, hasGoogleTokensInStorage, logout } =
           await import("../utils/authService");
         const email = await getUserEmail();
+        const identity = await apiClient.get<{
+          email: string;
+          emailHash: string;
+        }>("/auth/me");
 
         if (!email || !hasGoogleTokensInStorage()) {
           await logout();
@@ -200,6 +205,7 @@ const ShareFilesPage: React.FC = () => {
 
         if (!active) return;
         setSenderEmail(email);
+        setSenderLookupId(identity.data?.emailHash || "");
 
         const result = await recoverRsaKeysIfNeeded(email, true);
         if (!active) return;
@@ -425,7 +431,10 @@ const ShareFilesPage: React.FC = () => {
         return false;
       }
 
-      const pinnedKey = getRecipientKeyPin(normalizedEmail);
+      if (!senderLookupId) {
+        throw new Error("Authenticated account identity is unavailable");
+      }
+      const pinnedKey = getRecipientKeyPin(senderLookupId, normalizedEmail);
       if (pinnedKey && pinnedKey.fingerprint !== publicKey.fingerprint) {
         setRecipientVerified(false);
         setChangedRecipientKey(publicKey);
@@ -437,6 +446,7 @@ const ShareFilesPage: React.FC = () => {
 
       if (!pinnedKey) {
         pinRecipientKey(
+          senderLookupId,
           normalizedEmail,
           publicKey.fingerprint,
           publicKey.key_version,
@@ -465,6 +475,7 @@ const ShareFilesPage: React.FC = () => {
     if (validRecipient) {
       if (recipientDirectoryKey) {
         pinRecipientKey(
+          senderLookupId,
           recipientEmail,
           recipientDirectoryKey.fingerprint,
           recipientDirectoryKey.key_version,
@@ -478,6 +489,7 @@ const ShareFilesPage: React.FC = () => {
   const confirmChangedRecipientKey = () => {
     if (!changedRecipientKey) return;
     pinRecipientKey(
+      senderLookupId,
       recipientEmail,
       changedRecipientKey.fingerprint,
       changedRecipientKey.key_version,

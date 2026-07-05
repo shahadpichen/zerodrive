@@ -180,6 +180,7 @@ export async function refreshToken(): Promise<boolean> {
       credentials: "include", // Send refresh token cookie
       headers: {
         "Content-Type": "application/json",
+        ...(getCsrfToken() && { "X-CSRF-Token": getCsrfToken()! }),
       },
     });
     return response.ok;
@@ -226,6 +227,7 @@ async function refreshGoogleAccessToken(
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        ...(getCsrfToken() && { "X-CSRF-Token": getCsrfToken()! }),
       },
       credentials: "include",
       body: JSON.stringify({}),

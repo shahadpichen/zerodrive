@@ -348,16 +348,16 @@ router.post(
 /**
  * POST /api/auth/google/refresh
  * Refresh Google access token using refresh token
- * No JWT auth required - uses Google refresh token from request body
+ * Requires the authenticated session and HTTP-only Google refresh cookie.
  */
 router.post(
   "/google/refresh",
+  requireAuth,
   asyncHandler(async (req: Request, res: Response) => {
-    const refreshToken =
-      req.cookies.zerodrive_google_refresh || req.body.refreshToken;
+    const refreshToken = req.cookies.zerodrive_google_refresh;
 
     if (!refreshToken || typeof refreshToken !== "string") {
-      throw ApiErrors.BadRequest("Refresh token is required");
+      throw ApiErrors.Unauthorized("Google refresh session is unavailable");
     }
 
     try {

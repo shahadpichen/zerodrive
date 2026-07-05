@@ -36,6 +36,7 @@ import { getMnemonic, setMnemonic } from "../utils/mnemonicManager";
 import { downloadEncryptedRsaKeyFromDrive } from "../utils/gdriveKeyStorage";
 import { decryptRsaPrivateKeyWithAesKey } from "../utils/rsaKeyManager";
 import { readRecipientKeyVersion } from "../utils/sharedKeyEnvelope";
+import { recoverRsaKeyVersion } from "../utils/rsaKeyRecovery";
 import { toast } from "sonner";
 
 type KeyState =
@@ -163,7 +164,7 @@ const SharedWithMePage: React.FC = () => {
       pending.map(async (file) => {
         try {
           const mnemonic = getMnemonic();
-          const versionedKeyPair =
+          let versionedKeyPair =
             file.recipientKeyVersion && mnemonic
               ? await getUserKeyPair(
                   userEmail,
@@ -171,6 +172,13 @@ const SharedWithMePage: React.FC = () => {
                   file.recipientKeyVersion,
                 )
               : null;
+          if (!versionedKeyPair && file.recipientKeyVersion && mnemonic) {
+            versionedKeyPair = await recoverRsaKeyVersion(
+              userEmail,
+              file.recipientKeyVersion,
+              mnemonic,
+            );
+          }
           const metadata = await decryptSharedMetadata(
             file.encryptedMetadata!,
             file.encryptedFileKey,
@@ -324,10 +332,17 @@ const SharedWithMePage: React.FC = () => {
       const encryptedBlob = await downloadEncryptedFile(file.id);
       setProcessing({ fileId: file.id, action, stage: "decrypting" });
       const mnemonic = getMnemonic();
-      const versionedKeyPair =
+      let versionedKeyPair =
         file.recipientKeyVersion && mnemonic
           ? await getUserKeyPair(userEmail, mnemonic, file.recipientKeyVersion)
           : null;
+      if (!versionedKeyPair && file.recipientKeyVersion && mnemonic) {
+        versionedKeyPair = await recoverRsaKeyVersion(
+          userEmail,
+          file.recipientKeyVersion,
+          mnemonic,
+        );
+      }
       const decrypted = await decryptSharedFile(
         encryptedBlob,
         file.encryptedFileKey,
