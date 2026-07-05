@@ -50,7 +50,7 @@ export function generateToken(email: string): string {
       expiresIn: JWT_EXPIRY,
     } as any);
 
-    logger.info("[JWT] Token generated", { emailHash });
+    logger.info("[JWT] Token generated");
     return token;
   } catch (error) {
     logger.error("[JWT] Failed to generate token", error as Error);
@@ -95,7 +95,7 @@ export function generateRefreshToken(email: string): string {
       expiresIn: REFRESH_TOKEN_EXPIRY,
     } as any);
 
-    logger.info("[JWT] Refresh token generated", { emailHash });
+    logger.info("[JWT] Refresh token generated");
     return token;
   } catch (error) {
     logger.error("[JWT] Failed to generate refresh token", error as Error);

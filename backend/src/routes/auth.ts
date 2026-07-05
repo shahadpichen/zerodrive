@@ -342,9 +342,7 @@ router.post(
         path: "/",
       });
 
-      logger.info("[Auth] Access token refreshed", {
-        emailHash: payload.emailHash,
-      });
+      logger.info("[Auth] Access token refreshed");
 
       res.apiSuccess({}, "Token refreshed successfully");
     } catch (error) {

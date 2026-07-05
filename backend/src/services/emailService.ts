@@ -79,7 +79,7 @@ export async function sendFileShareNotification(
     const subject = getSubject();
 
     // Send email
-    const result = await client.messages.create(MAILGUN_DOMAIN, {
+    await client.messages.create(MAILGUN_DOMAIN, {
       from: `${MAILGUN_FROM_NAME} <${MAILGUN_FROM_EMAIL}>`,
       to: recipientEmail,
       subject: subject,
@@ -91,15 +91,10 @@ export async function sendFileShareNotification(
     });
 
     if (NODE_ENV === "development") {
-      console.log("[EmailService] Email sent successfully:", {
-        messageId: result.id,
-        status: result.message,
-      });
+      console.log("[EmailService] Email sent successfully");
     }
   } catch (error: any) {
-    console.error("[EmailService] Failed to send email:", {
-      error: error.message,
-    });
+    console.error("[EmailService] Failed to send email");
 
     // Don't throw error - we don't want to fail file sharing if email fails
     // Log the error and continue
@@ -176,7 +171,7 @@ export async function sendInvitationEmail(
     const subject = getInvitationSubject();
 
     // Send email
-    const result = await client.messages.create(MAILGUN_DOMAIN, {
+    await client.messages.create(MAILGUN_DOMAIN, {
       from: `${MAILGUN_FROM_NAME} <${MAILGUN_FROM_EMAIL}>`,
       to: recipientEmail,
       subject: subject,
@@ -188,15 +183,10 @@ export async function sendInvitationEmail(
     });
 
     if (NODE_ENV === "development") {
-      console.log("[EmailService] Invitation sent successfully:", {
-        messageId: result.id,
-        status: result.message,
-      });
+      console.log("[EmailService] Invitation sent successfully");
     }
   } catch (error: any) {
-    console.error("[EmailService] Failed to send invitation:", {
-      error: error.message,
-    });
+    console.error("[EmailService] Failed to send invitation");
 
     // Don't throw error - we don't want to fail the operation if email fails
     // Log the error and continue
@@ -222,8 +212,8 @@ export async function testEmailConfiguration(): Promise<boolean> {
     }
 
     return true;
-  } catch (error: any) {
-    console.error("[EmailService] Configuration test failed:", error.message);
+  } catch {
+    console.error("[EmailService] Configuration test failed");
     return false;
   }
 }

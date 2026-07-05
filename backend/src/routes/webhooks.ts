@@ -63,11 +63,9 @@ router.post("/mailgun", async (req: Request, res: Response) => {
     // Process event
     const eventData = event["event-data"];
     const eventType = eventData.event;
-    const messageId = eventData.message?.headers?.["message-id"];
 
     console.log("[Webhook] Mailgun event received:", {
       event: eventType,
-      messageId,
       timestamp: new Date(eventData.timestamp * 1000).toISOString(),
     });
 

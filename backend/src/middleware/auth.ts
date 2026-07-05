@@ -71,9 +71,7 @@ export function requireAuth(
       }),
     };
 
-    logger.debug("[Auth] Request authenticated", {
-      emailHash: payload.emailHash,
-    });
+    logger.debug("[Auth] Request authenticated");
     next();
   } catch (error) {
     logger.warn("[Auth] Authentication failed", {
@@ -115,9 +113,7 @@ export function optionalAuth(
           legacyEmailHash: payload.legacyEmailHash,
         }),
       };
-      logger.debug("[Auth] Optional auth: User authenticated", {
-        emailHash: payload.emailHash,
-      });
+      logger.debug("[Auth] Optional auth: User authenticated");
     } else {
       logger.debug("[Auth] Optional auth: No token provided");
     }
