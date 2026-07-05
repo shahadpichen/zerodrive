@@ -92,7 +92,6 @@ const OAuthCallback: React.FC = () => {
           await storeGoogleTokens(
             {
               accessToken: tokenData.accessToken,
-              refreshToken: tokenData.refreshToken,
               expiresAt: new Date(tokenData.expiresAt),
               scope: tokenData.scope,
             },

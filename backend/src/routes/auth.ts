@@ -40,7 +40,6 @@ const oauthExchanges = new Map<
     expiresAt: number;
     tokens: {
       accessToken: string;
-      refreshToken?: string;
       expiresAt: string;
       scope: string;
     };
@@ -213,6 +212,15 @@ router.get(
         maxAge: 7 * 24 * 60 * 60 * 1000, // Same as refresh token
         path: "/",
       });
+      if (refreshToken) {
+        res.cookie("zerodrive_google_refresh", refreshToken, {
+          httpOnly: true,
+          secure: NODE_ENV === "production",
+          sameSite: "lax",
+          maxAge: 30 * 24 * 60 * 60 * 1000,
+          path: "/api/auth",
+        });
+      }
 
       const exchangeCode = crypto.randomBytes(32).toString("base64url");
       const ownerHash = verifyToken(jwtToken).emailHash;
@@ -221,7 +229,6 @@ router.get(
         expiresAt: Date.now() + 60_000,
         tokens: {
           accessToken,
-          ...(refreshToken && { refreshToken }),
           expiresAt: tokenExpiry.toISOString(),
           scope,
         },
@@ -346,7 +353,8 @@ router.post(
 router.post(
   "/google/refresh",
   asyncHandler(async (req: Request, res: Response) => {
-    const { refreshToken } = req.body;
+    const refreshToken =
+      req.cookies.zerodrive_google_refresh || req.body.refreshToken;
 
     if (!refreshToken || typeof refreshToken !== "string") {
       throw ApiErrors.BadRequest("Refresh token is required");
@@ -397,6 +405,10 @@ router.post(
 
     res.clearCookie("zerodrive_token", cookieOptions);
     res.clearCookie("zerodrive_refresh", cookieOptions);
+    res.clearCookie("zerodrive_google_refresh", {
+      ...cookieOptions,
+      path: "/api/auth",
+    });
 
     // CSRF token is not httpOnly (frontend needs to read it)
     res.clearCookie("zerodrive_csrf", {

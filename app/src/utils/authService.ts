@@ -3,12 +3,13 @@
  * Handles JWT token management and authentication flow
  */
 
-import apiClient from './apiClient';
+import apiClient from "./apiClient";
 
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001/api';
+const API_URL = process.env.REACT_APP_API_URL || "http://localhost:3001/api";
 
 // JWT token is now stored in httpOnly cookie, not localStorage
-// Google tokens are stored unencrypted in sessionStorage (cleared on tab close)
+// Only short-lived access tokens are stored in sessionStorage.
+// Google refresh tokens remain in an httpOnly backend cookie.
 // Also cached in memory for performance
 let googleTokenCache: {
   token: string;
@@ -27,59 +28,60 @@ export function login(): void {
  * Logout user
  */
 export async function logout(): Promise<void> {
-  console.log('[Logout] Starting logout process...');
-  console.log('[Logout] CSRF token:', getCsrfToken() ? 'Present' : 'Missing');
-  console.log('[Logout] API URL:', API_URL);
+  console.log("[Logout] Starting logout process...");
+  console.log("[Logout] CSRF token:", getCsrfToken() ? "Present" : "Missing");
+  console.log("[Logout] API URL:", API_URL);
 
   // Call backend logout endpoint to clear httpOnly cookies FIRST
   try {
     const csrfToken = getCsrfToken();
-    console.log('[Logout] Sending logout request to backend...');
+    console.log("[Logout] Sending logout request to backend...");
 
     const response = await fetch(`${API_URL}/auth/logout`, {
-      method: 'POST',
+      method: "POST",
       headers: {
-        'Content-Type': 'application/json',
-        ...(csrfToken && { 'X-CSRF-Token': csrfToken }),
+        "Content-Type": "application/json",
+        ...(csrfToken && { "X-CSRF-Token": csrfToken }),
       },
-      credentials: 'include', // Send cookies
+      credentials: "include", // Send cookies
     });
 
-    console.log('[Logout] Backend response status:', response.status, response.ok ? 'OK' : 'ERROR');
+    console.log(
+      "[Logout] Backend response status:",
+      response.status,
+      response.ok ? "OK" : "ERROR",
+    );
 
     // Consume the response body to ensure request completes
     const responseData = await response.text();
-    console.log('[Logout] Backend response:', responseData);
+    console.log("[Logout] Backend response:", responseData);
 
     if (!response.ok) {
-      console.warn('[Logout] Backend logout returned error status:', response.status);
+      console.warn(
+        "[Logout] Backend logout returned error status:",
+        response.status,
+      );
       // Continue with local logout even if backend fails
     } else {
-      console.log('[Logout] Backend logout successful');
+      console.log("[Logout] Backend logout successful");
     }
   } catch (error) {
-    console.error('[Logout] Backend logout failed with error:', error);
+    console.error("[Logout] Backend logout failed with error:", error);
     // Continue with local logout even if backend fails
   }
 
   // Clear local storage and session storage
-  console.log('[Logout] Clearing local storage and session storage...');
-  clearGoogleTokens();
-
-  // Clear mnemonic from memory
-  const { clearMnemonic } = await import('./mnemonicManager');
-  clearMnemonic();
-
-  sessionStorage.clear();
-  console.log('[Logout] Logout process complete');
+  console.log("[Logout] Clearing local storage and session storage...");
+  await clearSensitiveBrowserSession();
+  console.log("[Logout] Logout process complete");
 }
 
 /**
  * Get CSRF token from cookie (readable by JavaScript)
  */
 export function getCsrfToken(): string | null {
-  const name = 'zerodrive_csrf=';
-  const cookies = document.cookie.split(';');
+  const name = "zerodrive_csrf=";
+  const cookies = document.cookie.split(";");
   for (let cookie of cookies) {
     cookie = cookie.trim();
     if (cookie.startsWith(name)) {
@@ -95,17 +97,19 @@ export function getCsrfToken(): string | null {
  */
 export async function isAuthenticated(): Promise<boolean> {
   // Quick check: do we have auth cookies?
-  const hasCookies = document.cookie.includes('zerodrive_csrf');
+  const hasCookies = document.cookie.includes("zerodrive_csrf");
 
   if (!hasCookies) {
     return false;
   }
 
   try {
-    const response = await apiClient.get<{ email: string; emailHash: string }>('/auth/me');
+    const response = await apiClient.get<{ email: string; emailHash: string }>(
+      "/auth/me",
+    );
     return response.success && !!response.data?.email;
   } catch (error) {
-    console.error('[Auth] Authentication check failed:', error);
+    console.error("[Auth] Authentication check failed:", error);
     return false;
   }
 }
@@ -115,10 +119,12 @@ export async function isAuthenticated(): Promise<boolean> {
  */
 export async function getUserEmail(): Promise<string | null> {
   try {
-    const response = await apiClient.get<{ email: string; emailHash: string }>('/auth/me');
+    const response = await apiClient.get<{ email: string; emailHash: string }>(
+      "/auth/me",
+    );
     return response.data?.email || null;
   } catch (error) {
-    console.error('Failed to get user email:', error);
+    console.error("Failed to get user email:", error);
     return null;
   }
 }
@@ -134,29 +140,32 @@ export async function getUserProfile(): Promise<{
   try {
     const token = await getOrFetchGoogleToken();
     if (!token) {
-      console.error('No Google token available to fetch user profile');
+      console.error("No Google token available to fetch user profile");
       return null;
     }
 
-    const response = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
-      headers: {
-        Authorization: `Bearer ${token}`,
+    const response = await fetch(
+      "https://www.googleapis.com/oauth2/v2/userinfo",
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
       },
-    });
+    );
 
     if (!response.ok) {
-      console.error('Failed to fetch user profile:', response.status);
+      console.error("Failed to fetch user profile:", response.status);
       return null;
     }
 
     const data = await response.json();
     return {
       email: data.email,
-      name: data.name || data.email.split('@')[0],
-      picture: data.picture || '',
+      name: data.name || data.email.split("@")[0],
+      picture: data.picture || "",
     };
   } catch (error) {
-    console.error('Error fetching user profile:', error);
+    console.error("Error fetching user profile:", error);
     return null;
   }
 }
@@ -167,15 +176,15 @@ export async function getUserProfile(): Promise<{
 export async function refreshToken(): Promise<boolean> {
   try {
     const response = await fetch(`${API_URL}/auth/refresh`, {
-      method: 'POST',
-      credentials: 'include', // Send refresh token cookie
+      method: "POST",
+      credentials: "include", // Send refresh token cookie
       headers: {
-        'Content-Type': 'application/json',
+        "Content-Type": "application/json",
       },
     });
     return response.ok;
   } catch (error) {
-    console.error('Token refresh failed:', error);
+    console.error("Token refresh failed:", error);
     return false;
   }
 }
@@ -201,41 +210,38 @@ function isGoogleTokenCacheValid(userEmail: string): boolean {
  * Refresh Google access token using refresh token
  * @returns Access token if successful, 'NO_REFRESH_TOKEN' if missing, null if refresh failed
  */
-async function refreshGoogleAccessToken(userEmail: string): Promise<string | 'NO_REFRESH_TOKEN' | null> {
+async function refreshGoogleAccessToken(
+  userEmail: string,
+): Promise<string | "NO_REFRESH_TOKEN" | null> {
   try {
-    const storedData = sessionStorage.getItem('google-tokens');
+    const storedData = sessionStorage.getItem("google-tokens");
     if (!storedData) {
-      console.log('[Auth] No tokens to refresh');
+      console.log("[Auth] No tokens to refresh");
       return null;
     }
 
     const parsed = JSON.parse(storedData);
-    if (!parsed.refreshToken) {
-      console.warn('[Auth] No refresh token available - cannot refresh access token');
-      console.log('[Auth] User will need to re-authenticate to get a new refresh token');
-      return 'NO_REFRESH_TOKEN';
-    }
-
-    console.log('[Auth] Attempting to refresh Google access token...');
+    console.log("[Auth] Attempting to refresh Google access token...");
     const response = await fetch(`${API_URL}/auth/google/refresh`, {
-      method: 'POST',
+      method: "POST",
       headers: {
-        'Content-Type': 'application/json',
+        "Content-Type": "application/json",
       },
-      credentials: 'include',
-      body: JSON.stringify({
-        refreshToken: parsed.refreshToken,
-      }),
+      credentials: "include",
+      body: JSON.stringify({}),
     });
 
     if (!response.ok) {
-      console.error('[Auth] Token refresh failed with status:', response.status);
+      console.error(
+        "[Auth] Token refresh failed with status:",
+        response.status,
+      );
       return null;
     }
 
     const data = await response.json();
     if (!data.accessToken || !data.expiresAt) {
-      console.error('[Auth] Invalid refresh response:', data);
+      console.error("[Auth] Invalid refresh response:", data);
       return null;
     }
 
@@ -243,17 +249,16 @@ async function refreshGoogleAccessToken(userEmail: string): Promise<string | 'NO
     await storeGoogleTokens(
       {
         accessToken: data.accessToken,
-        refreshToken: parsed.refreshToken, // Keep same refresh token
         expiresAt: new Date(data.expiresAt),
         scope: parsed.scope,
       },
-      userEmail
+      userEmail,
     );
 
-    console.log('[Auth] Google access token refreshed successfully');
+    console.log("[Auth] Google access token refreshed successfully");
     return data.accessToken;
   } catch (error) {
-    console.error('[Auth] Error refreshing Google token:', error);
+    console.error("[Auth] Error refreshing Google token:", error);
     return null;
   }
 }
@@ -261,11 +266,13 @@ async function refreshGoogleAccessToken(userEmail: string): Promise<string | 'NO
 /**
  * Get Google access token from sessionStorage
  */
-export async function getGoogleTokenFromStorage(userEmail: string): Promise<string | null> {
+export async function getGoogleTokenFromStorage(
+  userEmail: string,
+): Promise<string | null> {
   try {
-    const storedData = sessionStorage.getItem('google-tokens');
+    const storedData = sessionStorage.getItem("google-tokens");
     if (!storedData) {
-      console.log('[Auth] No Google tokens found in sessionStorage');
+      console.log("[Auth] No Google tokens found in sessionStorage");
       return null;
     }
 
@@ -273,8 +280,8 @@ export async function getGoogleTokenFromStorage(userEmail: string): Promise<stri
 
     // Check if tokens are for the correct user
     if (parsed.userEmail !== userEmail) {
-      console.warn('[Auth] Stored tokens are for different user, clearing');
-      clearGoogleTokens();
+      console.warn("[Auth] Stored tokens are for different user, clearing");
+      await clearSensitiveBrowserSession();
       return null;
     }
 
@@ -282,30 +289,34 @@ export async function getGoogleTokenFromStorage(userEmail: string): Promise<stri
     const expiresAt = new Date(parsed.expiresAt);
     const now = Date.now();
     if (now >= expiresAt.getTime()) {
-      console.log('[Auth] Access token expired, attempting refresh...');
+      console.log("[Auth] Access token expired, attempting refresh...");
 
       // Try to refresh the token before clearing
       const refreshResult = await refreshGoogleAccessToken(userEmail);
 
-      if (refreshResult === 'NO_REFRESH_TOKEN') {
+      if (refreshResult === "NO_REFRESH_TOKEN") {
         // No refresh token available - need to re-authenticate
-        console.warn('[Auth] Cannot refresh without refresh token - redirecting to login');
-        console.log('[Auth] Clearing tokens and redirecting to re-authenticate...');
+        console.warn(
+          "[Auth] Cannot refresh without refresh token - redirecting to login",
+        );
+        console.log(
+          "[Auth] Clearing tokens and redirecting to re-authenticate...",
+        );
         clearGoogleTokens();
 
         // Redirect to login to get fresh tokens with refresh token
-        window.location.href = '/';
+        window.location.href = "/";
         return null;
       }
 
       if (refreshResult) {
         // Refresh successful
-        console.log('[Auth] Token refreshed successfully, continuing...');
+        console.log("[Auth] Token refreshed successfully, continuing...");
         return refreshResult;
       }
 
       // Refresh failed for other reasons, clear tokens
-      console.error('[Auth] Token refresh failed, clearing tokens');
+      console.error("[Auth] Token refresh failed, clearing tokens");
       clearGoogleTokens();
       return null;
     }
@@ -319,7 +330,7 @@ export async function getGoogleTokenFromStorage(userEmail: string): Promise<stri
 
     return parsed.accessToken;
   } catch (error) {
-    console.error('[Auth] Error reading Google tokens:', error);
+    console.error("[Auth] Error reading Google tokens:", error);
     clearGoogleTokens();
     return null;
   }
@@ -332,7 +343,7 @@ export async function getOrFetchGoogleToken(): Promise<string | null> {
   // Get current user email
   const userEmail = await getUserEmail();
   if (!userEmail) {
-    console.error('Cannot get Google token: user not authenticated');
+    console.error("Cannot get Google token: user not authenticated");
     return null;
   }
 
@@ -346,15 +357,17 @@ export async function getOrFetchGoogleToken(): Promise<string | null> {
 }
 
 /**
- * Store Google OAuth tokens in sessionStorage (unencrypted)
- * SessionStorage is cleared when tab closes, providing adequate security
+ * Store short-lived Google access tokens in sessionStorage.
  */
-export async function storeGoogleTokens(tokens: {
-  accessToken: string;
-  refreshToken?: string;
-  expiresAt: Date;
-  scope: string;
-}, userEmail: string): Promise<void> {
+export async function storeGoogleTokens(
+  tokens: {
+    accessToken: string;
+    refreshToken?: string;
+    expiresAt: Date;
+    scope: string;
+  },
+  userEmail: string,
+): Promise<void> {
   try {
     // Update memory cache for performance
     googleTokenCache = {
@@ -363,27 +376,18 @@ export async function storeGoogleTokens(tokens: {
       userEmail,
     };
 
-    // Store tokens unencrypted in sessionStorage
-    // sessionStorage is cleared when tab closes, providing adequate security
     const stored = {
       accessToken: tokens.accessToken,
-      refreshToken: tokens.refreshToken,
       expiresAt: tokens.expiresAt.toISOString(),
       scope: tokens.scope,
       userEmail,
     };
-    sessionStorage.setItem('google-tokens', JSON.stringify(stored));
-    console.log('[Auth] Stored Google tokens in sessionStorage', {
-      hasRefreshToken: !!tokens.refreshToken,
+    sessionStorage.setItem("google-tokens", JSON.stringify(stored));
+    console.log("[Auth] Stored Google tokens in sessionStorage", {
       expiresAt: tokens.expiresAt.toISOString(),
     });
-
-    if (!tokens.refreshToken) {
-      console.warn('[Auth] No refresh token provided - token refresh will not be possible when access token expires');
-      console.log('[Auth] User may need to re-authenticate after 1 hour when access token expires');
-    }
   } catch (error) {
-    console.error('[Auth] Failed to store Google tokens:', error);
+    console.error("[Auth] Failed to store Google tokens:", error);
     throw error;
   }
 }
@@ -393,7 +397,18 @@ export async function storeGoogleTokens(tokens: {
  */
 export function clearGoogleTokens(): void {
   googleTokenCache = null;
-  sessionStorage.removeItem('google-tokens');
+  sessionStorage.removeItem("google-tokens");
+}
+
+export async function clearSensitiveBrowserSession(): Promise<void> {
+  googleTokenCache = null;
+  const [{ clearMnemonic }, { clearStoredKey }] = await Promise.all([
+    import("./mnemonicManager"),
+    import("./cryptoUtils"),
+  ]);
+  clearMnemonic();
+  clearStoredKey();
+  sessionStorage.clear();
 }
 
 /**
@@ -401,6 +416,6 @@ export function clearGoogleTokens(): void {
  * @returns true if tokens exist, false otherwise
  */
 export function hasGoogleTokensInStorage(): boolean {
-  const storedData = sessionStorage.getItem('google-tokens');
+  const storedData = sessionStorage.getItem("google-tokens");
   return storedData !== null;
 }

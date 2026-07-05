@@ -151,6 +151,12 @@ describe("Auth Routes Integration", () => {
       expect(cookies.some((c: string) => c.startsWith("zerodrive_csrf="))).toBe(
         true,
       );
+      expect(
+        cookies.some(
+          (c: string) =>
+            c.startsWith("zerodrive_google_refresh=") && c.includes("HttpOnly"),
+        ),
+      ).toBe(true);
 
       // Google tokens are NO LONGER stored in database (zero-knowledge architecture)
       // They are passed once via URL redirect to frontend, which encrypts them client-side
