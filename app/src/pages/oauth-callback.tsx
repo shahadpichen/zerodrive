@@ -12,6 +12,7 @@ import { Loader2 } from "lucide-react";
 import { storeGoogleTokens } from "../utils/authService";
 import { getUserEmail } from "../utils/authService";
 import apiClient from "../utils/apiClient";
+import logger from "../utils/logger";
 
 const OAuthCallback: React.FC = () => {
   const navigate = useNavigate();
@@ -102,13 +103,13 @@ const OAuthCallback: React.FC = () => {
             userEmail,
           );
 
-          console.log(
+          logger.log(
             "[OAuth] Google tokens successfully stored in sessionStorage",
           );
 
           // Verify tokens were stored
           const storedData = sessionStorage.getItem("google-tokens");
-          console.log(
+          logger.log(
             "[OAuth] Verification - tokens exist in sessionStorage:",
             !!storedData,
           );
@@ -134,7 +135,7 @@ const OAuthCallback: React.FC = () => {
         // Navigate to the home hub - ProtectedRoute will verify auth via cookie
         navigate("/home");
       } catch (error) {
-        console.error("Failed to complete sign-in:", error);
+        logger.error("Failed to complete sign-in:", error);
         setError("Failed to complete sign-in");
         toast.error("Sign-in failed", {
           description:

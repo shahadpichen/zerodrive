@@ -15,11 +15,10 @@ The schema is defined in `backend/database/init.sql`. Read it before writing any
 ### Existing Tables
 | Table | Purpose |
 |-------|---------|
-| `public_keys` | RSA public keys per user, credit balance |
-| `shared_files` | File sharing metadata (encrypted keys, access control) |
+| `public_keys` | Versioned RSA public encryption keys per recipient lookup ID |
+| `shared_files` | Encrypted sharing metadata, wrapped keys, lifecycle state, and anonymous management capabilities |
 | `analytics_daily_summary` | Anonymous daily usage statistics |
-| `credit_transactions` | Credit audit trail (deductions/additions) |
-| `credit_packages` | Credit pricing structure |
+| `oauth_exchanges` | One-time OAuth exchange capability hashes and expiry timestamps |
 
 ### Existing Patterns
 - **Primary keys:** UUID via `uuid_generate_v4()`
@@ -162,6 +161,6 @@ After writing a migration:
 
 - The database uses the `uuid-ossp` extension (already enabled in init.sql)
 - No foreign keys between user-related tables — the zero-knowledge architecture means user identity is hashed and not directly linkable
-- `user_id` columns store email hashes or emails — always VARCHAR(255)
-- JSONB is used for flexible metadata (see `credit_transactions.metadata`)
+- `user_id` and `recipient_user_id` columns store secret-derived lookup identifiers — always VARCHAR(255)
+- Never add plaintext sender identity, recipient email, filenames, MIME types, IP addresses, user agents, tokens, or share capabilities to PostgreSQL
 - Always consider index impact on write performance for high-traffic tables"""

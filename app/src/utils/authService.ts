@@ -4,6 +4,7 @@
  */
 
 import apiClient from "./apiClient";
+import logger from "./logger";
 
 const API_URL = process.env.REACT_APP_API_URL || "http://localhost:3001/api";
 
@@ -28,14 +29,14 @@ export function login(): void {
  * Logout user
  */
 export async function logout(): Promise<void> {
-  console.log("[Logout] Starting logout process...");
-  console.log("[Logout] CSRF token:", getCsrfToken() ? "Present" : "Missing");
-  console.log("[Logout] API URL:", API_URL);
+  logger.log("[Logout] Starting logout process...");
+  logger.log("[Logout] CSRF token:", getCsrfToken() ? "Present" : "Missing");
+  logger.log("[Logout] API URL:", API_URL);
 
   // Call backend logout endpoint to clear httpOnly cookies FIRST
   try {
     const csrfToken = getCsrfToken();
-    console.log("[Logout] Sending logout request to backend...");
+    logger.log("[Logout] Sending logout request to backend...");
 
     const response = await fetch(`${API_URL}/auth/logout`, {
       method: "POST",
@@ -46,7 +47,7 @@ export async function logout(): Promise<void> {
       credentials: "include", // Send cookies
     });
 
-    console.log(
+    logger.log(
       "[Logout] Backend response status:",
       response.status,
       response.ok ? "OK" : "ERROR",
@@ -54,26 +55,26 @@ export async function logout(): Promise<void> {
 
     // Consume the response body to ensure request completes
     const responseData = await response.text();
-    console.log("[Logout] Backend response:", responseData);
+    logger.log("[Logout] Backend response:", responseData);
 
     if (!response.ok) {
-      console.warn(
+      logger.warn(
         "[Logout] Backend logout returned error status:",
         response.status,
       );
       // Continue with local logout even if backend fails
     } else {
-      console.log("[Logout] Backend logout successful");
+      logger.log("[Logout] Backend logout successful");
     }
   } catch (error) {
-    console.error("[Logout] Backend logout failed with error:", error);
+    logger.error("[Logout] Backend logout failed with error:", error);
     // Continue with local logout even if backend fails
   }
 
   // Clear local storage and session storage
-  console.log("[Logout] Clearing local storage and session storage...");
+  logger.log("[Logout] Clearing local storage and session storage...");
   await clearSensitiveBrowserSession();
-  console.log("[Logout] Logout process complete");
+  logger.log("[Logout] Logout process complete");
 }
 
 /**
@@ -109,7 +110,7 @@ export async function isAuthenticated(): Promise<boolean> {
     );
     return response.success && !!response.data?.email;
   } catch (error) {
-    console.error("[Auth] Authentication check failed:", error);
+    logger.error("[Auth] Authentication check failed:", error);
     return false;
   }
 }
@@ -124,7 +125,7 @@ export async function getUserEmail(): Promise<string | null> {
     );
     return response.data?.email || null;
   } catch (error) {
-    console.error("Failed to get user email:", error);
+    logger.error("Failed to get user email:", error);
     return null;
   }
 }
@@ -140,7 +141,7 @@ export async function getUserProfile(): Promise<{
   try {
     const token = await getOrFetchGoogleToken();
     if (!token) {
-      console.error("No Google token available to fetch user profile");
+      logger.error("No Google token available to fetch user profile");
       return null;
     }
 
@@ -154,7 +155,7 @@ export async function getUserProfile(): Promise<{
     );
 
     if (!response.ok) {
-      console.error("Failed to fetch user profile:", response.status);
+      logger.error("Failed to fetch user profile:", response.status);
       return null;
     }
 
@@ -165,7 +166,7 @@ export async function getUserProfile(): Promise<{
       picture: data.picture || "",
     };
   } catch (error) {
-    console.error("Error fetching user profile:", error);
+    logger.error("Error fetching user profile:", error);
     return null;
   }
 }
@@ -185,7 +186,7 @@ export async function refreshToken(): Promise<boolean> {
     });
     return response.ok;
   } catch (error) {
-    console.error("Token refresh failed:", error);
+    logger.error("Token refresh failed:", error);
     return false;
   }
 }
@@ -217,12 +218,12 @@ async function refreshGoogleAccessToken(
   try {
     const storedData = sessionStorage.getItem("google-tokens");
     if (!storedData) {
-      console.log("[Auth] No tokens to refresh");
+      logger.log("[Auth] No tokens to refresh");
       return null;
     }
 
     const parsed = JSON.parse(storedData);
-    console.log("[Auth] Attempting to refresh Google access token...");
+    logger.log("[Auth] Attempting to refresh Google access token...");
     const response = await fetch(`${API_URL}/auth/google/refresh`, {
       method: "POST",
       headers: {
@@ -234,16 +235,13 @@ async function refreshGoogleAccessToken(
     });
 
     if (!response.ok) {
-      console.error(
-        "[Auth] Token refresh failed with status:",
-        response.status,
-      );
+      logger.error("[Auth] Token refresh failed with status:", response.status);
       return null;
     }
 
     const data = await response.json();
     if (!data.accessToken || !data.expiresAt) {
-      console.error("[Auth] Invalid refresh response:", data);
+      logger.error("[Auth] Invalid refresh response");
       return null;
     }
 
@@ -257,10 +255,10 @@ async function refreshGoogleAccessToken(
       userEmail,
     );
 
-    console.log("[Auth] Google access token refreshed successfully");
+    logger.log("[Auth] Google access token refreshed successfully");
     return data.accessToken;
   } catch (error) {
-    console.error("[Auth] Error refreshing Google token:", error);
+    logger.error("[Auth] Error refreshing Google token:", error);
     return null;
   }
 }
@@ -274,7 +272,7 @@ export async function getGoogleTokenFromStorage(
   try {
     const storedData = sessionStorage.getItem("google-tokens");
     if (!storedData) {
-      console.log("[Auth] No Google tokens found in sessionStorage");
+      logger.log("[Auth] No Google tokens found in sessionStorage");
       return null;
     }
 
@@ -282,7 +280,7 @@ export async function getGoogleTokenFromStorage(
 
     // Check if tokens are for the correct user
     if (parsed.userEmail !== userEmail) {
-      console.warn("[Auth] Stored tokens are for different user, clearing");
+      logger.warn("[Auth] Stored tokens are for different user, clearing");
       await clearSensitiveBrowserSession();
       return null;
     }
@@ -291,17 +289,17 @@ export async function getGoogleTokenFromStorage(
     const expiresAt = new Date(parsed.expiresAt);
     const now = Date.now();
     if (now >= expiresAt.getTime()) {
-      console.log("[Auth] Access token expired, attempting refresh...");
+      logger.log("[Auth] Access token expired, attempting refresh...");
 
       // Try to refresh the token before clearing
       const refreshResult = await refreshGoogleAccessToken(userEmail);
 
       if (refreshResult === "NO_REFRESH_TOKEN") {
         // No refresh token available - need to re-authenticate
-        console.warn(
+        logger.warn(
           "[Auth] Cannot refresh without refresh token - redirecting to login",
         );
-        console.log(
+        logger.log(
           "[Auth] Clearing tokens and redirecting to re-authenticate...",
         );
         clearGoogleTokens();
@@ -313,12 +311,12 @@ export async function getGoogleTokenFromStorage(
 
       if (refreshResult) {
         // Refresh successful
-        console.log("[Auth] Token refreshed successfully, continuing...");
+        logger.log("[Auth] Token refreshed successfully, continuing...");
         return refreshResult;
       }
 
       // Refresh failed for other reasons, clear tokens
-      console.error("[Auth] Token refresh failed, clearing tokens");
+      logger.error("[Auth] Token refresh failed, clearing tokens");
       clearGoogleTokens();
       return null;
     }
@@ -332,7 +330,7 @@ export async function getGoogleTokenFromStorage(
 
     return parsed.accessToken;
   } catch (error) {
-    console.error("[Auth] Error reading Google tokens:", error);
+    logger.error("[Auth] Error reading Google tokens:", error);
     clearGoogleTokens();
     return null;
   }
@@ -345,7 +343,7 @@ export async function getOrFetchGoogleToken(): Promise<string | null> {
   // Get current user email
   const userEmail = await getUserEmail();
   if (!userEmail) {
-    console.error("Cannot get Google token: user not authenticated");
+    logger.error("Cannot get Google token: user not authenticated");
     return null;
   }
 
@@ -385,11 +383,11 @@ export async function storeGoogleTokens(
       userEmail,
     };
     sessionStorage.setItem("google-tokens", JSON.stringify(stored));
-    console.log("[Auth] Stored Google tokens in sessionStorage", {
+    logger.log("[Auth] Stored Google tokens in sessionStorage", {
       expiresAt: tokens.expiresAt.toISOString(),
     });
   } catch (error) {
-    console.error("[Auth] Failed to store Google tokens:", error);
+    logger.error("[Auth] Failed to store Google tokens:", error);
     throw error;
   }
 }

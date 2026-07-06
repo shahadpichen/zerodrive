@@ -8,6 +8,7 @@ import {
   refreshToken,
   logout as authLogout,
 } from "./authService";
+import logger from "./logger";
 
 // API Configuration
 const API_BASE_URL =
@@ -189,20 +190,20 @@ class HttpClient {
             );
           }
 
-          console.warn("Unauthorized request, attempting token refresh...");
+          logger.warn("Unauthorized request, attempting token refresh...");
 
           // Try to refresh access token
           const refreshed = await refreshToken();
 
           if (refreshed) {
             // Token refreshed successfully, retry original request
-            console.log("Token refreshed, retrying request...");
+            logger.log("Token refreshed, retrying request...");
             clearTimeout(timeoutId);
             return this.request<T>(endpoint, options, false);
           }
 
           // Refresh failed, logout and redirect
-          console.warn("Token refresh failed, logging out...");
+          logger.warn("Token refresh failed, logging out...");
           await authLogout();
           window.location.href = "/";
           throw new ApiError(

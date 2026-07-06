@@ -91,7 +91,7 @@ router.post(
       });
 
       logger.info("Authorized upload URL generated", {
-        shareId: value.shareId,
+        requestId: req.requestId,
       });
 
       return res.json({
@@ -170,7 +170,7 @@ router.post("/download", async (req: Request, res: Response) => {
 
     const fileKey = shareResult.rows[0].file_id;
     logger.info("Generating authorized download URL", {
-      shareId: value.shareId,
+      requestId: req.requestId,
     });
 
     // Create pre-signed URL for download (expires in 5 minutes)

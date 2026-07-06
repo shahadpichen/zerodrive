@@ -25,11 +25,9 @@ Read these files to understand every endpoint:
 - `backend/src/routes/publicKeys.ts` — Public key management
 - `backend/src/routes/sharedFiles.ts` — File sharing
 - `backend/src/routes/presignedUrls.ts` — S3 pre-signed URLs
-- `backend/src/routes/crypto.ts` — Cryptographic utilities
 - `backend/src/routes/webhooks.ts` — Webhook handlers
 - `backend/src/routes/invitations.ts` — Email invitations
 - `backend/src/routes/analytics.ts` — Analytics data
-- `backend/src/routes/credits.ts` — Credit system
 
 ### Step 2: Read Types and Middleware
 
