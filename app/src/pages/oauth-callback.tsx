@@ -5,7 +5,7 @@
  * - Google tokens encrypted and stored in sessionStorage by frontend
  */
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
@@ -17,8 +17,14 @@ const OAuthCallback: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [error, setError] = useState<string | null>(null);
+  const callbackStarted = useRef(false);
 
   useEffect(() => {
+    // React Strict Mode intentionally re-runs effects in development. OAuth
+    // exchange codes are single-use, so this callback must only start once.
+    if (callbackStarted.current) return;
+    callbackStarted.current = true;
+
     const handleCallback = async () => {
       // Check for OAuth error
       const errorParam = searchParams.get("error");
@@ -85,8 +91,6 @@ const OAuthCallback: React.FC = () => {
           if (!userEmail) {
             throw new Error("Failed to get user email");
           }
-
-          console.log("[OAuth] Storing Google tokens for user:", userEmail);
 
           // Encrypt and store Google tokens in sessionStorage
           await storeGoogleTokens(

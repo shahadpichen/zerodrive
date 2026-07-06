@@ -48,7 +48,6 @@ router.get("/", (req, res) => {
         "DELETE /api/shared-files/:id": "Revoke file sharing",
         "POST /api/presigned-url/upload": "Generate pre-signed upload URL",
         "POST /api/presigned-url/download": "Generate pre-signed download URL",
-        "POST /api/crypto/hash-email": "Hash email with server-side salt",
         "POST /api/webhooks/mailgun": "Mailgun webhook endpoint",
         "GET /api/webhooks/mailgun/health": "Webhook health check",
         "POST /api/invitations/send":

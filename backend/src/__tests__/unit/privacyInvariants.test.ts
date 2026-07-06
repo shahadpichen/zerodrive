@@ -43,6 +43,23 @@ describe("database privacy invariants", () => {
     );
   });
 
+  it("stores no OAuth token payload or account identifier", () => {
+    const oauthSchema = initSql.match(
+      /CREATE TABLE IF NOT EXISTS oauth_exchanges \(([\s\S]*?)\n\);/,
+    )?.[1];
+    expect(oauthSchema).toBeDefined();
+    expect(oauthSchema).toContain("code_hash");
+    for (const forbidden of [
+      "access_token",
+      "refresh_token",
+      "owner_hash",
+      "user_id",
+      "email",
+    ]) {
+      expect(oauthSchema!.toLowerCase()).not.toContain(forbidden);
+    }
+  });
+
   it("cannot derive recipient identities without the external secret", () => {
     const previousSecret = process.env.DIRECTORY_HMAC_SECRET;
     process.env.DIRECTORY_HMAC_SECRET = "first-independent-secret";

@@ -95,7 +95,11 @@ app.use(corsHandler);
 // Rate limiting
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: NODE_ENV === "production" ? 100 : 1000, // Limit each IP
+  max: 100, // Limit each IP in production
+  // Development traffic can be unusually noisy because of hot reload and
+  // React Strict Mode. Route-specific abuse controls remain active, while the
+  // global IP quota is enforced only in production.
+  skip: () => NODE_ENV !== "production",
   message: {
     success: false,
     error: {

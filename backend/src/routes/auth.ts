@@ -28,26 +28,15 @@ import {
 import { query } from "../config/database";
 import logger from "../utils/logger";
 import { deriveLookupCandidates } from "../utils/identity";
+import {
+  consumeOAuthExchange,
+  createOAuthExchange,
+} from "../services/oauthExchange";
 
 const router = Router();
 
 const FRONTEND_URL = process.env.APP_URL || "http://localhost:5173";
 const NODE_ENV = process.env.NODE_ENV || "development";
-const oauthExchanges = new Map<
-  string,
-  {
-    ownerHash: string;
-    expiresAt: number;
-    tokens: {
-      accessToken: string;
-      expiresAt: string;
-      scope: string;
-    };
-    isNewUser: boolean;
-    hasLimitedScope: boolean;
-  }
->();
-
 /**
  * GET /api/auth/google
  * Initiate Google OAuth flow
@@ -233,9 +222,8 @@ router.get(
         });
       }
 
-      const exchangeCode = crypto.randomBytes(32).toString("base64url");
       const ownerHash = verifyToken(jwtToken).emailHash;
-      oauthExchanges.set(exchangeCode, {
+      const exchangeCode = await createOAuthExchange({
         ownerHash,
         expiresAt: Date.now() + 60_000,
         tokens: {
@@ -264,8 +252,7 @@ router.post(
     if (typeof code !== "string") {
       throw ApiErrors.BadRequest("Exchange code is required");
     }
-    const exchange = oauthExchanges.get(code);
-    oauthExchanges.delete(code);
+    const exchange = await consumeOAuthExchange(code);
     if (
       !exchange ||
       exchange.expiresAt <= Date.now() ||

@@ -314,6 +314,50 @@ describe("ApiClient", () => {
       expect(global.fetch).toHaveBeenCalledTimes(2);
     });
 
+    it("should not refresh or replay a rejected OAuth exchange", async () => {
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: false,
+        status: 401,
+        headers: new Headers({ "content-type": "application/json" }),
+        json: async () => ({
+          success: false,
+          error: {
+            code: "UNAUTHORIZED",
+            message: "Invalid or expired exchange code",
+          },
+        }),
+      });
+
+      await expect(
+        apiClient.post("/auth/exchange", { code: "used-code" }),
+      ).rejects.toThrow("Invalid or expired exchange code");
+
+      expect(mockRefreshToken).not.toHaveBeenCalled();
+      expect(mockAuthLogout).not.toHaveBeenCalled();
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+    });
+
+    it("should retry a rejected authenticated request only once", async () => {
+      const unauthorizedResponse = () => ({
+        ok: false,
+        status: 401,
+        headers: new Headers({ "content-type": "application/json" }),
+        json: async () => ({
+          success: false,
+          error: { code: "UNAUTHORIZED", message: "Not permitted" },
+        }),
+      });
+      (global.fetch as jest.Mock)
+        .mockResolvedValueOnce(unauthorizedResponse())
+        .mockResolvedValueOnce(unauthorizedResponse());
+      mockRefreshToken.mockResolvedValue(true);
+
+      await expect(apiClient.get("/test")).rejects.toThrow("Not permitted");
+
+      expect(mockRefreshToken).toHaveBeenCalledTimes(1);
+      expect(global.fetch).toHaveBeenCalledTimes(2);
+    });
+
     it("should logout and redirect when token refresh fails", async () => {
       (global.fetch as jest.Mock).mockResolvedValueOnce({
         ok: false,

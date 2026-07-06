@@ -27,11 +27,6 @@ import { getUserKeyPair, userHasStoredKeys } from "../utils/keyStorage";
 import apiClient from "../utils/apiClient";
 import { getStoredKey } from "../utils/cryptoUtils";
 import { uploadAndSyncFile } from "../utils/fileOperations";
-import {
-  AnalyticsCategory,
-  AnalyticsEvent,
-  trackEvent,
-} from "../utils/analyticsTracker";
 import { getMnemonic, setMnemonic } from "../utils/mnemonicManager";
 import { downloadEncryptedRsaKeyFromDrive } from "../utils/gdriveKeyStorage";
 import { decryptRsaPrivateKeyWithAesKey } from "../utils/rsaKeyManager";
@@ -373,12 +368,6 @@ const SharedWithMePage: React.FC = () => {
       void Promise.resolve(apiClient.sharedFiles.recordAccess(file.id)).catch(
         () => {},
       );
-      void Promise.resolve(
-        trackEvent(
-          AnalyticsEvent.SHARED_FILE_ACCESSED,
-          AnalyticsCategory.SHARING,
-        ),
-      ).catch(() => {});
     } catch (error) {
       console.error("[SharedWithMe] File action failed:", error);
       toast.error(

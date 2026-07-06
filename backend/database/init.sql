@@ -118,6 +118,16 @@ CREATE TRIGGER update_analytics_daily_summary_updated_at
     FOR EACH ROW
     EXECUTE FUNCTION update_updated_at_column();
 
+-- One-time OAuth capabilities. Only non-reversible capability hashes are
+-- persisted; the encrypted capability carries its short-lived payload.
+CREATE TABLE IF NOT EXISTS oauth_exchanges (
+    code_hash CHAR(64) PRIMARY KEY,
+    expires_at TIMESTAMP WITH TIME ZONE NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_oauth_exchanges_expiry
+    ON oauth_exchanges(expires_at);
+
 -- TABLE REMOVED: user_google_tokens (Risk #35 - Zero-knowledge architecture)
 -- Google OAuth tokens are now encrypted client-side with PBKDF2 and stored in sessionStorage
 -- Backend never stores or has access to Google Drive tokens

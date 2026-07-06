@@ -12,31 +12,31 @@
  * Only track anonymous events and aggregated metrics.
  */
 
-import { query } from '../config/database';
-import logger from '../utils/logger';
+import { query } from "../config/database";
+import logger from "../utils/logger";
 
 // Event types
 export enum AnalyticsEvent {
   // Authentication
-  USER_LOGIN = 'user_login',
-  USER_LOGIN_NEW = 'user_login_new',
-  USER_LOGIN_EXISTING = 'user_login_existing',
-  USER_LOGIN_LIMITED_SCOPE = 'user_login_limited_scope',
+  USER_LOGIN = "user_login",
+  USER_LOGIN_NEW = "user_login_new",
+  USER_LOGIN_EXISTING = "user_login_existing",
+  USER_LOGIN_LIMITED_SCOPE = "user_login_limited_scope",
 
   // Files
-  FILE_ADDED_TO_DRIVE = 'file_added_to_drive',
+  FILE_ADDED_TO_DRIVE = "file_added_to_drive",
 
   // Sharing
-  FILE_SHARED = 'file_shared',
-  INVITATION_SENT = 'invitation_sent',
-  SHARED_FILE_ACCESSED = 'shared_file_accessed',
+  FILE_SHARED = "file_shared",
+  INVITATION_SENT = "invitation_sent",
+  SHARED_FILE_ACCESSED = "shared_file_accessed",
 }
 
 // Event categories
 export enum AnalyticsCategory {
-  AUTH = 'auth',
-  FILES = 'files',
-  SHARING = 'sharing',
+  AUTH = "auth",
+  FILES = "files",
+  SHARING = "sharing",
 }
 
 /**
@@ -49,7 +49,7 @@ export enum AnalyticsCategory {
 export async function trackEvent(
   eventType: AnalyticsEvent | string,
   category: AnalyticsCategory,
-  metadata?: Record<string, any>
+  metadata?: Record<string, any>,
 ): Promise<void> {
   try {
     // Validate metadata doesn't contain user identifiers
@@ -59,21 +59,23 @@ export async function trackEvent(
 
     // Map event type to counter column
     const columnMap: Record<string, string> = {
-      [AnalyticsEvent.USER_LOGIN]: 'total_logins',
-      [AnalyticsEvent.USER_LOGIN_NEW]: 'total_new_users',
-      [AnalyticsEvent.USER_LOGIN_EXISTING]: 'total_logins',
-      [AnalyticsEvent.USER_LOGIN_LIMITED_SCOPE]: 'total_limited_scope_logins',
-      [AnalyticsEvent.FILE_ADDED_TO_DRIVE]: 'total_files_added_to_drive',
-      [AnalyticsEvent.FILE_SHARED]: 'total_shares',
-      [AnalyticsEvent.INVITATION_SENT]: 'total_invitations',
-      [AnalyticsEvent.SHARED_FILE_ACCESSED]: 'total_downloads',
+      [AnalyticsEvent.USER_LOGIN]: "total_logins",
+      [AnalyticsEvent.USER_LOGIN_NEW]: "total_new_users",
+      [AnalyticsEvent.USER_LOGIN_EXISTING]: "total_logins",
+      [AnalyticsEvent.USER_LOGIN_LIMITED_SCOPE]: "total_limited_scope_logins",
+      [AnalyticsEvent.FILE_ADDED_TO_DRIVE]: "total_files_added_to_drive",
+      [AnalyticsEvent.FILE_SHARED]: "total_shares",
+      [AnalyticsEvent.INVITATION_SENT]: "total_invitations",
+      [AnalyticsEvent.SHARED_FILE_ACCESSED]: "total_downloads",
     };
 
     // Determine which column to increment
     const column = columnMap[eventType] || null;
 
     if (!column) {
-      logger.warn('[Analytics] Unknown event type, not tracking', { eventType });
+      logger.warn("[Analytics] Unknown event type, not tracking", {
+        eventType,
+      });
       return;
     }
 
@@ -85,16 +87,16 @@ export async function trackEvent(
       DO UPDATE SET ${column} = analytics_daily_summary.${column} + 1
     `);
 
-    logger.info('[Analytics] Event tracked', {
+    logger.info("[Analytics] Event tracked", {
       event: eventType,
       category,
-      column
+      column,
     });
   } catch (error) {
     // Don't let analytics failures break the app
-    logger.error('[Analytics] Failed to track event', {
+    logger.error("[Analytics] Failed to track event", {
       event: eventType,
-      error: error instanceof Error ? error.message : 'Unknown error'
+      error: error instanceof Error ? error.message : "Unknown error",
     });
   }
 }
@@ -104,27 +106,37 @@ export async function trackEvent(
  */
 function validateAnonymousMetadata(metadata: Record<string, any>): void {
   const forbiddenKeys = [
-    'email', 'user_id', 'userId', 'user', 'username',
-    'ip', 'ipAddress', 'ip_address',
-    'session', 'sessionId', 'session_id',
-    'name', 'phone', 'address'
+    "email",
+    "user_id",
+    "userId",
+    "user",
+    "username",
+    "ip",
+    "ipAddress",
+    "ip_address",
+    "session",
+    "sessionId",
+    "session_id",
+    "name",
+    "phone",
+    "address",
   ];
 
-  const metadataKeys = Object.keys(metadata).map(k => k.toLowerCase());
-  const violations = forbiddenKeys.filter(key =>
-    metadataKeys.includes(key.toLowerCase())
+  const metadataKeys = Object.keys(metadata).map((k) => k.toLowerCase());
+  const violations = forbiddenKeys.filter((key) =>
+    metadataKeys.includes(key.toLowerCase()),
   );
 
   if (violations.length > 0) {
-    logger.warn('[Analytics] Metadata contains forbidden keys', {
+    logger.warn("[Analytics] Metadata contains forbidden keys", {
       violations,
-      metadata: Object.keys(metadata)
+      metadata: Object.keys(metadata),
     });
 
     // Remove forbidden keys
-    violations.forEach(key => {
-      const actualKey = Object.keys(metadata).find(k =>
-        k.toLowerCase() === key.toLowerCase()
+    violations.forEach((key) => {
+      const actualKey = Object.keys(metadata).find(
+        (k) => k.toLowerCase() === key.toLowerCase(),
       );
       if (actualKey) {
         delete metadata[actualKey];
@@ -140,23 +152,23 @@ function validateAnonymousMetadata(metadata: Record<string, any>): void {
 export function getFileSizeBucket(sizeBytes: number): string {
   const MB = 1024 * 1024;
 
-  if (sizeBytes < MB) return '<1MB';
-  if (sizeBytes < 10 * MB) return '1-10MB';
-  if (sizeBytes < 50 * MB) return '10-50MB';
-  if (sizeBytes < 100 * MB) return '50-100MB';
-  return '>100MB';
+  if (sizeBytes < MB) return "<1MB";
+  if (sizeBytes < 10 * MB) return "1-10MB";
+  if (sizeBytes < 50 * MB) return "10-50MB";
+  if (sizeBytes < 100 * MB) return "50-100MB";
+  return ">100MB";
 }
 
 /**
  * Helper to get file type category (not exact extension)
  */
 export function getFileTypeCategory(mimeType: string): string {
-  if (!mimeType) return 'unknown';
+  if (!mimeType) return "unknown";
 
-  const type = mimeType.split('/')[0];
-  const validTypes = ['image', 'video', 'audio', 'text', 'application'];
+  const type = mimeType.split("/")[0];
+  const validTypes = ["image", "video", "audio", "text", "application"];
 
-  return validTypes.includes(type) ? type : 'other';
+  return validTypes.includes(type) ? type : "other";
 }
 
 /**
@@ -164,7 +176,7 @@ export function getFileTypeCategory(mimeType: string): string {
  */
 export async function getAnalyticsSummary(
   startDate: Date,
-  endDate: Date
+  endDate: Date,
 ): Promise<{
   totalEvents: number;
   eventsByType: Record<string, number>;
@@ -172,7 +184,8 @@ export async function getAnalyticsSummary(
 }> {
   try {
     // Get sum of all counters for the date range
-    const result = await query(`
+    const result = await query(
+      `
       SELECT
         SUM(total_logins) as logins,
         SUM(total_new_users) as new_users,
@@ -183,7 +196,9 @@ export async function getAnalyticsSummary(
         SUM(total_invitations) as invitations
       FROM analytics_daily_summary
       WHERE date BETWEEN $1 AND $2
-    `, [startDate, endDate]);
+    `,
+      [startDate, endDate],
+    );
 
     const row = result.rows[0];
 
@@ -197,22 +212,29 @@ export async function getAnalyticsSummary(
 
     // Build response matching expected format
     const eventsByType: Record<string, number> = {
-      'user_login': logins,
-      'user_login_new': newUsers,
-      'user_login_limited_scope': limitedScopeLogins,
-      'shared_file_accessed': downloads,
-      'file_added_to_drive': filesAddedToDrive,
-      'file_shared': shares,
-      'invitation_sent': invitations,
+      user_login: logins,
+      user_login_new: newUsers,
+      user_login_limited_scope: limitedScopeLogins,
+      shared_file_accessed: downloads,
+      file_added_to_drive: filesAddedToDrive,
+      file_shared: shares,
+      invitation_sent: invitations,
     };
 
     const eventsByCategory: Record<string, number> = {
-      'auth': logins + newUsers + limitedScopeLogins,
-      'files': downloads + filesAddedToDrive,
-      'sharing': shares + invitations,
+      auth: logins + newUsers + limitedScopeLogins,
+      files: filesAddedToDrive,
+      sharing: shares + invitations + downloads,
     };
 
-    const totalEvents = logins + newUsers + limitedScopeLogins + downloads + filesAddedToDrive + shares + invitations;
+    const totalEvents =
+      logins +
+      newUsers +
+      limitedScopeLogins +
+      downloads +
+      filesAddedToDrive +
+      shares +
+      invitations;
 
     return {
       totalEvents,
@@ -220,7 +242,7 @@ export async function getAnalyticsSummary(
       eventsByCategory,
     };
   } catch (error) {
-    logger.error('[Analytics] Failed to get summary', error as Error);
+    logger.error("[Analytics] Failed to get summary", error as Error);
     throw error;
   }
 }
@@ -228,13 +250,15 @@ export async function getAnalyticsSummary(
 /**
  * Get daily stats for charting
  */
-export async function getDailyStats(days: number = 30): Promise<Array<{
-  date: string;
-  logins: number;
-  filesAdded: number;
-  shares: number;
-  downloads: number;
-}>> {
+export async function getDailyStats(days: number = 30): Promise<
+  Array<{
+    date: string;
+    logins: number;
+    filesAdded: number;
+    shares: number;
+    downloads: number;
+  }>
+> {
   try {
     const result = await query(`
       SELECT
@@ -248,7 +272,7 @@ export async function getDailyStats(days: number = 30): Promise<Array<{
       ORDER BY date DESC
     `);
 
-    return result.rows.map(row => ({
+    return result.rows.map((row) => ({
       date: row.date,
       logins: parseInt(row.logins) || 0,
       filesAdded: parseInt(row.files_added) || 0,
@@ -256,7 +280,7 @@ export async function getDailyStats(days: number = 30): Promise<Array<{
       downloads: parseInt(row.downloads) || 0,
     }));
   } catch (error) {
-    logger.error('[Analytics] Failed to get daily stats', error as Error);
+    logger.error("[Analytics] Failed to get daily stats", error as Error);
     throw error;
   }
 }

@@ -636,6 +636,11 @@ router.post(
         [id],
       );
 
+      void trackEvent(
+        AnalyticsEvent.SHARED_FILE_ACCESSED,
+        AnalyticsCategory.SHARING,
+      );
+
       res.apiSuccess({ recorded: true }, "File access recorded successfully");
     } catch (error) {
       if (error instanceof Error && error.message.includes("not found")) {

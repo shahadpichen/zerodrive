@@ -111,6 +111,7 @@ class HttpClient {
   private async request<T>(
     endpoint: string,
     options: RequestInit = {},
+    canRefresh: boolean = true,
   ): Promise<ApiResponse<T>> {
     const url = `${this.baseUrl}${endpoint}`;
 
@@ -166,8 +167,28 @@ class HttpClient {
 
       // Handle HTTP errors
       if (!response.ok) {
-        // Handle 401 Unauthorized - try refresh, then logout if refresh fails
+        // OAuth exchange codes are single-use. A rejected exchange must be
+        // surfaced as-is instead of refreshing and replaying the code.
         if (response.status === 401) {
+          if (endpoint === "/auth/exchange") {
+            throw new ApiError(
+              responseData.error?.message || "Invalid or expired exchange code",
+              responseData.error?.code || "UNAUTHORIZED",
+              401,
+            );
+          }
+
+          // Retry an authenticated request at most once. Without this guard,
+          // a valid refresh cookie plus a persistently rejected request causes
+          // an unbounded refresh/request loop.
+          if (!canRefresh) {
+            throw new ApiError(
+              responseData.error?.message || "Unauthorized",
+              responseData.error?.code || "UNAUTHORIZED",
+              401,
+            );
+          }
+
           console.warn("Unauthorized request, attempting token refresh...");
 
           // Try to refresh access token
@@ -177,7 +198,7 @@ class HttpClient {
             // Token refreshed successfully, retry original request
             console.log("Token refreshed, retrying request...");
             clearTimeout(timeoutId);
-            return this.request<T>(endpoint, options);
+            return this.request<T>(endpoint, options, false);
           }
 
           // Refresh failed, logout and redirect

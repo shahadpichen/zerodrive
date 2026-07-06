@@ -30,11 +30,6 @@ jest.mock("../../routes/presignedUrls", () => {
   const router = express.Router();
   return router;
 });
-jest.mock("../../routes/crypto", () => {
-  const express = require("express");
-  const router = express.Router();
-  return router;
-});
 jest.mock("../../routes/invitations", () => {
   const express = require("express");
   const router = express.Router();
@@ -245,9 +240,6 @@ describe("Health & Info Routes Integration", () => {
       // Presigned URLs
       expect(endpoints["POST /api/presigned-url/upload"]).toBeDefined();
       expect(endpoints["POST /api/presigned-url/download"]).toBeDefined();
-
-      // Crypto
-      expect(endpoints["POST /api/crypto/hash-email"]).toBeDefined();
 
       // Webhooks
       expect(endpoints["POST /api/webhooks/mailgun"]).toBeDefined();

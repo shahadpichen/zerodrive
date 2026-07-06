@@ -24,11 +24,21 @@ tokens use HTTP-only cookies. An active same-origin XSS can still access
 decrypted files, short-lived access tokens, and keys currently in JavaScript
 memory, so CSP and dependency integrity remain part of the security boundary.
 
+## Privacy-preserving analytics
+
+ZeroDrive does not load third-party analytics or advertising scripts. Product
+analytics are first-party daily counters stored in
+`analytics_daily_summary`. They contain no event rows, account identifiers,
+emails, IP addresses, session identifiers, file identifiers, filenames,
+capabilities, or browser fingerprints. Authentication, sharing, invitation,
+and shared-file access counters are incremented by the backend. The frontend
+may report only the predefined file-added event because direct Google Drive
+uploads do not pass through the backend.
+
 ## Deployment constraints
 
-OAuth exchange codes and request rate-limit counters currently use in-process
-memory with bounded TTLs. Production must run a single backend instance. Before
-running multiple backend instances, move both stores to a shared TTL-capable
-service such as Redis. Keep exchange-code values one-time-use and store only
-HMAC-derived identifiers in that service, using a separate secret/domain from
-recipient directory identifiers.
+OAuth exchanges use encrypted self-contained capabilities and PostgreSQL stores
+only their one-time SHA-256 hashes and expiry times. This supports multiple
+backend instances without storing Google tokens or account identifiers in the
+database. Request rate-limit counters remain in-process; deploy a shared rate
+limit store before relying on a global quota across multiple instances.

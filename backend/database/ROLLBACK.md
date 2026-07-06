@@ -3,6 +3,9 @@
 Back up PostgreSQL and MinIO before rolling back. Application code must be
 deployed in a version compatible with the resulting schema.
 
+- `008`: Deploy code that no longer creates durable exchange capabilities,
+  wait at least 60 seconds for outstanding exchanges to expire, then drop
+  `oauth_exchanges`. Active authenticated sessions are unaffected.
 - `006`: Drop the three `shared_files_*` lifecycle check constraints.
 - `005`: Keep historical public-key rows. Reverting to a unique `user_id`
   requires selecting one active row per user first; dropping history destroys

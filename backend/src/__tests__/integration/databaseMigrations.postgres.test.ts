@@ -9,6 +9,7 @@ const describeWithPostgres = databaseUrl ? describe : describe.skip;
 describeWithPostgres("database migrations against PostgreSQL", () => {
   let testPool: Pool;
   const databaseDirectory = path.resolve(__dirname, "../../../database");
+  const legacySchema = path.resolve(__dirname, "../fixtures/legacy-schema.sql");
   const migrationsDirectory = path.join(databaseDirectory, "migrations");
 
   beforeAll(async () => {
@@ -20,9 +21,7 @@ describeWithPostgres("database migrations against PostgreSQL", () => {
     }
     testPool = new Pool({ connectionString: databaseUrl });
     await testPool.query("DROP SCHEMA public CASCADE; CREATE SCHEMA public;");
-    await testPool.query(
-      fs.readFileSync(path.join(databaseDirectory, "init.sql"), "utf8"),
-    );
+    await testPool.query(fs.readFileSync(legacySchema, "utf8"));
     await testPool.query(
       `INSERT INTO shared_files
          (file_id, recipient_user_id, encrypted_file_key, file_name,
@@ -65,5 +64,23 @@ describeWithPostgres("database migrations against PostgreSQL", () => {
        WHERE file_id = 'shared/legacy-object'`,
     );
     expect(result.rows[0]).toEqual({ file_name: null, mime_type: null });
+  });
+
+  it("creates the current security and lifecycle structures", async () => {
+    const result = await testPool.query(
+      `SELECT
+         to_regclass('public.oauth_exchanges') IS NOT NULL AS oauth_exchanges,
+         to_regclass('public.idx_shared_files_management_capability_hash_unique')
+           IS NOT NULL AS capability_index,
+         EXISTS (
+           SELECT 1 FROM information_schema.columns
+           WHERE table_name = 'shared_files' AND column_name = 'encrypted_metadata'
+         ) AS encrypted_metadata`,
+    );
+    expect(result.rows[0]).toEqual({
+      oauth_exchanges: true,
+      capability_index: true,
+      encrypted_metadata: true,
+    });
   });
 });

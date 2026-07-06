@@ -240,6 +240,19 @@ describe("Auth Routes Integration", () => {
     });
 
     it("allows an exchange code exactly once", async () => {
+      let exchangeConsumed = false;
+      mockQuery.mockImplementation(async (sql: string) => {
+        if (
+          sql.includes("DELETE FROM oauth_exchanges") &&
+          sql.includes("RETURNING code_hash")
+        ) {
+          if (exchangeConsumed) return { rows: [], rowCount: 0 };
+          exchangeConsumed = true;
+          return { rows: [{ code_hash: "stored-hash" }], rowCount: 1 };
+        }
+        return { rows: [], rowCount: 0 };
+      });
+
       const callbackResponse = await callback({ code: mockCode });
       const exchangeCode = new URL(
         callbackResponse.headers.location as string,
