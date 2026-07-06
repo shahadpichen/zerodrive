@@ -3,14 +3,55 @@
  * Centralized logic for recovering RSA keys from Google Drive backups
  */
 
-import { toast } from 'sonner';
-import { downloadEncryptedRsaKeyFromDrive } from './gdriveKeyStorage';
-import { decryptRsaPrivateKeyWithAesKey } from './rsaKeyManager';
-import { getStoredKey } from './cryptoUtils';
-import { userHasStoredKeys, storeUserKeyPair } from './keyStorage';
-import { storeUserPublicKey, hashEmail, UserKeyPair } from './fileSharing';
-import { getMnemonic } from './mnemonicManager';
-import logger from './logger';
+import { toast } from "sonner";
+import { downloadEncryptedRsaKeyFromDrive } from "./gdriveKeyStorage";
+import { decryptRsaPrivateKeyWithAesKey } from "./rsaKeyManager";
+import { getStoredKey } from "./cryptoUtils";
+import { userHasStoredKeys, storeUserKeyPair } from "./keyStorage";
+import { storeUserPublicKey, UserKeyPair } from "./fileSharing";
+import { getMnemonic } from "./mnemonicManager";
+import logger from "./logger";
+
+function publicKeyFromPrivate(privateKeyJwk: JsonWebKey): JsonWebKey {
+  const publicKeyJwk: JsonWebKey = {
+    kty: privateKeyJwk.kty,
+    n: privateKeyJwk.n,
+    e: privateKeyJwk.e,
+    alg: "RSA-OAEP-256",
+    key_ops: ["encrypt"],
+    ext: true,
+  };
+  if (!publicKeyJwk.n || !publicKeyJwk.e || !publicKeyJwk.kty) {
+    throw new Error("Failed to reconstruct public key from private key backup");
+  }
+  return publicKeyJwk;
+}
+
+export async function recoverRsaKeyVersion(
+  userEmail: string,
+  keyVersion: number,
+  mnemonic: string,
+): Promise<UserKeyPair | null> {
+  const primaryAesKey = await getStoredKey();
+  if (!primaryAesKey) return null;
+  try {
+    const encrypted = await downloadEncryptedRsaKeyFromDrive(keyVersion);
+    const privateKeyJwk = await decryptRsaPrivateKeyWithAesKey(
+      encrypted,
+      primaryAesKey,
+    );
+    privateKeyJwk.key_ops = ["decrypt"];
+    const keyPair = {
+      publicKeyJwk: publicKeyFromPrivate(privateKeyJwk),
+      privateKeyJwk,
+    };
+    await storeUserKeyPair(userEmail, keyPair, mnemonic, keyVersion);
+    return keyPair;
+  } catch (error) {
+    logger.warn(`[RSA Recovery] Key version ${keyVersion} unavailable`, error);
+    return null;
+  }
+}
 
 export interface RsaRecoveryResult {
   success: boolean;
@@ -27,15 +68,15 @@ export interface RsaRecoveryResult {
  */
 export async function recoverRsaKeysIfNeeded(
   userEmail: string,
-  silent: boolean = false
+  silent: boolean = false,
 ): Promise<RsaRecoveryResult> {
   if (!userEmail) {
-    logger.warn('[RSA Recovery] No user email provided');
+    logger.warn("[RSA Recovery] No user email provided");
     return {
       success: false,
       recovered: false,
       keysExisted: false,
-      error: 'No user email provided',
+      error: "No user email provided",
     };
   }
 
@@ -44,7 +85,9 @@ export async function recoverRsaKeysIfNeeded(
     const keysExist = await userHasStoredKeys(userEmail);
 
     if (keysExist) {
-      logger.log('[RSA Recovery] Keys already exist in IndexedDB, skipping recovery');
+      logger.log(
+        "[RSA Recovery] Keys already exist in IndexedDB, skipping recovery",
+      );
       return {
         success: true,
         recovered: false,
@@ -54,10 +97,14 @@ export async function recoverRsaKeysIfNeeded(
 
     // Keys don't exist - attempt recovery from Google Drive
     if (!silent) {
-      logger.log('[RSA Recovery] Keys not found in IndexedDB, attempting recovery from Google Drive...');
+      logger.log(
+        "[RSA Recovery] Keys not found in IndexedDB, attempting recovery from Google Drive...",
+      );
     }
 
-    const toastId = silent ? undefined : toast.loading('Checking for RSA key backup in Google Drive...');
+    const toastId = silent
+      ? undefined
+      : toast.loading("Checking for RSA key backup in Google Drive...");
 
     let encryptedKeyBlob: Blob | null = null;
 
@@ -65,8 +112,10 @@ export async function recoverRsaKeysIfNeeded(
       encryptedKeyBlob = await downloadEncryptedRsaKeyFromDrive();
     } catch (downloadError: any) {
       // Backup might not exist (e.g., new user who hasn't enabled sharing yet)
-      if (downloadError.message?.includes('not found')) {
-        logger.log('[RSA Recovery] No backup found in Google Drive (user may not have enabled sharing yet)');
+      if (downloadError.message?.includes("not found")) {
+        logger.log(
+          "[RSA Recovery] No backup found in Google Drive (user may not have enabled sharing yet)",
+        );
         if (toastId && !silent) {
           toast.dismiss(toastId);
         }
@@ -82,7 +131,7 @@ export async function recoverRsaKeysIfNeeded(
     }
 
     if (!encryptedKeyBlob) {
-      logger.log('[RSA Recovery] No backup found in Google Drive');
+      logger.log("[RSA Recovery] No backup found in Google Drive");
       if (toastId && !silent) {
         toast.dismiss(toastId);
       }
@@ -95,18 +144,21 @@ export async function recoverRsaKeysIfNeeded(
 
     // Backup found - attempt decryption
     if (toastId && !silent) {
-      toast.loading('Backup found. Decrypting with your primary key...', { id: toastId });
+      toast.loading("Backup found. Decrypting with your primary key...", {
+        id: toastId,
+      });
     }
 
     const primaryAesKey = await getStoredKey();
 
     if (!primaryAesKey) {
-      const errorMsg = 'Primary encryption key not found in session storage';
-      logger.error('[RSA Recovery]', errorMsg);
+      const errorMsg = "Primary encryption key not found in session storage";
+      logger.error("[RSA Recovery]", errorMsg);
 
       if (toastId && !silent) {
-        toast.error('Cannot decrypt RSA key backup', {
-          description: 'Primary encryption key not found. Please enter your mnemonic in Key Management.',
+        toast.error("Cannot decrypt RSA key backup", {
+          description:
+            "Primary encryption key not found. Please enter your mnemonic in Key Management.",
           id: toastId,
           duration: 7000,
         });
@@ -124,28 +176,16 @@ export async function recoverRsaKeysIfNeeded(
       // Decrypt the private key
       const privateKeyJwk = await decryptRsaPrivateKeyWithAesKey(
         encryptedKeyBlob,
-        primaryAesKey
+        primaryAesKey,
       );
 
       // Construct public key from private key
       // RSA private JWK contains public components (n, e)
-      const publicKeyJwk: JsonWebKey = {
-        kty: privateKeyJwk.kty,
-        n: privateKeyJwk.n,
-        e: privateKeyJwk.e,
-        alg: privateKeyJwk.alg?.replace('PS', 'RS') || 'RSA-OAEP-256',
-        key_ops: ['encrypt'],
-        ext: true,
-      };
-
-      // Validate essential components
-      if (!publicKeyJwk.n || !publicKeyJwk.e || !publicKeyJwk.kty) {
-        throw new Error('Failed to reconstruct public key from private key backup');
-      }
+      const publicKeyJwk = publicKeyFromPrivate(privateKeyJwk);
 
       // Ensure private key has correct key_ops
       if (!privateKeyJwk.key_ops) {
-        privateKeyJwk.key_ops = ['decrypt'];
+        privateKeyJwk.key_ops = ["decrypt"];
       }
 
       const recoveredKeyPair: UserKeyPair = {
@@ -156,21 +196,30 @@ export async function recoverRsaKeysIfNeeded(
       // Get mnemonic for encrypting private key in IndexedDB
       const mnemonic = getMnemonic();
       if (!mnemonic) {
-        throw new Error('Mnemonic not available - cannot encrypt RSA private key');
+        throw new Error(
+          "Mnemonic not available - cannot encrypt RSA private key",
+        );
       }
 
       // Store in IndexedDB (private key encrypted with mnemonic)
-      await storeUserKeyPair(userEmail, recoveredKeyPair, mnemonic);
-
       // Store public key in PostgreSQL
-      const hashedEmail = await hashEmail(userEmail);
-      await storeUserPublicKey(hashedEmail, recoveredKeyPair.publicKeyJwk);
+      const storedPublicKey = await storeUserPublicKey(
+        recoveredKeyPair.publicKeyJwk,
+      );
+      await storeUserKeyPair(
+        userEmail,
+        recoveredKeyPair,
+        mnemonic,
+        storedPublicKey.keyVersion,
+      );
 
-      logger.log('[RSA Recovery] Successfully recovered and stored RSA keys from Google Drive');
+      logger.log(
+        "[RSA Recovery] Successfully recovered and stored RSA keys from Google Drive",
+      );
 
       if (toastId && !silent) {
-        toast.success('RSA keys recovered from Google Drive', {
-          description: 'Your sharing keys have been restored successfully.',
+        toast.success("RSA keys recovered from Google Drive", {
+          description: "Your sharing keys have been restored successfully.",
           id: toastId,
         });
       }
@@ -181,11 +230,16 @@ export async function recoverRsaKeysIfNeeded(
         keysExisted: false,
       };
     } catch (decryptionError: any) {
-      logger.error('[RSA Recovery] Failed to decrypt key backup:', decryptionError);
+      logger.error(
+        "[RSA Recovery] Failed to decrypt key backup:",
+        decryptionError,
+      );
 
       if (toastId && !silent) {
-        toast.error('Failed to decrypt RSA key backup', {
-          description: decryptionError.message || 'The primary key might be incorrect or backup corrupted.',
+        toast.error("Failed to decrypt RSA key backup", {
+          description:
+            decryptionError.message ||
+            "The primary key might be incorrect or backup corrupted.",
           id: toastId,
           duration: 7000,
         });
@@ -195,15 +249,15 @@ export async function recoverRsaKeysIfNeeded(
         success: false,
         recovered: false,
         keysExisted: false,
-        error: decryptionError.message || 'Decryption failed',
+        error: decryptionError.message || "Decryption failed",
       };
     }
   } catch (error: any) {
-    logger.error('[RSA Recovery] Unexpected error during recovery:', error);
+    logger.error("[RSA Recovery] Unexpected error during recovery:", error);
 
     if (!silent) {
-      toast.error('Failed to recover RSA keys', {
-        description: error.message || 'An unexpected error occurred',
+      toast.error("Failed to recover RSA keys", {
+        description: error.message || "An unexpected error occurred",
         duration: 5000,
       });
     }
@@ -212,7 +266,7 @@ export async function recoverRsaKeysIfNeeded(
       success: false,
       recovered: false,
       keysExisted: false,
-      error: error.message || 'Unexpected error',
+      error: error.message || "Unexpected error",
     };
   }
 }

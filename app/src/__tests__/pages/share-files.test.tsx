@@ -3,8 +3,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import ShareFilesPage from "../../pages/share-files";
 import {
-  fetchUserPublicKey,
-  hashEmail,
+  fetchRecipientPublicKey,
   prepareFileForSharing,
   storeFileShare,
 } from "../../utils/fileSharing";
@@ -22,6 +21,7 @@ import {
   getAllFilesForUser,
 } from "../../utils/dexieDB";
 import { decryptFile } from "../../utils/decryptFile";
+import { pinRecipientKey } from "../../utils/recipientKeyPins";
 
 const mockNavigate = jest.fn();
 
@@ -59,9 +59,9 @@ jest.mock("../../utils/mnemonicManager", () => ({
 }));
 
 jest.mock("../../utils/fileSharing", () => ({
+  fetchRecipientPublicKey: jest.fn(),
   fetchUserPublicKey: jest.fn(),
   generateUserKeyPair: jest.fn(),
-  hashEmail: jest.fn(),
   prepareFileForSharing: jest.fn(),
   storeFileShare: jest.fn(),
   storeUserPublicKey: jest.fn(),
@@ -88,6 +88,9 @@ jest.mock("../../utils/cryptoUtils", () => ({
 jest.mock("../../utils/apiClient", () => ({
   __esModule: true,
   default: {
+    get: jest.fn().mockResolvedValue({
+      data: { email: "sender@example.com", emailHash: "f".repeat(64) },
+    }),
     publicKeys: { delete: jest.fn() },
     invitations: { send: jest.fn() },
   },
@@ -105,9 +108,8 @@ const mockRecoverKeys = recoverRsaKeysIfNeeded as jest.MockedFunction<
   typeof recoverRsaKeysIfNeeded
 >;
 const mockGetMnemonic = getMnemonic as jest.MockedFunction<typeof getMnemonic>;
-const mockHashEmail = hashEmail as jest.MockedFunction<typeof hashEmail>;
-const mockFetchPublicKey = fetchUserPublicKey as jest.MockedFunction<
-  typeof fetchUserPublicKey
+const mockFetchPublicKey = fetchRecipientPublicKey as jest.MockedFunction<
+  typeof fetchRecipientPublicKey
 >;
 const mockPrepareFile = prepareFileForSharing as jest.MockedFunction<
   typeof prepareFileForSharing
@@ -162,6 +164,10 @@ async function fillShareDetails() {
 describe("ShareFilesPage", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    localStorage.clear();
+    (apiClient.get as jest.Mock).mockResolvedValue({
+      data: { email: "sender@example.com", emailHash: "f".repeat(64) },
+    });
     mockGetUserEmail.mockResolvedValue("sender@example.com");
     mockHasGoogleTokens.mockReturnValue(true);
     mockInitializeGapi.mockResolvedValue(undefined);
@@ -179,18 +185,23 @@ describe("ShareFilesPage", () => {
       recovered: false,
       keysExisted: true,
     });
-    mockHashEmail.mockResolvedValue("recipient-hash");
-    mockFetchPublicKey.mockResolvedValue({ kty: "RSA" });
+    mockFetchPublicKey.mockResolvedValue({
+      public_key: JSON.stringify({ kty: "RSA" }),
+      key_version: 1,
+      fingerprint: "a".repeat(64),
+    });
     mockPrepareFile.mockResolvedValue({
       encryptedFileBlob: new Blob(["ciphertext"]),
-      recipientHashedEmail: "recipient-hash",
       recipientEmail: "recipient@example.com",
       fileName: "encrypted-file.bin",
       originalFileName: "roadmap.pdf",
       encryptedFileKey: "wrapped-key",
+      encryptedMetadata: "encrypted-metadata",
       fileId: "file-id",
       mimeType: "application/pdf",
       fileSize: 15,
+      recipientKeyVersion: 1,
+      recipientKeyFingerprint: "a".repeat(64),
     });
     mockStoreFileShare.mockResolvedValue(undefined);
     (apiClient.invitations.send as jest.Mock).mockResolvedValue({
@@ -265,10 +276,36 @@ describe("ShareFilesPage", () => {
     fireEvent.click(screen.getByRole("button", { name: /review share/i }));
 
     await screen.findByText("Review before sharing");
-    expect(mockHashEmail).toHaveBeenCalledWith("recipient@example.com");
-    expect(mockFetchPublicKey).toHaveBeenCalledWith("recipient-hash");
+    expect(mockFetchPublicKey).toHaveBeenCalledWith("recipient@example.com");
     expect(screen.getByText("roadmap.pdf")).toBeInTheDocument();
     expect(screen.getByText("recipient@example.com")).toBeInTheDocument();
+  });
+
+  it("blocks a changed recipient key until the sender confirms it", async () => {
+    pinRecipientKey("f".repeat(64), "recipient@example.com", "b".repeat(64), 1);
+    mockFetchPublicKey.mockResolvedValue({
+      public_key: JSON.stringify({ kty: "RSA", n: "new-key" }),
+      key_version: 2,
+      fingerprint: "c".repeat(64),
+    });
+    renderPage();
+    await fillShareDetails();
+
+    fireEvent.click(screen.getByRole("button", { name: /review share/i }));
+
+    expect(
+      await screen.findByText(/recipient's encryption key changed/i),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Review before sharing")).not.toBeInTheDocument();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: /trust this new key/i }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: /review share/i }));
+
+    expect(
+      await screen.findByText("Review before sharing"),
+    ).toBeInTheDocument();
   });
 
   it("can select and share a file already in My Storage", async () => {

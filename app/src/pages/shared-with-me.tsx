@@ -20,21 +20,18 @@ import { getFileIconPath } from "../lib/mime-types";
 import {
   arrayBufferToBase64,
   decryptSharedFile,
+  decryptSharedMetadata,
   downloadEncryptedFile,
-  hashEmail,
 } from "../utils/fileSharing";
 import { getUserKeyPair, userHasStoredKeys } from "../utils/keyStorage";
 import apiClient from "../utils/apiClient";
 import { getStoredKey } from "../utils/cryptoUtils";
 import { uploadAndSyncFile } from "../utils/fileOperations";
-import {
-  AnalyticsCategory,
-  AnalyticsEvent,
-  trackEvent,
-} from "../utils/analyticsTracker";
 import { getMnemonic, setMnemonic } from "../utils/mnemonicManager";
 import { downloadEncryptedRsaKeyFromDrive } from "../utils/gdriveKeyStorage";
 import { decryptRsaPrivateKeyWithAesKey } from "../utils/rsaKeyManager";
+import { readRecipientKeyVersion } from "../utils/sharedKeyEnvelope";
+import { recoverRsaKeyVersion } from "../utils/rsaKeyRecovery";
 import { toast } from "sonner";
 
 type KeyState =
@@ -49,13 +46,16 @@ type ActionStage = "downloading" | "decrypting" | "saving";
 
 interface SharedFile {
   id: string;
-  fileId: string;
   name: string;
   createdAt: Date;
   expiresAt: Date | null;
   encryptedFileKey: string;
+  encryptedMetadata: string | null;
+  metadataDecrypted: boolean;
   fileSize: number | null;
   mimeType: string;
+  message?: string;
+  recipientKeyVersion: number | null;
 }
 
 function formatBytes(bytes: number | null): string {
@@ -70,14 +70,6 @@ function formatBytes(bytes: number | null): string {
 }
 
 function normalizeEncryptedKey(rawKey: unknown): string {
-  if (typeof rawKey === "string" && rawKey.startsWith("\\x")) {
-    const hex = rawKey.slice(2);
-    const bytes = new Uint8Array(hex.length / 2);
-    for (let index = 0; index < hex.length; index += 2) {
-      bytes[index / 2] = Number.parseInt(hex.slice(index, index + 2), 16);
-    }
-    return arrayBufferToBase64(bytes.buffer);
-  }
   if (typeof rawKey === "string") return rawKey;
   if (rawKey instanceof ArrayBuffer) return arrayBufferToBase64(rawKey);
   if (ArrayBuffer.isView(rawKey)) {
@@ -94,11 +86,16 @@ function normalizeEncryptedKey(rawKey: unknown): string {
 function mapSharedFile(row: any): SharedFile {
   return {
     id: row.id,
-    fileId: row.file_id,
-    name: row.file_name,
+    name: row.file_name || "Encrypted file",
     createdAt: new Date(row.created_at),
     expiresAt: row.expires_at ? new Date(row.expires_at) : null,
     encryptedFileKey: normalizeEncryptedKey(row.encrypted_file_key),
+    recipientKeyVersion:
+      typeof row.encrypted_file_key === "string"
+        ? readRecipientKeyVersion(row.encrypted_file_key)
+        : null,
+    encryptedMetadata: row.encrypted_metadata || null,
+    metadataDecrypted: !row.encrypted_metadata,
     fileSize:
       typeof row.file_size === "number"
         ? row.file_size
@@ -131,28 +128,89 @@ const SharedWithMePage: React.FC = () => {
     stage: ActionStage;
   } | null>(null);
 
-  const loadSharedFiles = useCallback(
-    async (email: string, showConfirmation = false) => {
-      setIsLoading(true);
-      setLoadError("");
-      try {
-        const hashedEmail = await hashEmail(email);
-        const result = await apiClient.sharedFiles.getForUser(hashedEmail);
-        setSharedFiles((result.files || []).map(mapSharedFile));
-        if (showConfirmation) toast.success("Inbox refreshed");
-      } catch (error) {
-        console.error("[SharedWithMe] Failed to load files:", error);
-        setLoadError(
-          error instanceof Error
-            ? error.message
-            : "Your shared files could not be loaded.",
-        );
-      } finally {
-        setIsLoading(false);
-      }
-    },
-    [],
-  );
+  const loadSharedFiles = useCallback(async (showConfirmation = false) => {
+    setIsLoading(true);
+    setLoadError("");
+    try {
+      const result = await apiClient.sharedFiles.getForUser();
+      setSharedFiles((result.files || []).map(mapSharedFile));
+      if (showConfirmation) toast.success("Inbox refreshed");
+    } catch (error) {
+      console.error("[SharedWithMe] Failed to load files:", error);
+      setLoadError(
+        error instanceof Error
+          ? error.message
+          : "Your shared files could not be loaded.",
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!sharingPrivateKey) return;
+    const pending = sharedFiles.filter(
+      (file) => file.encryptedMetadata && !file.metadataDecrypted,
+    );
+    if (pending.length === 0) return;
+
+    let active = true;
+    void Promise.all(
+      pending.map(async (file) => {
+        try {
+          const mnemonic = getMnemonic();
+          let versionedKeyPair =
+            file.recipientKeyVersion && mnemonic
+              ? await getUserKeyPair(
+                  userEmail,
+                  mnemonic,
+                  file.recipientKeyVersion,
+                )
+              : null;
+          if (!versionedKeyPair && file.recipientKeyVersion && mnemonic) {
+            versionedKeyPair = await recoverRsaKeyVersion(
+              userEmail,
+              file.recipientKeyVersion,
+              mnemonic,
+            );
+          }
+          const metadata = await decryptSharedMetadata(
+            file.encryptedMetadata!,
+            file.encryptedFileKey,
+            versionedKeyPair?.privateKeyJwk || sharingPrivateKey,
+          );
+          return {
+            id: file.id,
+            name: metadata.name,
+            mimeType: metadata.mimeType,
+            message: metadata.message,
+          };
+        } catch {
+          return {
+            id: file.id,
+            name: "Encrypted metadata unavailable",
+            mimeType: "application/octet-stream",
+          };
+        }
+      }),
+    ).then((decrypted) => {
+      if (!active) return;
+      const byId = new Map(
+        decrypted.map((metadata) => [metadata.id, metadata]),
+      );
+      setSharedFiles((current) =>
+        current.map((file) => {
+          const metadata = byId.get(file.id);
+          return metadata
+            ? { ...file, ...metadata, metadataDecrypted: true }
+            : file;
+        }),
+      );
+    });
+    return () => {
+      active = false;
+    };
+  }, [sharedFiles, sharingPrivateKey]);
 
   useEffect(() => {
     let active = true;
@@ -209,7 +267,7 @@ const SharedWithMePage: React.FC = () => {
           }
         }
 
-        await loadSharedFiles(email);
+        await loadSharedFiles();
       } catch (error) {
         console.error("[SharedWithMe] Initialization failed:", error);
         if (active) {
@@ -235,7 +293,7 @@ const SharedWithMePage: React.FC = () => {
   }, [searchQuery, sharedFiles]);
 
   const refreshInbox = () => {
-    if (userEmail) void loadSharedFiles(userEmail, true);
+    if (userEmail) void loadSharedFiles(true);
   };
 
   const requireReadyKeys = (): boolean => {
@@ -266,8 +324,20 @@ const SharedWithMePage: React.FC = () => {
 
     setProcessing({ fileId: file.id, action, stage: "downloading" });
     try {
-      const encryptedBlob = await downloadEncryptedFile(file.fileId);
+      const encryptedBlob = await downloadEncryptedFile(file.id);
       setProcessing({ fileId: file.id, action, stage: "decrypting" });
+      const mnemonic = getMnemonic();
+      let versionedKeyPair =
+        file.recipientKeyVersion && mnemonic
+          ? await getUserKeyPair(userEmail, mnemonic, file.recipientKeyVersion)
+          : null;
+      if (!versionedKeyPair && file.recipientKeyVersion && mnemonic) {
+        versionedKeyPair = await recoverRsaKeyVersion(
+          userEmail,
+          file.recipientKeyVersion,
+          mnemonic,
+        );
+      }
       const decrypted = await decryptSharedFile(
         encryptedBlob,
         file.encryptedFileKey,
@@ -275,7 +345,7 @@ const SharedWithMePage: React.FC = () => {
         file.name,
         file.mimeType,
         "",
-        sharingPrivateKey,
+        versionedKeyPair?.privateKeyJwk || sharingPrivateKey,
       );
 
       if (action === "download") {
@@ -298,12 +368,6 @@ const SharedWithMePage: React.FC = () => {
       void Promise.resolve(apiClient.sharedFiles.recordAccess(file.id)).catch(
         () => {},
       );
-      void Promise.resolve(
-        trackEvent(
-          AnalyticsEvent.SHARED_FILE_ACCESSED,
-          AnalyticsCategory.SHARING,
-        ),
-      ).catch(() => {});
     } catch (error) {
       console.error("[SharedWithMe] File action failed:", error);
       toast.error(

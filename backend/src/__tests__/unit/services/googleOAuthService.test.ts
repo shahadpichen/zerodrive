@@ -4,7 +4,7 @@
  */
 
 // Mock logger to prevent console noise
-jest.mock('../../../utils/logger', () => ({
+jest.mock("../../../utils/logger", () => ({
   info: jest.fn(),
   error: jest.fn(),
   warn: jest.fn(),
@@ -26,7 +26,7 @@ const mockOAuth2Client = {
 };
 
 // Mock googleapis before importing the service
-jest.mock('googleapis', () => ({
+jest.mock("googleapis", () => ({
   google: {
     auth: {
       OAuth2: jest.fn(() => mockOAuth2Client),
@@ -40,108 +40,127 @@ jest.mock('googleapis', () => ({
 }));
 
 // Import after mocks are set up
-import { getAuthUrl, hasFullDriveScope, refreshAccessToken } from '../../../services/googleOAuthService';
+import {
+  getAuthUrl,
+  hasFullDriveScope,
+  refreshAccessToken,
+} from "../../../services/googleOAuthService";
 
-describe('GoogleOAuthService', () => {
+describe("GoogleOAuthService", () => {
   beforeEach(() => {
     jest.clearAllMocks();
   });
 
-  describe('getAuthUrl', () => {
-    it('should generate OAuth authorization URL', () => {
-      mockGenerateAuthUrl.mockReturnValue('https://accounts.google.com/o/oauth2/auth?...');
+  describe("getAuthUrl", () => {
+    it("should generate OAuth authorization URL", () => {
+      mockGenerateAuthUrl.mockReturnValue(
+        "https://accounts.google.com/o/oauth2/auth?...",
+      );
 
-      const url = getAuthUrl();
+      const url = getAuthUrl("test-oauth-state");
 
       expect(url).toBeTruthy();
-      expect(typeof url).toBe('string');
-      expect(mockGenerateAuthUrl).toHaveBeenCalled();
+      expect(typeof url).toBe("string");
+      expect(mockGenerateAuthUrl).toHaveBeenCalledWith(
+        expect.objectContaining({ state: "test-oauth-state" }),
+      );
     });
 
-    it('should request correct OAuth scopes including appDataFolder', () => {
+    it("should request correct OAuth scopes including appDataFolder", () => {
       mockGenerateAuthUrl.mockImplementation((options) => {
-        expect(options.scope).toContain('https://www.googleapis.com/auth/userinfo.email');
-        expect(options.scope).toContain('https://www.googleapis.com/auth/userinfo.profile');
-        expect(options.scope).toContain('https://www.googleapis.com/auth/drive.file');
-        expect(options.scope).toContain('https://www.googleapis.com/auth/drive.appdata');
-        return 'https://accounts.google.com/o/oauth2/auth?...';
+        expect(options.scope).toContain(
+          "https://www.googleapis.com/auth/userinfo.email",
+        );
+        expect(options.scope).toContain(
+          "https://www.googleapis.com/auth/userinfo.profile",
+        );
+        expect(options.scope).toContain(
+          "https://www.googleapis.com/auth/drive.file",
+        );
+        expect(options.scope).toContain(
+          "https://www.googleapis.com/auth/drive.appdata",
+        );
+        return "https://accounts.google.com/o/oauth2/auth?...";
       });
 
-      getAuthUrl();
+      getAuthUrl("test-oauth-state");
 
       expect(mockGenerateAuthUrl).toHaveBeenCalled();
     });
 
-    it('should set access_type to offline for refresh token', () => {
+    it("should set access_type to offline for refresh token", () => {
       mockGenerateAuthUrl.mockImplementation((options) => {
-        expect(options.access_type).toBe('offline');
-        return 'https://accounts.google.com/o/oauth2/auth?...';
+        expect(options.access_type).toBe("offline");
+        return "https://accounts.google.com/o/oauth2/auth?...";
       });
 
-      getAuthUrl();
+      getAuthUrl("test-oauth-state");
 
       expect(mockGenerateAuthUrl).toHaveBeenCalled();
     });
 
-    it('should request consent prompt', () => {
+    it("should request consent prompt", () => {
       mockGenerateAuthUrl.mockImplementation((options) => {
-        expect(options.prompt).toBe('consent');
-        return 'https://accounts.google.com/o/oauth2/auth?...';
+        expect(options.prompt).toBe("consent");
+        return "https://accounts.google.com/o/oauth2/auth?...";
       });
 
-      getAuthUrl();
+      getAuthUrl("test-oauth-state");
 
       expect(mockGenerateAuthUrl).toHaveBeenCalled();
     });
 
-    it('should request exactly 4 scopes', () => {
+    it("should request exactly 4 scopes", () => {
       mockGenerateAuthUrl.mockImplementation((options) => {
         expect(options.scope).toHaveLength(4);
-        return 'https://accounts.google.com/o/oauth2/auth?...';
+        return "https://accounts.google.com/o/oauth2/auth?...";
       });
 
-      getAuthUrl();
+      getAuthUrl("test-oauth-state");
 
       expect(mockGenerateAuthUrl).toHaveBeenCalled();
     });
   });
 
-  describe('hasFullDriveScope', () => {
-    it('should return true for drive.file scope', () => {
-      const scopes = 'https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/drive.file';
+  describe("hasFullDriveScope", () => {
+    it("should return true for drive.file scope", () => {
+      const scopes =
+        "https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/drive.file";
 
       const result = hasFullDriveScope(scopes);
 
       expect(result).toBe(true);
     });
 
-    it('should return true for full drive scope', () => {
-      const scopes = 'https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/drive';
+    it("should return true for full drive scope", () => {
+      const scopes =
+        "https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/drive";
 
       const result = hasFullDriveScope(scopes);
 
       expect(result).toBe(true);
     });
 
-    it('should return false when Drive scope is missing', () => {
-      const scopes = 'https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile';
+    it("should return false when Drive scope is missing", () => {
+      const scopes =
+        "https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile";
 
       const result = hasFullDriveScope(scopes);
 
       expect(result).toBe(false);
     });
 
-    it('should return false for empty scope string', () => {
-      const result = hasFullDriveScope('');
+    it("should return false for empty scope string", () => {
+      const result = hasFullDriveScope("");
 
       expect(result).toBe(false);
     });
   });
 
-  describe('refreshAccessToken', () => {
-    it('should refresh and return new access token', async () => {
-      const mockRefreshToken = 'mock-refresh-token';
-      const mockNewAccessToken = 'mock-new-access-token';
+  describe("refreshAccessToken", () => {
+    it("should refresh and return new access token", async () => {
+      const mockRefreshToken = "mock-refresh-token";
+      const mockNewAccessToken = "mock-new-access-token";
 
       mockRefreshAccessToken.mockResolvedValue({
         credentials: {
@@ -158,18 +177,20 @@ describe('GoogleOAuthService', () => {
       expect(mockRefreshAccessToken).toHaveBeenCalled();
     });
 
-    it('should throw error when refresh fails', async () => {
-      const mockRefreshToken = 'invalid-refresh-token';
+    it("should throw error when refresh fails", async () => {
+      const mockRefreshToken = "invalid-refresh-token";
 
       mockRefreshAccessToken.mockRejectedValue(
-        new Error('Invalid refresh token')
+        new Error("Invalid refresh token"),
       );
 
-      await expect(refreshAccessToken(mockRefreshToken)).rejects.toThrow('Failed to refresh Google access token');
+      await expect(refreshAccessToken(mockRefreshToken)).rejects.toThrow(
+        "Failed to refresh Google access token",
+      );
     });
 
-    it('should throw error when no access_token in response', async () => {
-      const mockRefreshToken = 'mock-refresh-token';
+    it("should throw error when no access_token in response", async () => {
+      const mockRefreshToken = "mock-refresh-token";
 
       mockRefreshAccessToken.mockResolvedValue({
         credentials: {
@@ -177,7 +198,9 @@ describe('GoogleOAuthService', () => {
         },
       });
 
-      await expect(refreshAccessToken(mockRefreshToken)).rejects.toThrow('Failed to refresh Google access token');
+      await expect(refreshAccessToken(mockRefreshToken)).rejects.toThrow(
+        "Failed to refresh Google access token",
+      );
     });
   });
 });

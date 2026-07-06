@@ -10,8 +10,11 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 -- Stores RSA public keys for users to enable encrypted file sharing
 CREATE TABLE IF NOT EXISTS public_keys (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    user_id VARCHAR(255) NOT NULL UNIQUE,
+    user_id VARCHAR(255) NOT NULL,
     public_key TEXT NOT NULL,
+    key_version INTEGER NOT NULL DEFAULT 1 CHECK (key_version > 0),
+    fingerprint CHAR(64) NOT NULL CHECK (fingerprint ~ '^[0-9a-f]{64}$'),
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
@@ -22,22 +25,46 @@ CREATE TABLE IF NOT EXISTS shared_files (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     file_id VARCHAR(255) NOT NULL,
     recipient_user_id VARCHAR(255) NOT NULL,
+    management_capability_hash CHAR(64) CHECK (
+        management_capability_hash IS NULL
+        OR management_capability_hash ~ '^[0-9a-f]{64}$'
+    ),
+    encrypted_metadata TEXT,
+    status VARCHAR(20) NOT NULL DEFAULT 'active'
+        CHECK (status IN ('pending', 'active', 'deleting')),
+    expected_encrypted_size BIGINT,
+    pending_expires_at TIMESTAMP WITH TIME ZONE,
+    deletion_attempts INTEGER NOT NULL DEFAULT 0,
+    deletion_last_error TEXT,
     encrypted_file_key TEXT NOT NULL,
-    file_name VARCHAR(500) NOT NULL,
+    file_name VARCHAR(500),
     file_size BIGINT NOT NULL,
-    mime_type VARCHAR(200) NOT NULL,
+    mime_type VARCHAR(200),
     access_type VARCHAR(20) NOT NULL DEFAULT 'view' CHECK (access_type IN ('view', 'download')),
     expires_at TIMESTAMP WITH TIME ZONE,
     last_accessed_at TIMESTAMP WITH TIME ZONE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT shared_files_expiry_after_creation
+        CHECK (expires_at IS NULL OR expires_at > created_at),
+    CONSTRAINT shared_files_expected_size_positive
+        CHECK (expected_encrypted_size IS NULL OR expected_encrypted_size > 0),
+    CONSTRAINT shared_files_deletion_attempts_nonnegative
+        CHECK (deletion_attempts >= 0)
 );
 
 -- Create indexes for better query performance
 CREATE INDEX IF NOT EXISTS idx_public_keys_user_id ON public_keys(user_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_public_keys_owner_version
+    ON public_keys(user_id, key_version);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_public_keys_one_active
+    ON public_keys(user_id) WHERE is_active;
 CREATE INDEX IF NOT EXISTS idx_shared_files_recipient ON shared_files(recipient_user_id);
-CREATE INDEX IF NOT EXISTS idx_shared_files_file_id ON shared_files(file_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_shared_files_file_id_unique ON shared_files(file_id);
 CREATE INDEX IF NOT EXISTS idx_shared_files_expires_at ON shared_files(expires_at);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_shared_files_management_capability_hash_unique
+    ON shared_files(management_capability_hash)
+    WHERE management_capability_hash IS NOT NULL;
 
 -- Create updated_at trigger function
 CREATE OR REPLACE FUNCTION update_updated_at_column()
@@ -90,6 +117,16 @@ CREATE TRIGGER update_analytics_daily_summary_updated_at
     BEFORE UPDATE ON analytics_daily_summary
     FOR EACH ROW
     EXECUTE FUNCTION update_updated_at_column();
+
+-- One-time OAuth capabilities. Only non-reversible capability hashes are
+-- persisted; the encrypted capability carries its short-lived payload.
+CREATE TABLE IF NOT EXISTS oauth_exchanges (
+    code_hash CHAR(64) PRIMARY KEY,
+    expires_at TIMESTAMP WITH TIME ZONE NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_oauth_exchanges_expiry
+    ON oauth_exchanges(expires_at);
 
 -- TABLE REMOVED: user_google_tokens (Risk #35 - Zero-knowledge architecture)
 -- Google OAuth tokens are now encrypted client-side with PBKDF2 and stored in sessionStorage

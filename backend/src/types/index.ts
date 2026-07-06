@@ -7,6 +7,9 @@ export interface PublicKey {
   id?: string;
   user_id: string;
   public_key: string;
+  key_version: number;
+  fingerprint: string | null;
+  is_active: boolean;
   created_at?: Date;
   updated_at?: Date;
 }
@@ -15,10 +18,17 @@ export interface SharedFile {
   id?: string;
   file_id: string;
   recipient_user_id: string;
+  management_capability_hash?: string | null;
+  encrypted_metadata?: string | null;
+  status?: "pending" | "active" | "deleting";
+  expected_encrypted_size?: number | null;
+  pending_expires_at?: Date | null;
+  deletion_attempts?: number;
+  deletion_last_error?: string | null;
   encrypted_file_key: string;
-  file_name: string;
+  file_name?: string | null;
   file_size: number;
-  mime_type: string;
+  mime_type?: string | null;
   access_type: "view" | "download";
   expires_at?: Date;
   last_accessed_at?: Date;
@@ -84,56 +94,6 @@ export interface PaginationMeta {
   hasPrev: boolean;
 }
 
-// Database Query Results
-export interface UserPublicKeyRow {
-  id: string;
-  hashed_email_identifier: string;
-  public_key_jwk: any; // JSON from PostgreSQL
-  created_at: string;
-  updated_at: string;
-}
-
-export interface SharedFileRow {
-  id: string;
-  share_id: string;
-  encrypted_file_blob_id: string;
-  recipient_email_hash: string;
-  encrypted_file_key: Buffer | string; // Can be Buffer or hex string
-  sender_proof: string;
-  file_name: string;
-  file_mime_type: string;
-  file_size: number | null;
-  created_at: string;
-  updated_at: string;
-  expires_at: string | null;
-  is_claimed: boolean;
-}
-
-// Service Layer Types
-export interface CreatePublicKeyData {
-  hashedEmail: string;
-  publicKeyJwk: string;
-}
-
-export interface CreateSharedFileData {
-  shareId: string;
-  encryptedFileBlobId: string;
-  recipientEmailHash: string;
-  encryptedFileKey: string;
-  senderProof: string;
-  fileName: string;
-  fileMimeType: string;
-  fileSize?: number;
-  expiresAt?: Date;
-}
-
-export interface GetSharedFilesOptions {
-  recipientEmailHash: string;
-  page?: number;
-  limit?: number;
-  claimed?: boolean;
-}
-
 // Health Check Types
 export interface HealthCheckResponse {
   status: "ok" | "error";
@@ -195,7 +155,7 @@ export interface RequestLogMeta extends LogMeta {
   status: number;
   duration: string;
   userAgent?: string;
-  ip: string;
+  ip?: string;
 }
 
 // Database Connection Types

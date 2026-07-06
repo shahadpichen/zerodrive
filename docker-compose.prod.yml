@@ -51,7 +51,7 @@ services:
       sleep 10;
       /usr/bin/mc alias set myminio http://minio:9000 ${MINIO_ACCESS_KEY} ${MINIO_SECRET_KEY};
       /usr/bin/mc mb myminio/zerodrive-files --ignore-existing;
-      /usr/bin/mc anonymous set public myminio/zerodrive-files;
+      /usr/bin/mc anonymous set none myminio/zerodrive-files;
       "
     networks:
       - zerodrive-internal

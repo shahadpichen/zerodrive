@@ -314,6 +314,50 @@ describe("ApiClient", () => {
       expect(global.fetch).toHaveBeenCalledTimes(2);
     });
 
+    it("should not refresh or replay a rejected OAuth exchange", async () => {
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: false,
+        status: 401,
+        headers: new Headers({ "content-type": "application/json" }),
+        json: async () => ({
+          success: false,
+          error: {
+            code: "UNAUTHORIZED",
+            message: "Invalid or expired exchange code",
+          },
+        }),
+      });
+
+      await expect(
+        apiClient.post("/auth/exchange", { code: "used-code" }),
+      ).rejects.toThrow("Invalid or expired exchange code");
+
+      expect(mockRefreshToken).not.toHaveBeenCalled();
+      expect(mockAuthLogout).not.toHaveBeenCalled();
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+    });
+
+    it("should retry a rejected authenticated request only once", async () => {
+      const unauthorizedResponse = () => ({
+        ok: false,
+        status: 401,
+        headers: new Headers({ "content-type": "application/json" }),
+        json: async () => ({
+          success: false,
+          error: { code: "UNAUTHORIZED", message: "Not permitted" },
+        }),
+      });
+      (global.fetch as jest.Mock)
+        .mockResolvedValueOnce(unauthorizedResponse())
+        .mockResolvedValueOnce(unauthorizedResponse());
+      mockRefreshToken.mockResolvedValue(true);
+
+      await expect(apiClient.get("/test")).rejects.toThrow("Not permitted");
+
+      expect(mockRefreshToken).toHaveBeenCalledTimes(1);
+      expect(global.fetch).toHaveBeenCalledTimes(2);
+    });
+
     it("should logout and redirect when token refresh fails", async () => {
       (global.fetch as jest.Mock).mockResolvedValueOnce({
         ok: false,
@@ -402,7 +446,7 @@ describe("ApiClient", () => {
         }),
       });
 
-      const result = await publicKeysApi.upsert(testUserId, publicKey);
+      const result = await publicKeysApi.upsert(publicKey);
 
       expect(result.user_id).toBe(testUserId);
       expect(result.public_key).toBe(publicKey);
@@ -418,7 +462,7 @@ describe("ApiClient", () => {
         }),
       });
 
-      const result = await publicKeysApi.get(testUserId);
+      const result = await publicKeysApi.lookup("recipient@example.com");
 
       expect(result).toEqual({ public_key: "test-key" });
     });
@@ -434,26 +478,9 @@ describe("ApiClient", () => {
         }),
       });
 
-      const result = await publicKeysApi.get(testUserId);
+      const result = await publicKeysApi.lookup("recipient@example.com");
 
       expect(result).toBeNull();
-    });
-
-    it("should list all public keys", async () => {
-      const keys = [
-        { id: "1", user_id: "user1", public_key: "key1" },
-        { id: "2", user_id: "user2", public_key: "key2" },
-      ];
-
-      (global.fetch as jest.Mock).mockResolvedValueOnce({
-        ok: true,
-        headers: new Headers({ "content-type": "application/json" }),
-        json: async () => ({ success: true, data: keys }),
-      });
-
-      const result = await publicKeysApi.list();
-
-      expect(result).toEqual(keys);
     });
 
     it("should delete public key successfully", async () => {
@@ -463,18 +490,18 @@ describe("ApiClient", () => {
         json: async () => ({ success: true }),
       });
 
-      await expect(publicKeysApi.delete(testUserId)).resolves.not.toThrow();
+      await expect(publicKeysApi.delete()).resolves.not.toThrow();
     });
   });
 
   describe("Shared Files API", () => {
     const shareData = {
-      file_id: "file-123",
-      recipient_user_id: "recipient-456",
+      management_capability_hash: "a".repeat(64),
+      recipient_email: "recipient@example.com",
       encrypted_file_key: "encrypted-key",
-      file_name: "test.txt",
+      encrypted_metadata: "encrypted-metadata",
       file_size: 1024,
-      mime_type: "text/plain",
+      encrypted_size: 1052,
     };
 
     it("should create shared file successfully", async () => {
@@ -490,7 +517,7 @@ describe("ApiClient", () => {
       const result = await sharedFilesApi.create(shareData);
 
       expect(result.id).toBe("share-123");
-      expect(result.file_id).toBe(shareData.file_id);
+      expect(result.file_id).toBeUndefined();
     });
 
     it("should get shared files for user", async () => {
@@ -508,11 +535,15 @@ describe("ApiClient", () => {
         }),
       });
 
-      const result = await sharedFilesApi.getForUser(testUserId);
+      const result = await sharedFilesApi.getForUser();
 
       expect(result.files).toEqual(files);
       expect(result.total).toBe(2);
       expect(result.hasMore).toBe(false);
+      expect(global.fetch).toHaveBeenCalledWith(
+        expect.not.stringContaining("recipient_user_id"),
+        expect.any(Object),
+      );
     });
 
     it("should get shared file by ID", async () => {
@@ -558,7 +589,11 @@ describe("ApiClient", () => {
         }),
       });
 
-      const result = await sharedFilesApi.update("share-123", updateData);
+      const result = await sharedFilesApi.update(
+        "share-123",
+        updateData,
+        "management-capability",
+      );
 
       expect(result.access_type).toBe("download");
     });
@@ -570,7 +605,10 @@ describe("ApiClient", () => {
         json: async () => ({ success: true, data: { deleted: true } }),
       });
 
-      const result = await sharedFilesApi.delete("share-123");
+      const result = await sharedFilesApi.delete(
+        "share-123",
+        "management-capability",
+      );
 
       expect(result.deleted).toBe(true);
     });

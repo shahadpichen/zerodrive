@@ -7,7 +7,6 @@ import authRouter from "./auth";
 import publicKeysRouter from "./publicKeys";
 import sharedFilesRouter from "./sharedFiles";
 import presignedUrlsRouter from "./presignedUrls";
-import cryptoRouter from "./crypto";
 import webhooksRouter from "./webhooks";
 import invitationsRouter from "./invitations";
 import analyticsRouter from "./analytics";
@@ -49,7 +48,6 @@ router.get("/", (req, res) => {
         "DELETE /api/shared-files/:id": "Revoke file sharing",
         "POST /api/presigned-url/upload": "Generate pre-signed upload URL",
         "POST /api/presigned-url/download": "Generate pre-signed download URL",
-        "POST /api/crypto/hash-email": "Hash email with server-side salt",
         "POST /api/webhooks/mailgun": "Mailgun webhook endpoint",
         "GET /api/webhooks/mailgun/health": "Webhook health check",
         "POST /api/invitations/send":
@@ -76,7 +74,6 @@ router.use(requireAuth);
 router.use("/public-keys", publicKeysRouter);
 router.use("/shared-files", sharedFilesRouter);
 router.use("/presigned-url", presignedUrlsRouter);
-router.use("/crypto", cryptoRouter);
 router.use("/invitations", invitationsRouter);
 router.use("/analytics", analyticsRouter);
 

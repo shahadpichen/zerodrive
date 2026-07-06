@@ -8,6 +8,7 @@ import {
   refreshToken,
   logout as authLogout,
 } from "./authService";
+import logger from "./logger";
 
 // API Configuration
 const API_BASE_URL =
@@ -40,16 +41,26 @@ interface PublicKeyData {
   public_key: string;
   created_at?: string;
   updated_at?: string;
+  key_version?: number;
+  fingerprint?: string;
+  is_active?: boolean;
+}
+
+export interface DirectoryPublicKey {
+  public_key: string;
+  key_version: number;
+  fingerprint: string;
 }
 
 interface SharedFileData {
   id?: string;
-  file_id: string;
-  recipient_user_id: string;
+  file_id?: string;
+  recipient_user_id?: string;
   encrypted_file_key: string;
-  file_name: string;
+  encrypted_metadata?: string;
+  file_name?: string;
   file_size: number;
-  mime_type: string;
+  mime_type?: string;
   access_type: "view" | "download";
   expires_at?: string;
   last_accessed_at?: string;
@@ -101,6 +112,7 @@ class HttpClient {
   private async request<T>(
     endpoint: string,
     options: RequestInit = {},
+    canRefresh: boolean = true,
   ): Promise<ApiResponse<T>> {
     const url = `${this.baseUrl}${endpoint}`;
 
@@ -156,22 +168,42 @@ class HttpClient {
 
       // Handle HTTP errors
       if (!response.ok) {
-        // Handle 401 Unauthorized - try refresh, then logout if refresh fails
+        // OAuth exchange codes are single-use. A rejected exchange must be
+        // surfaced as-is instead of refreshing and replaying the code.
         if (response.status === 401) {
-          console.warn("Unauthorized request, attempting token refresh...");
+          if (endpoint === "/auth/exchange") {
+            throw new ApiError(
+              responseData.error?.message || "Invalid or expired exchange code",
+              responseData.error?.code || "UNAUTHORIZED",
+              401,
+            );
+          }
+
+          // Retry an authenticated request at most once. Without this guard,
+          // a valid refresh cookie plus a persistently rejected request causes
+          // an unbounded refresh/request loop.
+          if (!canRefresh) {
+            throw new ApiError(
+              responseData.error?.message || "Unauthorized",
+              responseData.error?.code || "UNAUTHORIZED",
+              401,
+            );
+          }
+
+          logger.warn("Unauthorized request, attempting token refresh...");
 
           // Try to refresh access token
           const refreshed = await refreshToken();
 
           if (refreshed) {
             // Token refreshed successfully, retry original request
-            console.log("Token refreshed, retrying request...");
+            logger.log("Token refreshed, retrying request...");
             clearTimeout(timeoutId);
-            return this.request<T>(endpoint, options);
+            return this.request<T>(endpoint, options, false);
           }
 
           // Refresh failed, logout and redirect
-          console.warn("Token refresh failed, logging out...");
+          logger.warn("Token refresh failed, logging out...");
           await authLogout();
           window.location.href = "/";
           throw new ApiError(
@@ -239,22 +271,35 @@ class HttpClient {
     return this.request<T>(url, { method: "GET" });
   }
 
-  async post<T>(endpoint: string, data?: any): Promise<ApiResponse<T>> {
+  async post<T>(
+    endpoint: string,
+    data?: any,
+    headers?: HeadersInit,
+  ): Promise<ApiResponse<T>> {
     return this.request<T>(endpoint, {
       method: "POST",
       body: data ? JSON.stringify(data) : undefined,
+      headers,
     });
   }
 
-  async put<T>(endpoint: string, data?: any): Promise<ApiResponse<T>> {
+  async put<T>(
+    endpoint: string,
+    data?: any,
+    headers?: HeadersInit,
+  ): Promise<ApiResponse<T>> {
     return this.request<T>(endpoint, {
       method: "PUT",
       body: data ? JSON.stringify(data) : undefined,
+      headers,
     });
   }
 
-  async delete<T>(endpoint: string): Promise<ApiResponse<T>> {
-    return this.request<T>(endpoint, { method: "DELETE" });
+  async delete<T>(
+    endpoint: string,
+    headers?: HeadersInit,
+  ): Promise<ApiResponse<T>> {
+    return this.request<T>(endpoint, { method: "DELETE", headers });
   }
 }
 
@@ -266,9 +311,8 @@ export const publicKeysApi = {
   /**
    * Store or update a user's public key
    */
-  async upsert(userId: string, publicKey: string): Promise<PublicKeyData> {
+  async upsert(publicKey: string): Promise<PublicKeyData> {
     const response = await httpClient.post<PublicKeyData>("/public-keys", {
-      user_id: userId,
       public_key: publicKey,
     });
 
@@ -278,10 +322,11 @@ export const publicKeysApi = {
   /**
    * Get a user's public key by user ID
    */
-  async get(userId: string): Promise<{ public_key: string } | null> {
+  async lookup(email: string): Promise<DirectoryPublicKey | null> {
     try {
-      const response = await httpClient.get<{ public_key: string }>(
-        `/public-keys/${userId}`,
+      const response = await httpClient.post<DirectoryPublicKey>(
+        "/public-keys/lookup",
+        { email },
       );
       return response.data!;
     } catch (error) {
@@ -295,16 +340,8 @@ export const publicKeysApi = {
   /**
    * List all public keys (for debugging)
    */
-  async list(): Promise<PublicKeyData[]> {
-    const response = await httpClient.get<PublicKeyData[]>("/public-keys");
-    return response.data!;
-  },
-
-  /**
-   * Delete a user's public key
-   */
-  async delete(userId: string): Promise<void> {
-    await httpClient.delete(`/public-keys/${userId}`);
+  async delete(): Promise<void> {
+    await httpClient.delete("/public-keys");
   },
 };
 
@@ -314,14 +351,12 @@ export const sharedFilesApi = {
    * Create a new file share
    */
   async create(shareData: {
-    file_id: string;
-    recipient_user_id: string;
-    recipient_email?: string;
-    custom_message?: string;
+    management_capability_hash: string;
+    recipient_email: string;
     encrypted_file_key: string;
-    file_name: string;
+    encrypted_metadata: string;
     file_size: number;
-    mime_type: string;
+    encrypted_size: number;
     access_type?: "view" | "download";
     expires_at?: string;
   }): Promise<SharedFileData> {
@@ -332,27 +367,32 @@ export const sharedFilesApi = {
     return response.data!;
   },
 
+  async finalize(
+    id: string,
+    managementCapability: string,
+  ): Promise<SharedFileData> {
+    const response = await httpClient.post<SharedFileData>(
+      `/shared-files/${id}/finalize`,
+      undefined,
+      { "X-Share-Capability": managementCapability },
+    );
+    return response.data!;
+  },
+
   /**
    * Get shared files for a recipient
    */
   async getForUser(
-    userId: string,
     options: {
-      recipient_user_id?: string;
       limit?: number;
       offset?: number;
     } = {},
   ): Promise<{ files: SharedFileData[]; total: number; hasMore: boolean }> {
-    const params = {
-      recipient_user_id: userId,
-      ...options,
-    };
-
     const response = await httpClient.get<{
       files: SharedFileData[];
       total: number;
       hasMore: boolean;
-    }>("/shared-files", params);
+    }>("/shared-files", options);
     return response.data!;
   },
 
@@ -382,10 +422,12 @@ export const sharedFilesApi = {
       access_type?: "view" | "download";
       expires_at?: string | null;
     },
+    managementCapability: string,
   ): Promise<SharedFileData> {
     const response = await httpClient.put<SharedFileData>(
       `/shared-files/${id}`,
       updateData,
+      { "X-Share-Capability": managementCapability },
     );
     return response.data!;
   },
@@ -393,9 +435,13 @@ export const sharedFilesApi = {
   /**
    * Delete/revoke a shared file
    */
-  async delete(id: string): Promise<{ deleted: boolean }> {
+  async delete(
+    id: string,
+    managementCapability: string,
+  ): Promise<{ deleted: boolean }> {
     const response = await httpClient.delete<{ deleted: boolean }>(
       `/shared-files/${id}`,
+      { "X-Share-Capability": managementCapability },
     );
     return response.data!;
   },

@@ -5,19 +5,27 @@
  * - Google tokens encrypted and stored in sessionStorage by frontend
  */
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
 import { storeGoogleTokens } from "../utils/authService";
 import { getUserEmail } from "../utils/authService";
+import apiClient from "../utils/apiClient";
+import logger from "../utils/logger";
 
 const OAuthCallback: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [error, setError] = useState<string | null>(null);
+  const callbackStarted = useRef(false);
 
   useEffect(() => {
+    // React Strict Mode intentionally re-runs effects in development. OAuth
+    // exchange codes are single-use, so this callback must only start once.
+    if (callbackStarted.current) return;
+    callbackStarted.current = true;
+
     const handleCallback = async () => {
       // Check for OAuth error
       const errorParam = searchParams.get("error");
@@ -63,20 +71,20 @@ const OAuthCallback: React.FC = () => {
       try {
         // JWT token is already set as httpOnly cookie by backend
 
-        // Get Google tokens from URL (base64-encoded by backend)
-        const encodedTokens = searchParams.get("tokens");
+        const exchangeCode = searchParams.get("exchange");
 
-        if (encodedTokens) {
-          console.log("[OAuth] Received tokens from backend, decoding...");
-
-          // Decode tokens
-          const tokenData = JSON.parse(atob(encodedTokens));
-          console.log("[OAuth] Token data decoded:", {
-            hasAccessToken: !!tokenData.accessToken,
-            hasRefreshToken: !!tokenData.refreshToken,
-            expiresAt: tokenData.expiresAt,
-            scope: tokenData.scope,
+        if (exchangeCode) {
+          const response = await apiClient.post("/auth/exchange", {
+            code: exchangeCode,
           });
+          const tokenData = response.data as {
+            accessToken: string;
+            refreshToken?: string;
+            expiresAt: string;
+            scope: string;
+            isNewUser: boolean;
+            hasLimitedScope: boolean;
+          };
 
           // Get user email (from JWT cookie)
           const userEmail = await getUserEmail();
@@ -85,57 +93,49 @@ const OAuthCallback: React.FC = () => {
             throw new Error("Failed to get user email");
           }
 
-          console.log("[OAuth] Storing Google tokens for user:", userEmail);
-
           // Encrypt and store Google tokens in sessionStorage
           await storeGoogleTokens(
             {
               accessToken: tokenData.accessToken,
-              refreshToken: tokenData.refreshToken,
               expiresAt: new Date(tokenData.expiresAt),
               scope: tokenData.scope,
             },
             userEmail,
           );
 
-          console.log(
+          logger.log(
             "[OAuth] Google tokens successfully stored in sessionStorage",
           );
 
           // Verify tokens were stored
           const storedData = sessionStorage.getItem("google-tokens");
-          console.log(
+          logger.log(
             "[OAuth] Verification - tokens exist in sessionStorage:",
             !!storedData,
           );
-        } else {
-          console.warn(
-            "[OAuth] No tokens parameter in callback URL - this should not happen",
-          );
-        }
+          const isNewUser = tokenData.isNewUser;
+          const hasLimitedScope = tokenData.hasLimitedScope;
 
-        // Check for special flags
-        const isNewUser = searchParams.get("new") === "true";
-        const hasLimitedScope = searchParams.get("limited") === "true";
-
-        // Show appropriate message
-        if (hasLimitedScope) {
-          toast.warning("Limited permissions granted", {
-            description:
-              "Some features may not work without full Google Drive access",
-          });
-        } else if (isNewUser) {
-          toast.success("Welcome to ZeroDrive!", {
-            description: "Your account has been created successfully",
-          });
+          if (hasLimitedScope) {
+            toast.warning("Limited permissions granted", {
+              description:
+                "Some features may not work without full Google Drive access",
+            });
+          } else if (isNewUser) {
+            toast.success("Welcome to ZeroDrive!", {
+              description: "Your account has been created successfully",
+            });
+          } else {
+            toast.success("Signed in successfully!");
+          }
         } else {
-          toast.success("Signed in successfully!");
+          throw new Error("OAuth exchange code is missing");
         }
 
         // Navigate to the home hub - ProtectedRoute will verify auth via cookie
         navigate("/home");
       } catch (error) {
-        console.error("Failed to complete sign-in:", error);
+        logger.error("Failed to complete sign-in:", error);
         setError("Failed to complete sign-in");
         toast.error("Sign-in failed", {
           description:

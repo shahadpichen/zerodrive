@@ -8,13 +8,19 @@ import express, { Application } from "express";
 import cookieParser from "cookie-parser";
 import sharedFilesRouter from "../../routes/sharedFiles";
 import { responseHelpers, errorHandler } from "../../middleware/errorHandler";
-import { generateToken } from "../../services/jwtService";
+import { generateToken, verifyToken } from "../../services/jwtService";
 import { requireAuth } from "../../middleware/auth";
+import crypto from "crypto";
 
 // Mock dependencies
 jest.mock("../../config/database");
 jest.mock("../../services/emailService");
 jest.mock("../../services/analytics");
+const mockS3Send = jest.fn();
+jest.mock("../../config/s3", () => ({
+  MINIO_BUCKET: "test-bucket",
+  s3Client: { send: (...args: any[]) => mockS3Send(...args) },
+}));
 
 const mockQuery = jest.fn();
 jest.mock("../../config/database", () => ({
@@ -40,11 +46,23 @@ jest.mock("../../services/analytics", () => ({
   getFileTypeCategory: jest.fn((mimeType: string) => "document"),
 }));
 
+const validWrappedFileKey = JSON.stringify({
+  v: 2,
+  keyWrap: "RSA-OAEP-256",
+  contentEncryption: "AES-256-GCM",
+  recipientKeyVersion: 1,
+  recipientKeyFingerprint: "f".repeat(64),
+  ciphertext: Buffer.alloc(256, 7).toString("base64"),
+});
+
 describe("Shared Files Routes Integration", () => {
   let app: Application;
   const testUserEmail = "sender@example.com";
   const testRecipientEmail = "recipient@example.com";
-  const testRecipientEmailHash = "recipient-hash-456";
+  const authenticatedUserHash = verifyToken(
+    generateToken(testUserEmail),
+  ).emailHash;
+  const testRecipientEmailHash = authenticatedUserHash;
   const csrfToken = "test-csrf-token";
 
   beforeAll(() => {
@@ -61,17 +79,17 @@ describe("Shared Files Routes Integration", () => {
     jest.clearAllMocks();
     mockTrackEvent.mockResolvedValue(undefined);
     mockSendFileShareNotification.mockResolvedValue(undefined);
+    mockS3Send.mockResolvedValue({});
   });
 
   describe("POST /api/shared-files", () => {
     const validShareRequest = {
-      file_id: "file-123",
-      recipient_user_id: testRecipientEmailHash,
+      management_capability_hash: "a".repeat(64),
       recipient_email: testRecipientEmail,
-      encrypted_file_key: "encrypted-key-data",
-      file_name: "document.pdf",
+      encrypted_file_key: validWrappedFileKey,
+      encrypted_metadata: Buffer.from("encrypted-metadata").toString("base64"),
       file_size: 1024000,
-      mime_type: "application/pdf",
+      encrypted_size: 1024028,
       access_type: "view",
     };
 
@@ -104,26 +122,22 @@ describe("Shared Files Routes Integration", () => {
 
       expect(response.status).toBe(201);
       expect(response.body.success).toBe(true);
-      expect(response.body.data.file_id).toBe(validShareRequest.file_id);
-      expect(response.body.message).toBe("File shared successfully");
+      expect(response.body.data.file_id).toBeUndefined();
+      expect(response.body.message).toBe("Pending share created");
 
       // Verify existing share check
       expect(mockQuery).toHaveBeenCalledWith(
-        "SELECT id FROM shared_files WHERE file_id = $1 AND recipient_user_id = $2",
-        [validShareRequest.file_id, validShareRequest.recipient_user_id],
+        "SELECT id FROM shared_files WHERE management_capability_hash = $1",
+        [validShareRequest.management_capability_hash],
       );
     });
 
-    it("should create shared file and send email when custom message provided", async () => {
+    it("sends only a generic notification without plaintext metadata", async () => {
       const token = generateToken(testUserEmail);
-      const requestWithMessage = {
-        ...validShareRequest,
-        custom_message: "Check out this file!",
-      };
 
       mockQuery.mockResolvedValueOnce({ rows: [] }); // No existing share
       mockQuery.mockResolvedValueOnce({
-        rows: [{ id: "share-uuid-123", ...requestWithMessage }],
+        rows: [{ id: "share-uuid-123", ...validShareRequest }],
       });
 
       const response = await request(app)
@@ -133,7 +147,7 @@ describe("Shared Files Routes Integration", () => {
           `zerodrive_csrf=${csrfToken}`,
         ])
         .set("x-csrf-token", csrfToken)
-        .send(requestWithMessage);
+        .send(validShareRequest);
 
       expect(response.status).toBe(201);
       expect(response.body.success).toBe(true);
@@ -141,7 +155,6 @@ describe("Shared Files Routes Integration", () => {
       // Verify email was sent
       expect(mockSendFileShareNotification).toHaveBeenCalledWith(
         testRecipientEmail,
-        "Check out this file!",
       );
     });
 
@@ -224,10 +237,9 @@ describe("Shared Files Routes Integration", () => {
       expect(response.body.error.message).toContain("CSRF");
     });
 
-    it("should return 422 when required field file_id is missing", async () => {
+    it("rejects caller-supplied object keys", async () => {
       const token = generateToken(testUserEmail);
-      const invalidRequest = { ...validShareRequest };
-      delete (invalidRequest as any).file_id;
+      const invalidRequest = { ...validShareRequest, file_id: "chosen-key" };
 
       const response = await request(app)
         .post("/api/shared-files")
@@ -242,10 +254,10 @@ describe("Shared Files Routes Integration", () => {
       expect(response.body.error.message).toContain("file_id");
     });
 
-    it("should return 422 when required field recipient_user_id is missing", async () => {
+    it("should return 422 when required field recipient_email is missing", async () => {
       const token = generateToken(testUserEmail);
       const invalidRequest = { ...validShareRequest };
-      delete (invalidRequest as any).recipient_user_id;
+      delete (invalidRequest as any).recipient_email;
 
       const response = await request(app)
         .post("/api/shared-files")
@@ -257,7 +269,7 @@ describe("Shared Files Routes Integration", () => {
         .send(invalidRequest);
 
       expect(response.status).toBe(422);
-      expect(response.body.error.message).toContain("recipient_user_id");
+      expect(response.body.error.message).toContain("recipient_email");
     });
 
     it("should return 422 when required field encrypted_file_key is missing", async () => {
@@ -278,10 +290,28 @@ describe("Shared Files Routes Integration", () => {
       expect(response.body.error.message).toContain("encrypted_file_key");
     });
 
-    it("should return 422 when required field file_name is missing", async () => {
+    it("should reject an unversioned wrapped file key", async () => {
+      const token = generateToken(testUserEmail);
+      const response = await request(app)
+        .post("/api/shared-files")
+        .set("Cookie", [
+          `zerodrive_token=${token}`,
+          `zerodrive_csrf=${csrfToken}`,
+        ])
+        .set("x-csrf-token", csrfToken)
+        .send({
+          ...validShareRequest,
+          encrypted_file_key: "opaque-unversioned-value",
+        });
+
+      expect(response.status).toBe(422);
+      expect(mockQuery).not.toHaveBeenCalled();
+    });
+
+    it("should return 422 when encrypted metadata is missing", async () => {
       const token = generateToken(testUserEmail);
       const invalidRequest = { ...validShareRequest };
-      delete (invalidRequest as any).file_name;
+      delete (invalidRequest as any).encrypted_metadata;
 
       const response = await request(app)
         .post("/api/shared-files")
@@ -293,7 +323,7 @@ describe("Shared Files Routes Integration", () => {
         .send(invalidRequest);
 
       expect(response.status).toBe(422);
-      expect(response.body.error.message).toContain("file_name");
+      expect(response.body.error.message).toContain("encrypted_metadata");
     });
 
     it("should return 422 when required field file_size is missing", async () => {
@@ -314,10 +344,13 @@ describe("Shared Files Routes Integration", () => {
       expect(response.body.error.message).toContain("file_size");
     });
 
-    it("should return 422 when required field mime_type is missing", async () => {
+    it("rejects plaintext filename and MIME metadata", async () => {
       const token = generateToken(testUserEmail);
-      const invalidRequest = { ...validShareRequest };
-      delete (invalidRequest as any).mime_type;
+      const invalidRequest = {
+        ...validShareRequest,
+        file_name: "secret.pdf",
+        mime_type: "application/pdf",
+      };
 
       const response = await request(app)
         .post("/api/shared-files")
@@ -329,7 +362,7 @@ describe("Shared Files Routes Integration", () => {
         .send(invalidRequest);
 
       expect(response.status).toBe(422);
-      expect(response.body.error.message).toContain("mime_type");
+      expect(response.body.error.message).toContain("not allowed");
     });
 
     it("should return 422 when file_size is negative", async () => {
@@ -495,7 +528,7 @@ describe("Shared Files Routes Integration", () => {
         .send(validShareRequest);
 
       expect(response.status).toBe(409);
-      expect(response.body.error.message).toContain("already shared");
+      expect(response.body.error.message).toContain("capability collision");
     });
 
     it("should return 500 on database error during share check", async () => {
@@ -534,14 +567,10 @@ describe("Shared Files Routes Integration", () => {
 
     it("should handle email sending failure gracefully", async () => {
       const token = generateToken(testUserEmail);
-      const requestWithMessage = {
-        ...validShareRequest,
-        custom_message: "Check out this file!",
-      };
 
       mockQuery.mockResolvedValueOnce({ rows: [] });
       mockQuery.mockResolvedValueOnce({
-        rows: [{ id: "share-uuid-123", ...requestWithMessage }],
+        rows: [{ id: "share-uuid-123", ...validShareRequest }],
       });
       mockSendFileShareNotification.mockRejectedValueOnce(
         new Error("Email service down"),
@@ -554,7 +583,7 @@ describe("Shared Files Routes Integration", () => {
           `zerodrive_csrf=${csrfToken}`,
         ])
         .set("x-csrf-token", csrfToken)
-        .send(requestWithMessage);
+        .send(validShareRequest);
 
       // Should still succeed even if email fails
       expect(response.status).toBe(201);
@@ -613,6 +642,74 @@ describe("Shared Files Routes Integration", () => {
     });
   });
 
+  describe("POST /api/shared-files/:id/finalize", () => {
+    const id = "550e8400-e29b-41d4-a716-446655440000";
+    const capability = "finalize-capability";
+    const capabilityHash = crypto
+      .createHash("sha256")
+      .update(capability)
+      .digest("hex");
+
+    it("activates a pending share only after storage size verification", async () => {
+      const token = generateToken(testUserEmail);
+      const pending = {
+        id,
+        file_id: "shared/opaque-id",
+        status: "pending",
+        expected_encrypted_size: 1052,
+        management_capability_hash: capabilityHash,
+      };
+      mockQuery
+        .mockResolvedValueOnce({ rows: [pending] })
+        .mockResolvedValueOnce({ rows: [{ ...pending, status: "active" }] });
+      mockS3Send.mockResolvedValueOnce({ ContentLength: 1052 });
+
+      const response = await request(app)
+        .post(`/api/shared-files/${id}/finalize`)
+        .set("Cookie", [
+          `zerodrive_token=${token}`,
+          `zerodrive_csrf=${csrfToken}`,
+        ])
+        .set("x-csrf-token", csrfToken)
+        .set("x-share-capability", capability)
+        .expect(200);
+
+      expect(response.body.data.status).toBe("active");
+      expect(mockQuery).toHaveBeenLastCalledWith(
+        expect.stringContaining("SET status = 'active'"),
+        [id],
+      );
+    });
+
+    it("keeps a size-mismatched upload pending", async () => {
+      const token = generateToken(testUserEmail);
+      mockQuery.mockResolvedValueOnce({
+        rows: [
+          {
+            id,
+            file_id: "shared/opaque-id",
+            status: "pending",
+            expected_encrypted_size: 1052,
+            management_capability_hash: capabilityHash,
+          },
+        ],
+      });
+      mockS3Send.mockResolvedValueOnce({ ContentLength: 999 });
+
+      await request(app)
+        .post(`/api/shared-files/${id}/finalize`)
+        .set("Cookie", [
+          `zerodrive_token=${token}`,
+          `zerodrive_csrf=${csrfToken}`,
+        ])
+        .set("x-csrf-token", csrfToken)
+        .set("x-share-capability", capability)
+        .expect(409);
+
+      expect(mockQuery).toHaveBeenCalledTimes(1);
+    });
+  });
+
   describe("GET /api/shared-files", () => {
     it("should retrieve shared files for recipient with pagination", async () => {
       const token = generateToken(testUserEmail);
@@ -654,7 +751,6 @@ describe("Shared Files Routes Integration", () => {
       const response = await request(app)
         .get("/api/shared-files")
         .query({
-          recipient_user_id: testRecipientEmailHash,
           limit: 2,
           offset: 0,
         })
@@ -675,13 +771,12 @@ describe("Shared Files Routes Integration", () => {
 
       const response = await request(app)
         .get("/api/shared-files")
-        .query({ recipient_user_id: testRecipientEmailHash })
         .set("Cookie", [`zerodrive_token=${token}`]);
 
       expect(response.status).toBe(200);
       expect(mockQuery).toHaveBeenCalledWith(
         expect.any(String),
-        [testRecipientEmailHash, 50, 0], // Default limit=50, offset=0
+        [[authenticatedUserHash, expect.any(String)], 50, 0], // Current HMAC plus legacy identifier
       );
     });
 
@@ -693,7 +788,6 @@ describe("Shared Files Routes Integration", () => {
       const response = await request(app)
         .get("/api/shared-files")
         .query({
-          recipient_user_id: testRecipientEmailHash,
           limit: 20,
           offset: 40,
         })
@@ -701,7 +795,7 @@ describe("Shared Files Routes Integration", () => {
 
       expect(response.status).toBe(200);
       expect(mockQuery).toHaveBeenCalledWith(expect.any(String), [
-        testRecipientEmailHash,
+        [authenticatedUserHash, expect.any(String)],
         20,
         40,
       ]);
@@ -714,7 +808,6 @@ describe("Shared Files Routes Integration", () => {
 
       await request(app)
         .get("/api/shared-files")
-        .query({ recipient_user_id: testRecipientEmailHash })
         .set("Cookie", [`zerodrive_token=${token}`]);
 
       // Verify query includes expiration filter
@@ -727,22 +820,24 @@ describe("Shared Files Routes Integration", () => {
     });
 
     it("should return 401 when no auth cookie provided", async () => {
-      const response = await request(app)
-        .get("/api/shared-files")
-        .query({ recipient_user_id: testRecipientEmailHash });
+      const response = await request(app).get("/api/shared-files");
 
       expect(response.status).toBe(401);
     });
 
-    it("should return 422 when recipient_user_id is missing", async () => {
+    it("should derive recipient identity without a query parameter", async () => {
       const token = generateToken(testUserEmail);
+      mockQuery.mockResolvedValueOnce({ rows: [{ count: "0" }] });
+      mockQuery.mockResolvedValueOnce({ rows: [] });
 
       const response = await request(app)
         .get("/api/shared-files")
         .set("Cookie", [`zerodrive_token=${token}`]);
 
-      expect(response.status).toBe(422);
-      expect(response.body.error.message).toContain("recipient_user_id");
+      expect(response.status).toBe(200);
+      expect(mockQuery).toHaveBeenCalledWith(expect.any(String), [
+        [authenticatedUserHash, expect.any(String)],
+      ]);
     });
 
     it("should return 422 when limit exceeds maximum", async () => {
@@ -750,7 +845,7 @@ describe("Shared Files Routes Integration", () => {
 
       const response = await request(app)
         .get("/api/shared-files")
-        .query({ recipient_user_id: testRecipientEmailHash, limit: 101 })
+        .query({ limit: 101 })
         .set("Cookie", [`zerodrive_token=${token}`]);
 
       expect(response.status).toBe(422);
@@ -761,7 +856,7 @@ describe("Shared Files Routes Integration", () => {
 
       const response = await request(app)
         .get("/api/shared-files")
-        .query({ recipient_user_id: testRecipientEmailHash, limit: 0 })
+        .query({ limit: 0 })
         .set("Cookie", [`zerodrive_token=${token}`]);
 
       expect(response.status).toBe(422);
@@ -772,7 +867,7 @@ describe("Shared Files Routes Integration", () => {
 
       const response = await request(app)
         .get("/api/shared-files")
-        .query({ recipient_user_id: testRecipientEmailHash, offset: -1 })
+        .query({ offset: -1 })
         .set("Cookie", [`zerodrive_token=${token}`]);
 
       expect(response.status).toBe(422);
@@ -785,7 +880,6 @@ describe("Shared Files Routes Integration", () => {
 
       const response = await request(app)
         .get("/api/shared-files")
-        .query({ recipient_user_id: testRecipientEmailHash })
         .set("Cookie", [`zerodrive_token=${token}`]);
 
       expect(response.status).toBe(200);
@@ -800,7 +894,6 @@ describe("Shared Files Routes Integration", () => {
 
       const response = await request(app)
         .get("/api/shared-files")
-        .query({ recipient_user_id: testRecipientEmailHash })
         .set("Cookie", [`zerodrive_token=${token}`]);
 
       expect(response.status).toBe(500);
@@ -817,7 +910,6 @@ describe("Shared Files Routes Integration", () => {
       const response = await request(app)
         .get("/api/shared-files")
         .query({
-          recipient_user_id: testRecipientEmailHash,
           limit: 50,
           offset: 0,
         })
@@ -858,6 +950,10 @@ describe("Shared Files Routes Integration", () => {
       expect(response.body.success).toBe(true);
       expect(response.body.data.id).toBe(validUuid);
       expect(response.body.message).toBe("Shared file retrieved successfully");
+      expect(mockQuery).toHaveBeenCalledWith(expect.any(String), [
+        validUuid,
+        expect.arrayContaining([authenticatedUserHash]),
+      ]);
     });
 
     it("should return 401 when no auth cookie provided", async () => {
@@ -1176,7 +1272,12 @@ describe("Shared Files Routes Integration", () => {
 
     it("should delete shared file successfully", async () => {
       const token = generateToken(testUserEmail);
-      mockQuery.mockResolvedValueOnce({ rowCount: 1 });
+      mockQuery
+        .mockResolvedValueOnce({
+          rows: [{ id: validUuid, file_id: "shared/legacy-object" }],
+        })
+        .mockResolvedValueOnce({ rowCount: 1 })
+        .mockResolvedValueOnce({ rowCount: 1 });
 
       const response = await request(app)
         .delete(`/api/shared-files/${validUuid}`)
@@ -1191,6 +1292,95 @@ describe("Shared Files Routes Integration", () => {
       expect(response.body.data.deleted).toBe(true);
       expect(response.body.message).toBe("File sharing revoked successfully");
       expect(mockQuery).toHaveBeenCalledWith(
+        expect.stringContaining("management_capability_hash IS NULL"),
+        [validUuid, [authenticatedUserHash, expect.any(String)]],
+      );
+    });
+
+    it("revokes a new share using only its anonymous capability", async () => {
+      const token = generateToken(testUserEmail);
+      const capability = "anonymous-management-secret";
+      const capabilityHash = crypto
+        .createHash("sha256")
+        .update(capability)
+        .digest("hex");
+      mockQuery
+        .mockResolvedValueOnce({
+          rows: [
+            {
+              id: validUuid,
+              file_id: "shared/opaque-object",
+              management_capability_hash: capabilityHash,
+            },
+          ],
+        })
+        .mockResolvedValueOnce({ rowCount: 1 })
+        .mockResolvedValueOnce({ rowCount: 1 });
+
+      await request(app)
+        .delete(`/api/shared-files/${validUuid}`)
+        .set("Cookie", [
+          `zerodrive_token=${token}`,
+          `zerodrive_csrf=${csrfToken}`,
+        ])
+        .set("x-csrf-token", csrfToken)
+        .set("x-share-capability", capability)
+        .expect(200);
+
+      expect(mockQuery).toHaveBeenLastCalledWith(
+        "DELETE FROM shared_files WHERE id = $1",
+        [validUuid],
+      );
+    });
+
+    it("rejects an incorrect anonymous capability", async () => {
+      const token = generateToken(testUserEmail);
+      mockQuery.mockResolvedValueOnce({
+        rows: [
+          {
+            id: validUuid,
+            management_capability_hash: "a".repeat(64),
+          },
+        ],
+      });
+
+      await request(app)
+        .delete(`/api/shared-files/${validUuid}`)
+        .set("Cookie", [
+          `zerodrive_token=${token}`,
+          `zerodrive_csrf=${csrfToken}`,
+        ])
+        .set("x-csrf-token", csrfToken)
+        .set("x-share-capability", "wrong-capability")
+        .expect(403);
+
+      expect(mockQuery).toHaveBeenCalledTimes(1);
+    });
+
+    it("keeps a deleting row for retry when object removal fails", async () => {
+      const token = generateToken(testUserEmail);
+      mockQuery
+        .mockResolvedValueOnce({
+          rows: [{ id: validUuid, file_id: "shared/retry-object" }],
+        })
+        .mockResolvedValueOnce({ rowCount: 1 })
+        .mockResolvedValueOnce({ rowCount: 1 });
+      mockS3Send.mockRejectedValueOnce(new Error("MinIO unavailable"));
+
+      await request(app)
+        .delete(`/api/shared-files/${validUuid}`)
+        .set("Cookie", [
+          `zerodrive_token=${token}`,
+          `zerodrive_csrf=${csrfToken}`,
+        ])
+        .set("x-csrf-token", csrfToken)
+        .expect(503);
+
+      expect(mockQuery).toHaveBeenLastCalledWith(
+        expect.stringContaining("deletion_attempts = deletion_attempts + 1"),
+        [validUuid, "OBJECT_DELETE_FAILED"],
+      );
+      expect(mockQuery).not.toHaveBeenCalledWith(
         "DELETE FROM shared_files WHERE id = $1",
         [validUuid],
       );
@@ -1244,7 +1434,7 @@ describe("Shared Files Routes Integration", () => {
 
     it("should return 404 when shared file not found", async () => {
       const token = generateToken(testUserEmail);
-      mockQuery.mockResolvedValueOnce({ rowCount: 0 });
+      mockQuery.mockResolvedValueOnce({ rows: [] });
 
       const response = await request(app)
         .delete(`/api/shared-files/${validUuid}`)
@@ -1262,7 +1452,12 @@ describe("Shared Files Routes Integration", () => {
       const token = generateToken(testUserEmail);
 
       // First deletion succeeds
-      mockQuery.mockResolvedValueOnce({ rowCount: 1 });
+      mockQuery
+        .mockResolvedValueOnce({
+          rows: [{ id: validUuid, file_id: "shared/legacy-object" }],
+        })
+        .mockResolvedValueOnce({ rowCount: 1 })
+        .mockResolvedValueOnce({ rowCount: 1 });
       const response1 = await request(app)
         .delete(`/api/shared-files/${validUuid}`)
         .set("Cookie", [
@@ -1273,7 +1468,7 @@ describe("Shared Files Routes Integration", () => {
       expect(response1.status).toBe(200);
 
       // Second deletion fails (already deleted)
-      mockQuery.mockResolvedValueOnce({ rowCount: 0 });
+      mockQuery.mockResolvedValueOnce({ rows: [] });
       const response2 = await request(app)
         .delete(`/api/shared-files/${validUuid}`)
         .set("Cookie", [

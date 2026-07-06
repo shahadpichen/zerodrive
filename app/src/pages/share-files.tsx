@@ -32,14 +32,15 @@ import {
 } from "../utils/dexieDB";
 import { decryptFile } from "../utils/decryptFile";
 import {
+  fetchRecipientPublicKey,
   fetchUserPublicKey,
   generateUserKeyPair,
-  hashEmail,
   prepareFileForSharing,
   storeFileShare,
   storeUserPublicKey,
 } from "../utils/fileSharing";
-import apiClient from "../utils/apiClient";
+import apiClient, { DirectoryPublicKey } from "../utils/apiClient";
+import { getRecipientKeyPin, pinRecipientKey } from "../utils/recipientKeyPins";
 import {
   deleteUserKeyPair,
   getUserKeyPair,
@@ -87,13 +88,12 @@ async function syncPublicKeyIfNeeded(
   mnemonic: string,
 ): Promise<void> {
   try {
-    const hashedEmail = await hashEmail(email);
-    const serverKey = await fetchUserPublicKey(hashedEmail);
+    const serverKey = await fetchUserPublicKey(email);
     if (serverKey) return;
 
     const localKeyPair = await getUserKeyPair(email, mnemonic);
     if (localKeyPair?.publicKeyJwk) {
-      await storeUserPublicKey(hashedEmail, localKeyPair.publicKeyJwk);
+      await storeUserPublicKey(localKeyPair.publicKeyJwk);
     }
   } catch (error) {
     console.error("[Share] Public-key sync failed:", error);
@@ -148,6 +148,7 @@ const ShareFilesPage: React.FC = () => {
 
   const [pageState, setPageState] = useState<PageState>("checking");
   const [senderEmail, setSenderEmail] = useState("");
+  const [senderLookupId, setSenderLookupId] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [storedFile, setStoredFile] = useState<FileMeta | null>(null);
   const [fileSource, setFileSource] = useState<FileSource>("device");
@@ -160,6 +161,10 @@ const ShareFilesPage: React.FC = () => {
   const [recipientError, setRecipientError] = useState("");
   const [isCheckingRecipient, setIsCheckingRecipient] = useState(false);
   const [recipientVerified, setRecipientVerified] = useState(false);
+  const [recipientDirectoryKey, setRecipientDirectoryKey] =
+    useState<DirectoryPublicKey | null>(null);
+  const [changedRecipientKey, setChangedRecipientKey] =
+    useState<DirectoryPublicKey | null>(null);
   const [customMessage, setCustomMessage] = useState("");
   const [showMessage, setShowMessage] = useState(false);
   const [mnemonicInput, setMnemonicInput] = useState("");
@@ -180,6 +185,10 @@ const ShareFilesPage: React.FC = () => {
         const { getUserEmail, hasGoogleTokensInStorage, logout } =
           await import("../utils/authService");
         const email = await getUserEmail();
+        const identity = await apiClient.get<{
+          email: string;
+          emailHash: string;
+        }>("/auth/me");
 
         if (!email || !hasGoogleTokensInStorage()) {
           await logout();
@@ -196,6 +205,7 @@ const ShareFilesPage: React.FC = () => {
 
         if (!active) return;
         setSenderEmail(email);
+        setSenderLookupId(identity.data?.emailHash || "");
 
         const result = await recoverRsaKeysIfNeeded(email, true);
         if (!active) return;
@@ -227,8 +237,7 @@ const ShareFilesPage: React.FC = () => {
   const rollbackKeyGeneration = async (email: string) => {
     try {
       await deleteUserKeyPair(email);
-      const hashedEmail = await hashEmail(email);
-      await apiClient.publicKeys.delete(hashedEmail);
+      await apiClient.publicKeys.delete();
     } catch (error) {
       console.error("[Share] Key rollback failed:", error);
     }
@@ -251,10 +260,13 @@ const ShareFilesPage: React.FC = () => {
       }
 
       const keyPair = await generateUserKeyPair();
-      const hashedEmail = await hashEmail(senderEmail);
-
-      await storeUserPublicKey(hashedEmail, keyPair.publicKeyJwk);
-      await storeUserKeyPair(senderEmail, keyPair, mnemonic);
+      const storedPublicKey = await storeUserPublicKey(keyPair.publicKeyJwk);
+      await storeUserKeyPair(
+        senderEmail,
+        keyPair,
+        mnemonic,
+        storedPublicKey.keyVersion,
+      );
 
       try {
         const encryptedPrivateKey = await encryptRsaPrivateKeyWithAesKey(
@@ -264,6 +276,10 @@ const ShareFilesPage: React.FC = () => {
         const backupId =
           await uploadEncryptedRsaKeyToDrive(encryptedPrivateKey);
         if (!backupId) throw new Error("Google Drive backup failed");
+        await uploadEncryptedRsaKeyToDrive(
+          encryptedPrivateKey,
+          storedPublicKey.keyVersion,
+        );
       } catch (error) {
         await rollbackKeyGeneration(senderEmail);
         throw error;
@@ -383,6 +399,8 @@ const ShareFilesPage: React.FC = () => {
     setRecipientEmail(value);
     setRecipientError("");
     setRecipientVerified(false);
+    setRecipientDirectoryKey(null);
+    setChangedRecipientKey(null);
   };
 
   const validateRecipient = async (): Promise<boolean> => {
@@ -404,8 +422,7 @@ const ShareFilesPage: React.FC = () => {
     setIsCheckingRecipient(true);
     setRecipientError("");
     try {
-      const hashedEmail = await hashEmail(normalizedEmail);
-      const publicKey = await fetchUserPublicKey(hashedEmail);
+      const publicKey = await fetchRecipientPublicKey(normalizedEmail);
       setRecipientEmail(normalizedEmail);
 
       if (!publicKey) {
@@ -414,6 +431,29 @@ const ShareFilesPage: React.FC = () => {
         return false;
       }
 
+      if (!senderLookupId) {
+        throw new Error("Authenticated account identity is unavailable");
+      }
+      const pinnedKey = getRecipientKeyPin(senderLookupId, normalizedEmail);
+      if (pinnedKey && pinnedKey.fingerprint !== publicKey.fingerprint) {
+        setRecipientVerified(false);
+        setChangedRecipientKey(publicKey);
+        setRecipientError(
+          "This recipient's encryption key changed. Confirm the new fingerprint before sharing.",
+        );
+        return false;
+      }
+
+      if (!pinnedKey) {
+        pinRecipientKey(
+          senderLookupId,
+          normalizedEmail,
+          publicKey.fingerprint,
+          publicKey.key_version,
+        );
+      }
+      setRecipientDirectoryKey(publicKey);
+      setChangedRecipientKey(null);
       setRecipientVerified(true);
       return true;
     } catch (error) {
@@ -433,9 +473,31 @@ const ShareFilesPage: React.FC = () => {
 
     const validRecipient = recipientVerified || (await validateRecipient());
     if (validRecipient) {
+      if (recipientDirectoryKey) {
+        pinRecipientKey(
+          senderLookupId,
+          recipientEmail,
+          recipientDirectoryKey.fingerprint,
+          recipientDirectoryKey.key_version,
+        );
+      }
       setShareError("");
       setPageState("review");
     }
+  };
+
+  const confirmChangedRecipientKey = () => {
+    if (!changedRecipientKey) return;
+    pinRecipientKey(
+      senderLookupId,
+      recipientEmail,
+      changedRecipientKey.fingerprint,
+      changedRecipientKey.key_version,
+    );
+    setRecipientDirectoryKey(changedRecipientKey);
+    setChangedRecipientKey(null);
+    setRecipientError("");
+    setRecipientVerified(true);
   };
 
   const getFileForSharing = async (): Promise<File> => {
@@ -494,6 +556,7 @@ const ShareFilesPage: React.FC = () => {
         senderEmail,
         mnemonic,
         customMessage.trim() || undefined,
+        recipientDirectoryKey || undefined,
       );
 
       setShareStage("uploading");
@@ -969,9 +1032,31 @@ const ShareFilesPage: React.FC = () => {
               )}
             </div>
             {recipientError ? (
-              <p id="recipient-error" className="text-xs text-destructive">
-                {recipientError}
-              </p>
+              <div id="recipient-error" className="space-y-3">
+                <p className="text-xs text-destructive">{recipientError}</p>
+                {changedRecipientKey && (
+                  <div className="border border-destructive/40 bg-destructive/5 p-3">
+                    <p className="text-xs font-medium">New key fingerprint</p>
+                    <code className="mt-1 block break-all text-[11px] text-muted-foreground">
+                      {changedRecipientKey.fingerprint}
+                    </code>
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      Verify this fingerprint with the recipient through another
+                      channel. First-contact trust depends on the ZeroDrive
+                      directory.
+                    </p>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="mt-3"
+                      onClick={confirmChangedRecipientKey}
+                    >
+                      Trust this new key
+                    </Button>
+                  </div>
+                )}
+              </div>
             ) : (
               <p id="recipient-help" className="text-xs text-muted-foreground">
                 {recipientVerified

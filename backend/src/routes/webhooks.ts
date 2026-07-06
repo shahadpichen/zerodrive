@@ -10,8 +10,8 @@
  * - unsubscribed: Recipient unsubscribed
  */
 
-import { Router, Request, Response } from 'express';
-import { verifyWebhookSignature } from '../services/emailService';
+import { Router, Request, Response } from "express";
+import { verifyWebhookSignature } from "../services/emailService";
 
 const router = Router();
 
@@ -21,16 +21,16 @@ interface MailgunWebhookEvent {
     token: string;
     signature: string;
   };
-  'event-data': {
+  "event-data": {
     event: string;
     recipient: string;
     timestamp: number;
     message: {
       headers: {
-        'message-id': string;
+        "message-id": string;
       };
     };
-    'delivery-status'?: {
+    "delivery-status"?: {
       message?: string;
       code?: number;
     };
@@ -44,7 +44,7 @@ interface MailgunWebhookEvent {
  *
  * Receives delivery events from Mailgun
  */
-router.post('/mailgun', async (req: Request, res: Response) => {
+router.post("/mailgun", async (req: Request, res: Response) => {
   try {
     const event: MailgunWebhookEvent = req.body;
 
@@ -53,83 +53,78 @@ router.post('/mailgun', async (req: Request, res: Response) => {
     const isValid = verifyWebhookSignature(timestamp, token, signature);
 
     if (!isValid) {
-      console.error('[Webhook] Invalid signature - possible forged request');
+      console.error("[Webhook] Invalid signature - possible forged request");
       return res.status(401).json({
         success: false,
-        error: 'Invalid signature',
+        error: "Invalid signature",
       });
     }
 
     // Process event
-    const eventData = event['event-data'];
+    const eventData = event["event-data"];
     const eventType = eventData.event;
-    const recipient = eventData.recipient;
-    const messageId = eventData.message?.headers?.['message-id'];
 
-    console.log('[Webhook] Mailgun event received:', {
+    console.log("[Webhook] Mailgun event received:", {
       event: eventType,
-      recipient,
-      messageId,
       timestamp: new Date(eventData.timestamp * 1000).toISOString(),
     });
 
     // Handle different event types
     switch (eventType) {
-      case 'delivered':
+      case "delivered":
         // Email successfully delivered
-        console.log('[Webhook] Email delivered successfully:', recipient);
+        console.log("[Webhook] Email delivered successfully");
         break;
 
-      case 'failed':
+      case "failed":
         // Permanent delivery failure
-        const failureReason = eventData.reason || 'Unknown';
-        const deliveryStatus = eventData['delivery-status'];
-        console.error('[Webhook] Email delivery failed:', {
-          recipient,
+        const failureReason = eventData.reason || "Unknown";
+        const deliveryStatus = eventData["delivery-status"];
+        console.error("[Webhook] Email delivery failed:", {
           reason: failureReason,
           message: deliveryStatus?.message,
           code: deliveryStatus?.code,
         });
         break;
 
-      case 'complained':
+      case "complained":
         // User marked email as spam
-        console.warn('[Webhook] Spam complaint received:', recipient);
+        console.warn("[Webhook] Spam complaint received");
         // TODO: Add user to suppression list or disable notifications
         break;
 
-      case 'unsubscribed':
+      case "unsubscribed":
         // User unsubscribed
-        console.log('[Webhook] User unsubscribed:', recipient);
+        console.log("[Webhook] User unsubscribed");
         // TODO: Update user preferences in database
         break;
 
-      case 'opened':
+      case "opened":
         // User opened email (only if tracking enabled)
-        console.log('[Webhook] Email opened:', recipient);
+        console.log("[Webhook] Email opened");
         break;
 
-      case 'clicked':
+      case "clicked":
         // User clicked link (only if tracking enabled)
-        console.log('[Webhook] Link clicked:', recipient);
+        console.log("[Webhook] Link clicked");
         break;
 
       default:
-        console.log('[Webhook] Unknown event type:', eventType);
+        console.log("[Webhook] Unknown event type:", eventType);
     }
 
     // Always return 200 OK to acknowledge receipt
     return res.status(200).json({
       success: true,
-      message: 'Event processed',
+      message: "Event processed",
     });
   } catch (error: any) {
-    console.error('[Webhook] Error processing webhook:', error.message);
+    console.error("[Webhook] Error processing webhook:", error.message);
 
     // Still return 200 to prevent Mailgun retries
     return res.status(200).json({
       success: false,
-      error: 'Internal error',
+      error: "Internal error",
     });
   }
 });
@@ -139,10 +134,10 @@ router.post('/mailgun', async (req: Request, res: Response) => {
  *
  * Health check endpoint for webhook configuration
  */
-router.get('/mailgun/health', (req: Request, res: Response) => {
+router.get("/mailgun/health", (req: Request, res: Response) => {
   return res.status(200).json({
     success: true,
-    message: 'Webhook endpoint is configured and ready',
+    message: "Webhook endpoint is configured and ready",
     timestamp: new Date().toISOString(),
   });
 });
