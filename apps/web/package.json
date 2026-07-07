@@ -59,7 +59,8 @@
     "build": "react-scripts build",
     "dev": "react-scripts start",
     "typecheck": "tsc --noEmit",
-    "test": "react-scripts test",
+    "test": "react-scripts test --watchAll=false",
+    "test:watch": "react-scripts test",
     "eject": "react-scripts eject"
   },
   "eslintConfig": {

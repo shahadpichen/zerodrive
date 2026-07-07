@@ -7,7 +7,8 @@ React 18 + Create React App + TypeScript (strict mode).
 ```bash
 pnpm --filter @zerodrive/web start       # Dev server on :3000
 pnpm --filter @zerodrive/web build       # Production build
-pnpm --filter @zerodrive/web test        # Jest in watch mode
+pnpm --filter @zerodrive/web test        # Jest, non-watch
+pnpm --filter @zerodrive/web test:watch  # Jest in watch mode
 pnpm --filter @zerodrive/web typecheck   # Type check
 ```
 
@@ -38,6 +39,7 @@ src/
 ## Testing
 
 Jest + React Testing Library. Tests live in `src/__tests__/` mirroring the source tree:
+
 - `__tests__/components/` — component tests
 - `__tests__/utils/` — utility/crypto tests
 - `__tests__/pages/` — page-level tests
@@ -53,4 +55,4 @@ Jest + React Testing Library. Tests live in `src/__tests__/` mirroring the sourc
 
 - tsconfig uses `moduleResolution: "node"` — required by CRA; no path aliases
 - Use `pnpm --filter @zerodrive/web typecheck` for type checking
-- `react-scripts test` runs Jest in watch mode by default; use `--watchAll=false` for CI
+- `pnpm --filter @zerodrive/web test` runs Jest once; use `test:watch` for local watch mode
