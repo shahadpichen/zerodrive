@@ -17,23 +17,26 @@ A TypeScript-based backend for ZeroDrive, replacing Supabase with a self-hosted 
 
 ### Prerequisites
 
-- Node.js 18+ and pnpm
+- Node.js 24+ and pnpm 11.7+
 - Docker and Docker Compose
 - Git
 
 ### Installation
 
 1. **Install dependencies from the repository root:**
+
    ```bash
    pnpm install
    ```
 
 2. **Start local infrastructure from the repository root:**
+
    ```bash
    pnpm infra:up
    ```
 
 3. **Set up backend environment variables:**
+
    ```bash
    cd apps/api
    cp .env.example .env
@@ -62,16 +65,19 @@ The API will be available at `http://localhost:3001`
 ## API Endpoints
 
 ### Health Check
+
 - `GET /` - API information and status
 - `GET /api/health` - Health check endpoint
 
 ### Public Keys
+
 - `POST /api/public-keys` - Store or update user's public key
 - `GET /api/public-keys/:user_id` - Get user's public key
 - `GET /api/public-keys` - List all public keys (debugging)
 - `DELETE /api/public-keys/:user_id` - Delete user's public key
 
 ### Shared Files
+
 - `POST /api/shared-files` - Share a file with another user
 - `GET /api/shared-files` - Get shared files (with query filters)
 - `GET /api/shared-files/:id` - Get specific shared file
@@ -82,6 +88,7 @@ The API will be available at `http://localhost:3001`
 ## API Usage Examples
 
 ### Store a Public Key
+
 ```bash
 curl -X POST http://localhost:3001/api/public-keys \
   -H "Content-Type: application/json" \
@@ -92,11 +99,13 @@ curl -X POST http://localhost:3001/api/public-keys \
 ```
 
 ### Get a Public Key
+
 ```bash
 curl http://localhost:3001/api/public-keys/user@example.com
 ```
 
 ### Share a File
+
 ```bash
 curl -X POST http://localhost:3001/api/shared-files \
   -H "Content-Type: application/json" \
@@ -117,6 +126,7 @@ curl -X POST http://localhost:3001/api/shared-files \
 The database uses PostgreSQL with the following tables:
 
 ### `public_keys`
+
 - `id` (UUID, Primary Key)
 - `user_id` (VARCHAR, Unique) - User identifier (email)
 - `public_key` (TEXT) - RSA public key in PEM format
@@ -124,6 +134,7 @@ The database uses PostgreSQL with the following tables:
 - `updated_at` (TIMESTAMP)
 
 ### `shared_files`
+
 - `id` (UUID, Primary Key)
 - `file_id` (VARCHAR) - Google Drive file ID
 - `owner_user_id` (VARCHAR) - File owner's user ID
@@ -140,18 +151,18 @@ The database uses PostgreSQL with the following tables:
 
 ## Environment Variables
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `NODE_ENV` | `development` | Environment mode |
-| `PORT` | `3001` | Server port |
-| `HOST` | `localhost` | Server host |
-| `DB_HOST` | `localhost` | PostgreSQL host |
-| `DB_PORT` | `5433` | PostgreSQL port |
-| `DB_NAME` | `zerodrive` | Database name |
-| `DB_USER` | `zerodrive_app` | Database user |
-| `DB_PASSWORD` | `localdev123` | Database password |
+| Variable          | Default                                       | Description          |
+| ----------------- | --------------------------------------------- | -------------------- |
+| `NODE_ENV`        | `development`                                 | Environment mode     |
+| `PORT`            | `3001`                                        | Server port          |
+| `HOST`            | `localhost`                                   | Server host          |
+| `DB_HOST`         | `localhost`                                   | PostgreSQL host      |
+| `DB_PORT`         | `5433`                                        | PostgreSQL port      |
+| `DB_NAME`         | `zerodrive`                                   | Database name        |
+| `DB_USER`         | `zerodrive_app`                               | Database user        |
+| `DB_PASSWORD`     | `localdev123`                                 | Database password    |
 | `ALLOWED_ORIGINS` | `http://localhost:3000,http://localhost:5173` | CORS allowed origins |
-| `LOG_LEVEL` | `debug` | Logging level |
+| `LOG_LEVEL`       | `debug`                                       | Logging level        |
 
 ## Docker Configuration
 
@@ -162,6 +173,7 @@ The `docker-compose.yml` includes:
 - **pgAdmin**: Database administration UI (optional)
 
 Services are accessible at:
+
 - PostgreSQL: `localhost:5433`
 - MinIO: `localhost:9000` (API), `localhost:9001` (UI)
 - pgAdmin: `localhost:5050`
@@ -206,6 +218,7 @@ const directoryKey = await apiClient.publicKeys.getForEmail("user@example.com");
 ## Troubleshooting
 
 ### Database Connection Issues
+
 ```bash
 # Check if PostgreSQL container is running
 docker ps | grep postgres
@@ -220,6 +233,7 @@ pnpm infra:up
 ```
 
 ### Port Conflicts
+
 ```bash
 # Kill processes using port 3001
 lsof -ti:3001 | xargs kill -9
@@ -229,6 +243,7 @@ lsof -ti:5433 | xargs kill -9
 ```
 
 ### TypeScript Errors
+
 ```bash
 # Check compilation
 pnpm typecheck:api
@@ -241,13 +256,13 @@ pnpm --filter @zerodrive/api clean && pnpm build:api
 
 This backend replaces the following Supabase features:
 
-| Supabase Feature | Backend Equivalent |
-|------------------|-------------------|
-| `supabase.from('public_keys')` | `POST/GET /api/public-keys` |
-| `supabase.from('shared_files')` | `POST/GET /api/shared-files` |
-| Real-time subscriptions | Not implemented (can add WebSocket support) |
-| Authentication | Handled by frontend (BIP39 mnemonics) |
-| Storage | Google Drive API (existing) |
+| Supabase Feature                | Backend Equivalent                          |
+| ------------------------------- | ------------------------------------------- |
+| `supabase.from('public_keys')`  | `POST/GET /api/public-keys`                 |
+| `supabase.from('shared_files')` | `POST/GET /api/shared-files`                |
+| Real-time subscriptions         | Not implemented (can add WebSocket support) |
+| Authentication                  | Handled by frontend (BIP39 mnemonics)       |
+| Storage                         | Google Drive API (existing)                 |
 
 ## Next Steps
 

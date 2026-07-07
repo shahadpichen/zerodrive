@@ -14,6 +14,17 @@ packages       Shared TypeScript packages
 
 ## Quick start
 
+Prerequisites:
+
+- Node.js 24+
+- pnpm 11.7+ via Corepack
+- Docker and Docker Compose
+
+```bash
+corepack enable
+corepack prepare pnpm@11.7.0 --activate
+```
+
 ```bash
 pnpm install
 pnpm infra:up

@@ -32,7 +32,7 @@ jobs:
       - uses: pnpm/action-setup@f2b2b233b538f500472c7274c7012f57857d8ce0 # v4
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          node-version: 18
+          node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm -r --filter './packages/*' build
@@ -49,7 +49,7 @@ jobs:
       - uses: pnpm/action-setup@f2b2b233b538f500472c7274c7012f57857d8ce0 # v4
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          node-version: 18
+          node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm -r --filter './packages/*' build
