@@ -1,7 +1,7 @@
 import {
   createSharedFileEnvelope,
   decryptSharedFileEnvelope,
-} from "../../utils/sharedFileEnvelope";
+} from "@zerodrive/crypto";
 
 describe("authenticated shared file envelope", () => {
   let key: CryptoKey;

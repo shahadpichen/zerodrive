@@ -7,15 +7,14 @@ import apiClient from "./apiClient";
 import logger from "./logger";
 import { getUserKeyPair } from "./keyStorage";
 import { storeShareManagementCapability } from "./shareCapabilityStorage";
-import {
-  readSharedKeyCiphertext,
-  serializeSharedKeyEnvelope,
-} from "./sharedKeyEnvelope";
-import { DirectoryPublicKey } from "./apiClient";
+import type { SharedFileMetadata } from "@zerodrive/shared-types";
 import {
   createSharedFileEnvelope,
   decryptSharedFileEnvelope,
-} from "./sharedFileEnvelope";
+  readSharedKeyCiphertext,
+  serializeSharedKeyEnvelope,
+} from "@zerodrive/crypto";
+import { DirectoryPublicKey } from "./apiClient";
 
 /**
  * Represents the result of preparing a file for sharing (Step 1).
@@ -41,13 +40,6 @@ export interface UserKeyPair {
   publicKeyJwk: JsonWebKey;
   /** The private key as a JsonWebKey object. */
   privateKeyJwk: JsonWebKey;
-}
-
-export interface SharedFileMetadata {
-  version: 1;
-  name: string;
-  mimeType: string;
-  message?: string;
 }
 
 const SHARED_METADATA_AAD = new TextEncoder().encode(

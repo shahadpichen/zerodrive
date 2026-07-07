@@ -30,7 +30,7 @@ import { uploadAndSyncFile } from "../utils/fileOperations";
 import { getMnemonic, setMnemonic } from "../utils/mnemonicManager";
 import { downloadEncryptedRsaKeyFromDrive } from "../utils/gdriveKeyStorage";
 import { decryptRsaPrivateKeyWithAesKey } from "../utils/rsaKeyManager";
-import { readRecipientKeyVersion } from "../utils/sharedKeyEnvelope";
+import { readRecipientKeyVersion } from "@zerodrive/crypto";
 import { recoverRsaKeyVersion } from "../utils/rsaKeyRecovery";
 import { toast } from "sonner";
 

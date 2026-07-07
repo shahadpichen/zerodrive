@@ -2,7 +2,7 @@ import {
   readRecipientKeyVersion,
   readSharedKeyCiphertext,
   serializeSharedKeyEnvelope,
-} from "../../utils/sharedKeyEnvelope";
+} from "@zerodrive/crypto";
 
 describe("shared key envelopes", () => {
   it("serializes and reads the supported cryptographic suite", () => {

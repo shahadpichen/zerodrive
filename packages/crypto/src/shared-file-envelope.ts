@@ -1,4 +1,4 @@
-import type { SharedFileMetadata } from "./fileSharing";
+import type { SharedFileMetadata } from "@zerodrive/shared-types";
 
 const MAGIC = new Uint8Array([0x5a, 0x44, 0x53, 0x45]); // ZDSE
 const VERSION = 1;
