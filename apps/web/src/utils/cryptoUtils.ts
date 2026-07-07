@@ -60,7 +60,7 @@ export const deriveKeyFromMnemonic = async (
   if (!bip39.validateMnemonic(mnemonic)) {
     throw new Error("Invalid mnemonic phrase");
   }
-  const seed = bip39.mnemonicToSeedSync(mnemonic);
+  const seed = Uint8Array.from(bip39.mnemonicToSeedSync(mnemonic));
   const keyMaterial = await crypto.subtle.digest("SHA-256", seed);
 
   return crypto.subtle.importKey(

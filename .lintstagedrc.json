@@ -1,11 +1,11 @@
 {
-  "app/**/*.{js,jsx,ts,tsx}": [
+  "apps/web/**/*.{js,jsx,ts,tsx}": [
     "prettier --write",
-    "app/node_modules/.bin/eslint --fix"
+    "pnpm --dir apps/web exec eslint --fix"
   ],
-  "backend/**/*.ts": [
+  "apps/api/**/*.ts": [
     "prettier --write",
-    "backend/node_modules/.bin/eslint --fix"
+    "pnpm --dir apps/api exec eslint --fix"
   ],
   "**/*.{json,css,md}": ["prettier --write"]
 }

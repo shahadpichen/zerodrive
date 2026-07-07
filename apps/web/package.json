@@ -1,5 +1,5 @@
 {
-  "name": "private-drive",
+  "name": "@zerodrive/web",
   "version": "0.1.0",
   "private": true,
   "dependencies": {
@@ -24,6 +24,8 @@
     "@testing-library/jest-dom": "^5.17.0",
     "@testing-library/react": "^13.4.0",
     "@testing-library/user-event": "^13.5.0",
+    "@zerodrive/crypto": "workspace:*",
+    "@zerodrive/shared-types": "workspace:*",
     "@types/gapi": "^0.0.47",
     "@types/gapi.auth2": "^0.0.61",
     "bip39": "^3.1.0",
@@ -55,6 +57,8 @@
   "scripts": {
     "start": "react-scripts start",
     "build": "react-scripts build",
+    "dev": "react-scripts start",
+    "typecheck": "tsc --noEmit",
     "test": "react-scripts test",
     "eject": "react-scripts eject"
   },
@@ -78,6 +82,12 @@
   },
   "devDependencies": {
     "@types/bip39": "^3.0.4",
-    "tailwindcss": "^3.4.10"
+    "@types/jest": "^29.5.14",
+    "@types/node": "^20.10.0",
+    "@types/react": "^18.3.31",
+    "@types/react-dom": "^18.3.7",
+    "@types/testing-library__jest-dom": "^5.14.9",
+    "tailwindcss": "^3.4.10",
+    "typescript": "^5.3.2"
   }
 }

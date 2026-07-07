@@ -1,5 +1,5 @@
 {
-  "name": "zerodrive-backend",
+  "name": "@zerodrive/api",
   "version": "1.0.0",
   "description": "ZeroDrive Backend API - Self-hosted replacement for Supabase",
   "main": "dist/server.js",
@@ -8,10 +8,6 @@
     "start": "node dist/server.js",
     "dev": "ts-node-dev --respawn --transpile-only src/server.ts",
     "dev:watch": "ts-node-dev --respawn --transpile-only --watch src src/server.ts",
-    "dev:docker": "docker-compose up -d && npm run dev",
-    "docker:up": "docker-compose up -d",
-    "docker:down": "docker-compose down",
-    "docker:logs": "docker-compose logs -f",
     "test": "jest",
     "test:watch": "jest --watch",
     "lint": "eslint src/**/*.ts",
@@ -79,6 +75,6 @@
   },
   "engines": {
     "node": ">=18.0.0",
-    "npm": ">=8.0.0"
+    "pnpm": ">=11.0.0"
   }
 }
