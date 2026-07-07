@@ -1,43 +1,81 @@
 # ZeroDrive
 
-**ZeroDrive** is a tool that keeps your Google Drive files secure with end-to-end encryption. Here’s what you need to know:
+ZeroDrive is a zero-knowledge encrypted cloud storage and private file sharing app.
 
-## Key Features
+Files are encrypted in the browser before upload. The backend coordinates authentication, storage, sharing metadata, and lifecycle state, but it should never receive plaintext file content or encryption keys.
 
-- **End-to-End Encryption:** Your files are encrypted on your device before uploading to Google Drive. Only you can decrypt them.
-- **Open Source:** The code is fully available for review, ensuring transparency and trust.
-- **Easy to Use:** Drag, drop, and encrypt—no technical skills needed.
-- **Customizable:** Review, modify, and host the tool on your own servers if desired.
-- **IndexedDB Storage:** Efficient local storage management.
+## Repository layout
 
-## Getting Started
+```txt
+apps/web       React frontend
+apps/api       Express API
+packages       Shared TypeScript packages
+```
 
-1. **Clone the Repository:**
+## Quick start
 
-   ```bash
-   git clone https://github.com/shahadpichen/zerodrive.git
-   ```
+Prerequisites:
 
-2. **Install Dependencies:**
-   ```bash
-   cd zerodrive
-   npm install
-   ```
-3. **Set Environment Variables:**
-   
-    Before starting the application, make sure to add the following environment variables:
-   
-   ```bash
-   REACT_APP_PUBLIC_CLIENT_ID
-   REACT_APP_PUBLIC_SCOPE
-   ```
-   You can add these variables in a .env.local file in the project root.
-5. **Run the Application:**
-   ```bash
-   npm start
-   ```
-4. Visit localhost:3000 in your browser to start using ZeroDrive.
+- Node.js 24+
+- pnpm 11.7+ via Corepack
+- Docker and Docker Compose
 
-## Contact
+```bash
+corepack enable
+corepack prepare pnpm@11.7.0 --activate
+```
 
-For support or questions, open an issue on GitHub
+```bash
+pnpm install
+pnpm infra:up
+```
+
+Run the backend:
+
+```bash
+pnpm dev:api
+```
+
+Run the frontend:
+
+```bash
+pnpm dev:web
+```
+
+Frontend: http://localhost:3000
+
+Backend: http://localhost:3001
+
+## Useful commands
+
+```bash
+pnpm build
+pnpm typecheck
+pnpm test
+pnpm format:check
+pnpm infra:down
+```
+
+## Environment files
+
+Use the examples in each app:
+
+```txt
+apps/web/.env.example
+apps/api/.env.example
+```
+
+## Infrastructure
+
+The root `docker-compose.yml` starts:
+
+- PostgreSQL on `localhost:5433`
+- MinIO on `localhost:9000`
+- MinIO console on `localhost:9001`
+- pgAdmin on `localhost:5050`
+
+The database schema source of truth is:
+
+```txt
+apps/api/database/init.sql
+```

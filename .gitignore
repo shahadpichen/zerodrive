@@ -9,12 +9,12 @@
 **/coverage
 
 # production
-/build
-backend/dist/
+**/build/
+**/dist/
+.pnpm-store/
 
 # environment files
-backend/.env
-app/.env
+**/.env
 
 # build artifacts
 *.tsbuildinfo

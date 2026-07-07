@@ -21,8 +21,8 @@ Thanks for the PR! A few reminders:
 
 <!-- How did you verify this works? Checklist of what was tested. -->
 
-- [ ] Type check passes (`npx tsc --noEmit` in `app/` and `backend/`)
-- [ ] Tests pass (`npm test` in affected package)
+- [ ] Type check passes (`pnpm typecheck`)
+- [ ] Tests pass (`pnpm test` or affected package test)
 - [ ] Manually tested the happy path in the browser
 - [ ] Manually tested edge cases relevant to this change
 

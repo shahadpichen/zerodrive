@@ -2,15 +2,37 @@
   "name": "zerodrive",
   "version": "1.0.0",
   "private": true,
-  "description": "Zero-knowledge encrypted cloud storage — root tooling (formatting)",
+  "packageManager": "pnpm@11.7.0",
+  "description": "Zero-knowledge encrypted cloud storage — monorepo workspace",
   "scripts": {
-    "format": "prettier --write \"{app,backend}/src/**/*.{ts,tsx,js,jsx,json,css,md}\"",
-    "format:check": "prettier --check \"{app,backend}/src/**/*.{ts,tsx,js,jsx,json,css,md}\"",
+    "dev": "pnpm -r --filter './packages/*' build && pnpm -r --parallel --filter @zerodrive/api --filter @zerodrive/web dev",
+    "dev:web": "pnpm -r --filter './packages/*' build && pnpm --filter @zerodrive/web start",
+    "dev:api": "pnpm -r --filter './packages/*' build && pnpm --filter @zerodrive/api dev",
+    "build": "pnpm -r --filter './packages/*' build && pnpm --filter @zerodrive/api build && pnpm --filter @zerodrive/web build",
+    "build:web": "pnpm -r --filter './packages/*' build && pnpm --filter @zerodrive/web build",
+    "build:api": "pnpm --filter @zerodrive/api build",
+    "typecheck": "pnpm -r --filter './packages/*' build && pnpm -r typecheck",
+    "typecheck:web": "pnpm -r --filter './packages/*' build && pnpm --filter @zerodrive/web typecheck",
+    "typecheck:api": "pnpm --filter @zerodrive/api typecheck",
+    "test": "pnpm --filter @zerodrive/api test:ci && pnpm run test:web",
+    "test:web": "pnpm -r --filter './packages/*' build && pnpm --filter @zerodrive/web exec react-scripts test --watchAll=false --runTestsByPath src/__tests__/utils/sharedFileEnvelope.test.ts src/__tests__/utils/sharedKeyEnvelope.test.ts",
+    "test:web:all": "pnpm -r --filter './packages/*' build && pnpm --filter @zerodrive/web test",
+    "test:api": "pnpm --filter @zerodrive/api test:ci",
+    "lint:api": "pnpm --filter @zerodrive/api lint",
+    "infra:up": "docker compose up -d",
+    "infra:down": "docker compose down",
+    "infra:logs": "docker compose logs -f",
+    "format": "prettier --write \"{apps,packages}/**/*.{ts,tsx,js,jsx,json,css,md}\"",
+    "format:check": "prettier --check \"{apps,packages}/**/*.{ts,tsx,js,jsx,json,css,md}\"",
     "prepare": "husky"
   },
   "devDependencies": {
     "husky": "^9.1.7",
     "lint-staged": "^16.4.0",
     "prettier": "^3.8.3"
+  },
+  "engines": {
+    "node": ">=24.0.0",
+    "pnpm": ">=11.7.0"
   }
 }
