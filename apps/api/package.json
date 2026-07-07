@@ -9,6 +9,7 @@
     "dev": "ts-node-dev --respawn --transpile-only src/server.ts",
     "dev:watch": "ts-node-dev --respawn --transpile-only --watch src src/server.ts",
     "test": "jest",
+    "test:ci": "jest --runInBand --silent",
     "test:watch": "jest --watch",
     "lint": "eslint src/**/*.ts",
     "lint:fix": "eslint src/**/*.ts --fix",

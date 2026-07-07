@@ -37,7 +37,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm -r --filter './packages/*' build
       - run: pnpm --filter @zerodrive/api typecheck
-      - run: pnpm --filter @zerodrive/api test -- --runInBand --silent
+      - run: pnpm --filter @zerodrive/api test:ci
 
   frontend:
     runs-on: ubuntu-latest
