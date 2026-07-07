@@ -1,9 +1,27 @@
 import React from "react";
+import { Link } from "react-router-dom";
 
-const FAQS: { q: string; a: string }[] = [
+const FAQS: { q: string; a: React.ReactNode }[] = [
   {
     q: "What if I lose my recovery phrase?",
     a: "Then your files can't be recovered — by anyone, including us. That's the cost of true zero-knowledge encryption: no backdoor for us means no backdoor for anyone. Write your phrase down and store it safely.",
+  },
+  {
+    q: "What happens if ZeroDrive disappears?",
+    a: (
+      <>
+        Your personal encrypted files should still remain in your Google Drive,
+        but recovery depends on having your recovery phrase and a compatible
+        decryptor.{" "}
+        <Link
+          to="/docs/if-zerodrive-disappears"
+          className="font-medium underline underline-offset-4"
+        >
+          Read the full recovery model
+        </Link>
+        .
+      </>
+    ),
   },
   {
     q: "Can ZeroDrive read my files?",
