@@ -97,3 +97,68 @@ u {
 #not_signed_in35qfawpxhggu {
   font-size: 15px !important;
 }
+
+.docs-reading p,
+.docs-reading li {
+  color: hsl(var(--muted-foreground));
+  font-weight: 300;
+}
+
+.docs-reading ul,
+.docs-reading ol {
+  color: hsl(var(--muted-foreground));
+}
+
+.docs-reading h2 {
+  scroll-margin-top: 2rem;
+  margin: 4rem auto 1.5rem;
+  max-width: 48rem;
+  color: hsl(var(--foreground));
+  text-align: center;
+  font-size: 1.5rem;
+  line-height: 1.25;
+}
+
+.docs-reading h2:first-child {
+  margin-top: 0;
+}
+
+.docs-reading h3 {
+  margin-top: 1.5rem;
+  color: hsl(var(--foreground));
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.docs-reading p {
+  margin-top: 1rem;
+}
+
+.docs-reading ul,
+.docs-reading ol {
+  margin-top: 1rem;
+}
+
+.docs-reading li + li {
+  margin-top: 0.5rem;
+}
+
+.docs-reading div.grid {
+  display: block;
+}
+
+.docs-reading div.grid > div {
+  margin-top: 1rem;
+}
+
+.docs-reading div.border {
+  border-width: 0 0 0 1px;
+  background: transparent;
+  padding: 0 0 0 1rem;
+}
+
+.docs-reading div.border p:first-child,
+.docs-reading span.text-foreground {
+  color: hsl(var(--foreground));
+  font-weight: 500;
+}

@@ -25,10 +25,10 @@ function Header() {
       {/* Desktop Navigation */}
       <div className="hidden items-center gap-5 md:flex">
         <button
-          onClick={() => navigate("/how-it-works")}
+          onClick={() => navigate("/docs")}
           className="border-none bg-transparent p-0 text-sm font-medium hover:underline"
         >
-          How it works
+          Docs
         </button>
 
         <a
@@ -55,8 +55,8 @@ function Header() {
           </DropdownMenuTrigger>
 
           <DropdownMenuContent align="end" className="w-44">
-            <DropdownMenuItem onClick={() => navigate("/how-it-works")}>
-              How it works
+            <DropdownMenuItem onClick={() => navigate("/docs")}>
+              Docs
             </DropdownMenuItem>
 
             <DropdownMenuItem asChild>

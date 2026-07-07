@@ -5,10 +5,13 @@ function Footer() {
   return (
     <footer className="text-center text-sm border-t pt-10 mt-10 md:pt-14 pb-12">
       <p>
-        &copy; ZeroDrive - A platform for secure file storage on Google Drive.
+        &copy; ZeroDrive - A platform for encrypted storage and private sharing.
       </p>
 
       <div className="flex flex-wrap justify-center gap-4 mt-4">
+        <Link to="/docs" className="hover:underline text-sm">
+          Docs
+        </Link>
         <Link to="/privacy" className="hover:underline text-sm">
           Privacy Policy
         </Link>
