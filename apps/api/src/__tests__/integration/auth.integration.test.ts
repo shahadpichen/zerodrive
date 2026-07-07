@@ -384,8 +384,8 @@ describe("Auth Routes Integration", () => {
   // ENDPOINT REMOVED: /api/auth/google-token (Risk #35 - Zero-knowledge architecture)
   // Google tokens are now encrypted client-side and never stored in database
   // Backend passes tokens once via URL redirect during OAuth callback
-  // See: backend/src/routes/auth.ts (lines 140-151)
-  // See: app/src/utils/authService.ts (storeGoogleTokens function)
+  // See: apps/api/src/routes/auth.ts (lines 140-151)
+  // See: apps/web/src/utils/authService.ts (storeGoogleTokens function)
   //
   // describe('GET /api/auth/google-token', () => {
   //   // Tests removed - endpoint no longer exists

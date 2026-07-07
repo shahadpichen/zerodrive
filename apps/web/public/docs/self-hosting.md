@@ -6,7 +6,7 @@ A full deployment needs the frontend website, backend API, PostgreSQL database, 
 
 In simpler terms, you run the website, the server, the database, the shared-file storage, and the email setup. You get more control, but you also become responsible for updates, backups, secrets, and uptime.
 
-For local development, `docker-compose up -d` starts PostgreSQL, MinIO, and pgAdmin. The backend runs at `http://localhost:3001`, and the frontend runs at `http://localhost:3000`.
+For local development, `pnpm infra:up` starts PostgreSQL, MinIO, and pgAdmin. The backend runs at `http://localhost:3001`, and the frontend runs at `http://localhost:3000`.
 
 For production, you need proper domains, HTTPS, backups, monitoring, and a secure place to store secrets.
 

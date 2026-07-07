@@ -17,47 +17,47 @@ A TypeScript-based backend for ZeroDrive, replacing Supabase with a self-hosted 
 
 ### Prerequisites
 
-- Node.js 18+ and npm 8+
+- Node.js 18+ and pnpm
 - Docker and Docker Compose
 - Git
 
 ### Installation
 
-1. **Clone and navigate to backend:**
+1. **Install dependencies from the repository root:**
    ```bash
-   cd /Users/shahad/Projects/zerodrive/backend
-   npm install
+   pnpm install
    ```
 
-2. **Start PostgreSQL with Docker:**
+2. **Start local infrastructure from the repository root:**
    ```bash
-   docker-compose up -d postgres
+   pnpm infra:up
    ```
 
-3. **Set up environment variables:**
+3. **Set up backend environment variables:**
    ```bash
+   cd apps/api
    cp .env.example .env
    # Edit .env if needed (default values work for local development)
    ```
 
-4. **Start the development server:**
+4. **Start the development server from the repository root:**
    ```bash
-   npm run dev
+   pnpm dev:api
    ```
 
 The API will be available at `http://localhost:3001`
 
 ### Development Scripts
 
-- `npm run dev` - Start development server with hot reload
-- `npm run build` - Build TypeScript to JavaScript
-- `npm run start` - Start production server (requires build first)
-- `npm run typecheck` - Check TypeScript compilation without emitting files
-- `npm run lint` - Run ESLint
-- `npm run lint:fix` - Fix ESLint errors automatically
-- `npm run docker:up` - Start all Docker services
-- `npm run docker:down` - Stop all Docker services
-- `npm run docker:logs` - View Docker container logs
+- `pnpm dev:api` - Start development server with hot reload
+- `pnpm build:api` - Build TypeScript to JavaScript
+- `pnpm --filter @zerodrive/api start` - Start production server after build
+- `pnpm typecheck:api` - Check TypeScript compilation without emitting files
+- `pnpm lint:api` - Run ESLint
+- `pnpm --filter @zerodrive/api lint:fix` - Fix ESLint errors automatically
+- `pnpm infra:up` - Start all Docker services
+- `pnpm infra:down` - Stop all Docker services
+- `pnpm infra:logs` - View Docker container logs
 
 ## API Endpoints
 
@@ -168,27 +168,12 @@ Services are accessible at:
 
 ## Frontend Integration
 
-The backend works with the updated `app/src/utils/apiClient.ts` which provides:
+The backend works with the web API client in `apps/web/src/utils/apiClient.ts`.
 
 ```typescript
-import apiClient from './utils/apiClient';
+import apiClient from "./utils/apiClient";
 
-// Store public key
-await apiClient.publicKeys.upsert('user@example.com', publicKeyPem);
-
-// Get public key
-const result = await apiClient.publicKeys.get('user@example.com');
-
-// Share file
-await apiClient.sharedFiles.create({
-  file_id: 'google-drive-id',
-  owner_user_id: 'owner@example.com',
-  recipient_user_id: 'recipient@example.com',
-  encrypted_file_key: 'encrypted-key',
-  file_name: 'document.pdf',
-  file_size: 1024000,
-  mime_type: 'application/pdf'
-});
+const directoryKey = await apiClient.publicKeys.getForEmail("user@example.com");
 ```
 
 ## Architecture
@@ -229,9 +214,9 @@ docker ps | grep postgres
 docker logs zerodrive-postgres
 
 # Reset database (deletes all data)
-docker-compose down
+pnpm infra:down
 docker volume rm zerodrive_postgres_data
-docker-compose up -d postgres
+pnpm infra:up
 ```
 
 ### Port Conflicts
@@ -246,10 +231,10 @@ lsof -ti:5433 | xargs kill -9
 ### TypeScript Errors
 ```bash
 # Check compilation
-npm run typecheck
+pnpm typecheck:api
 
 # Clean build
-npm run clean && npm run build
+pnpm --filter @zerodrive/api clean && pnpm build:api
 ```
 
 ## Migration from Supabase

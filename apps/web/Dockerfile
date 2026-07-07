@@ -1,28 +1,30 @@
 # Build stage
 FROM node:18-alpine AS builder
 
-WORKDIR /app
+WORKDIR /repo
 
-# Copy package files
-COPY package*.json ./
+RUN corepack enable
 
-# Install dependencies
-RUN npm ci
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY apps/web/package.json apps/web/package.json
+COPY packages/crypto/package.json packages/crypto/package.json
+COPY packages/shared-types/package.json packages/shared-types/package.json
 
-# Copy source code
+RUN pnpm install --frozen-lockfile
+
 COPY . .
 
-# Build React app
-RUN npm run build
+RUN pnpm -r --filter './packages/*' build
+RUN pnpm --filter @zerodrive/web build
 
 # Production stage
 FROM nginx:alpine
 
 # Copy built app from builder
-COPY --from=builder /app/build /usr/share/nginx/html
+COPY --from=builder /repo/apps/web/build /usr/share/nginx/html
 
 # Copy nginx config
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+COPY apps/web/nginx.conf /etc/nginx/conf.d/default.conf
 
 EXPOSE 80
 

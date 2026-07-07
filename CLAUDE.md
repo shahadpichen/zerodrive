@@ -1,18 +1,20 @@
 # ZeroDrive
 
-Zero-knowledge encrypted cloud storage. Monorepo with `app/` (React frontend) and `backend/` (Express API).
+Zero-knowledge encrypted cloud storage. pnpm monorepo with `apps/web/` (React frontend), `apps/api/` (Express API), and shared packages in `packages/`.
 
 ## Quick Start
 
 ```bash
+pnpm install
+
 # Start infrastructure (PostgreSQL on :5433, MinIO on :9000/:9001, pgAdmin on :5050)
-docker-compose up -d
+pnpm infra:up
 
 # Backend (http://localhost:3001)
-cd backend && npm install && npm run dev
+pnpm dev:api
 
 # Frontend (http://localhost:3000)
-cd app && npm install && npm start
+pnpm dev:web
 ```
 
 ## Commit Conventions
@@ -35,7 +37,7 @@ Custom agents in `.claude/agents/` — use via the Task tool with matching `suba
 
 ## Key Documentation
 
-- `backend/database/init.sql` — database schema (source of truth)
+- `apps/api/database/init.sql` — database schema (source of truth)
 - `docker-compose.yml` — PostgreSQL, MinIO, pgAdmin, MinIO setup services
 
 ## Architecture

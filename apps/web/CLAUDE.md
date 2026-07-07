@@ -5,10 +5,10 @@ React 18 + Create React App + TypeScript (strict mode).
 ## Commands
 
 ```bash
-npm start          # Dev server on :3000
-npm run build      # Production build
-npm test           # Jest in watch mode
-npx tsc --noEmit   # Type check (no build script; run tsc directly)
+pnpm --filter @zerodrive/web start       # Dev server on :3000
+pnpm --filter @zerodrive/web build       # Production build
+pnpm --filter @zerodrive/web test        # Jest in watch mode
+pnpm --filter @zerodrive/web typecheck   # Type check
 ```
 
 No dedicated lint script — ESLint runs via `react-scripts` (config in package.json under `eslintConfig`).
@@ -52,5 +52,5 @@ Jest + React Testing Library. Tests live in `src/__tests__/` mirroring the sourc
 ## Gotchas
 
 - tsconfig uses `moduleResolution: "node"` — required by CRA; no path aliases
-- No `lint` or `typecheck` npm scripts — use `npx tsc --noEmit` for type checking
+- Use `pnpm --filter @zerodrive/web typecheck` for type checking
 - `react-scripts test` runs Jest in watch mode by default; use `--watchAll=false` for CI

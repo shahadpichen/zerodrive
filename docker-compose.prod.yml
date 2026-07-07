@@ -10,7 +10,7 @@ services:
       POSTGRES_PASSWORD: ${DB_PASSWORD}
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./backend/database/init.sql:/docker-entrypoint-initdb.d/01-schema.sql
+      - ./apps/api/database/init.sql:/docker-entrypoint-initdb.d/01-schema.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-zerodrive_app} -d ${DB_NAME:-zerodrive}"]
       interval: 10s
@@ -58,11 +58,11 @@ services:
 
   backend:
     build:
-      context: ./backend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: apps/api/Dockerfile
     container_name: zerodrive-backend
     env_file:
-      - ./backend/.env.production
+      - ./apps/api/.env.production
     ports:
       - "127.0.0.1:3001:3001"
     depends_on:
@@ -81,8 +81,8 @@ services:
 
   frontend:
     build:
-      context: ./app
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: apps/web/Dockerfile
     container_name: zerodrive-frontend
     ports:
       - "127.0.0.1:3000:80"

@@ -1,6 +1,6 @@
 -- ZeroDrive PostgreSQL Database Schema
 -- This script initializes the database with the required tables for the backend
--- docker exec -i zerodrive-postgres psql -U zerodrive_app -d zerodrive < /Users/shahad/Projects/zerodrive/backend/database/init.sql
+-- docker exec -i zerodrive-postgres psql -U zerodrive_app -d zerodrive < /Users/shahad/Projects/zerodrive/apps/api/database/init.sql
 -- docker exec zerodrive-postgres psql -U zerodrive_app -d zerodrive -c "SELECT * FROM <tablename>;"
 
 -- Enable UUID extension for generating UUIDs
@@ -136,8 +136,8 @@ CREATE INDEX IF NOT EXISTS idx_oauth_exchanges_expiry
 -- - Backend only handles OAuth flow and returns tokens once
 -- - User's Google Drive access is never compromised even if backend is breached
 --
--- See: app/src/utils/authService.ts for encrypted storage implementation
--- See: app/src/utils/cryptoUtils.ts for PBKDF2 encryption functions
+-- See: apps/web/src/utils/authService.ts for encrypted storage implementation
+-- See: apps/web/src/utils/cryptoUtils.ts for PBKDF2 encryption functions
 
 -- Create a view for active shared files (not expired)
 CREATE OR REPLACE VIEW active_shared_files AS

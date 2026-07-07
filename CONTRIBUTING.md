@@ -108,13 +108,13 @@ See [`CLAUDE.md`](./CLAUDE.md) at the repo root for the project layout and quick
 
 ```bash
 # Infrastructure
-docker-compose up -d
+pnpm infra:up
 
 # Backend
-cd backend && npm install && npm run dev
+pnpm dev:api
 
 # Frontend
-cd app && npm install && npm start
+pnpm dev:web
 ```
 
 ## Questions

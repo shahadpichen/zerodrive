@@ -5,14 +5,14 @@ Express + TypeScript + PostgreSQL (raw SQL via `pg`, no ORM).
 ## Commands
 
 ```bash
-npm run dev          # Dev server on :3001 (ts-node-dev with auto-restart)
-npm run build        # Compile to dist/
-npm test             # Jest (all tests)
-npm run test:watch   # Jest in watch mode
-npm run lint         # ESLint
-npm run lint:fix     # ESLint with auto-fix
-npm run typecheck    # tsc --noEmit
-npm run db:reset     # Reset database via src/utils/resetDb.ts
+pnpm --filter @zerodrive/api dev          # Dev server on :3001
+pnpm --filter @zerodrive/api build        # Compile to dist/
+pnpm --filter @zerodrive/api test         # Jest
+pnpm --filter @zerodrive/api test:watch   # Jest watch mode
+pnpm --filter @zerodrive/api lint         # ESLint
+pnpm --filter @zerodrive/api lint:fix     # ESLint with auto-fix
+pnpm --filter @zerodrive/api typecheck    # tsc --noEmit
+pnpm --filter @zerodrive/api db:reset     # Reset database
 ```
 
 ## Database
@@ -62,7 +62,7 @@ src/
 
 ## Environment
 
-Backend requires `.env` with: DB connection, JWT secret, Google OAuth credentials, MinIO/S3 config, Mailgun API key, CORS origins. See `backend/.env` for all variables.
+Backend requires `.env` with: DB connection, JWT secret, Google OAuth credentials, MinIO/S3 config, Mailgun API key, CORS origins. See `apps/api/.env.example` for variables.
 
 ## Gotchas
 

@@ -1,22 +1,23 @@
 FROM node:18-alpine
 
-WORKDIR /app
+WORKDIR /repo
 
-# Copy package files
-COPY package*.json ./
+RUN corepack enable
 
-# Install dependencies
-RUN npm ci
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY apps/api/package.json apps/api/package.json
+COPY packages/crypto/package.json packages/crypto/package.json
+COPY packages/shared-types/package.json packages/shared-types/package.json
 
-# Copy source code
+RUN pnpm install --frozen-lockfile
+
 COPY . .
 
-# Build TypeScript
-RUN npm run build
+RUN pnpm -r --filter './packages/*' build
+RUN pnpm --filter @zerodrive/api build
 
-# Remove dev dependencies
-RUN npm prune --production
+RUN pnpm prune --prod
 
 EXPOSE 3001
 
-CMD ["npm", "start"]
+CMD ["pnpm", "--filter", "@zerodrive/api", "start"]
