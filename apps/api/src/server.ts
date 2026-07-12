@@ -25,6 +25,8 @@ import logger from "./utils/logger";
 import { cleanupExpiredShares } from "./jobs/cleanupExpiredShares";
 import { validateIdentitySecrets } from "./utils/identity";
 import { enforceHttps } from "./middleware/httpsEnforcement";
+import { validateAnalyticsConfig } from "./config/analytics";
+import { cleanupAnalyticsRetention } from "./services/analytics";
 
 // Initialize Express app
 const app: Application = express();
@@ -213,6 +215,7 @@ process.on("uncaughtException", (error: Error) => {
 const startServer = async (): Promise<void> => {
   try {
     validateIdentitySecrets();
+    validateAnalyticsConfig();
     // Test database connection
     const dbConnected = await testConnection();
     if (!dbConnected) {
@@ -225,6 +228,7 @@ const startServer = async (): Promise<void> => {
     cron.schedule("0 2 * * *", async () => {
       logger.info("Running scheduled cleanup job for expired shared files...");
       await cleanupExpiredShares();
+      await cleanupAnalyticsRetention();
     });
 
     logger.info("Scheduled cleanup job initialized (runs daily at 2:00 AM)");

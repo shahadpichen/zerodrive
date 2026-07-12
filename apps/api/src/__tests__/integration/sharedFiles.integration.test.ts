@@ -38,6 +38,9 @@ jest.mock("../../services/analytics", () => ({
   trackEvent: (...args: any[]) => mockTrackEvent(...args),
   AnalyticsEvent: {
     FILE_SHARED: "file_shared",
+    SHARED_FILE_ACCESSED: "shared_file_accessed",
+    SHARE_FINALIZED: "share_finalized",
+    SHARE_REVOKED: "share_revoked",
   },
   AnalyticsCategory: {
     SHARING: "sharing",
@@ -679,6 +682,7 @@ describe("Shared Files Routes Integration", () => {
         expect.stringContaining("SET status = 'active'"),
         [id],
       );
+      expect(mockTrackEvent).toHaveBeenCalledWith("share_finalized", "sharing");
     });
 
     it("keeps a size-mismatched upload pending", async () => {
@@ -1295,6 +1299,7 @@ describe("Shared Files Routes Integration", () => {
         expect.stringContaining("management_capability_hash IS NULL"),
         [validUuid, [authenticatedUserHash, expect.any(String)]],
       );
+      expect(mockTrackEvent).toHaveBeenCalledWith("share_revoked", "sharing");
     });
 
     it("revokes a new share using only its anonymous capability", async () => {

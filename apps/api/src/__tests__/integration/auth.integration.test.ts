@@ -295,6 +295,9 @@ describe("Auth Routes Integration", () => {
       expect(response.body.success).toBe(true);
       expect(response.body.data.email).toBe(userEmail);
       expect(response.body.data.emailHash).toBeDefined();
+      expect(response.body.data.capabilities).toEqual({
+        analyticsRead: true,
+      });
     });
 
     it("should return 401 when no token cookie provided", async () => {

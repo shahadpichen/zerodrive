@@ -11,11 +11,13 @@ jest.mock("../../services/analytics");
 
 const mockGetAnalyticsSummary = jest.fn();
 const mockGetDailyStats = jest.fn();
+const mockGetDimensionStats = jest.fn();
 const mockTrackEvent = jest.fn();
 
 jest.mock("../../services/analytics", () => ({
   getAnalyticsSummary: (...args: any[]) => mockGetAnalyticsSummary(...args),
   getDailyStats: (...args: any[]) => mockGetDailyStats(...args),
+  getDimensionStats: (...args: any[]) => mockGetDimensionStats(...args),
   trackEvent: (...args: any[]) => mockTrackEvent(...args),
   AnalyticsEvent: {
     FILE_ADDED_TO_DRIVE: "file_added_to_drive",
@@ -106,6 +108,56 @@ describe("Analytics Routes Integration", () => {
       expect(response.status).toBe(401);
       expect(mockGetAnalyticsSummary).not.toHaveBeenCalled();
     });
+
+    it("rejects an authenticated non-administrator", async () => {
+      const response = await request(app)
+        .get("/api/analytics/summary")
+        .set("Cookie", [
+          `zerodrive_token=${generateToken("user@example.com")}`,
+        ]);
+
+      expect(response.status).toBe(403);
+      expect(mockGetAnalyticsSummary).not.toHaveBeenCalled();
+    });
+
+    it("does not expose analytics when the deployment has disabled them", async () => {
+      process.env.ANALYTICS_ENABLED = "false";
+      try {
+        const response = await request(app)
+          .get("/api/analytics/summary")
+          .set("Cookie", [authCookie()]);
+
+        expect(response.status).toBe(503);
+        expect(mockGetAnalyticsSummary).not.toHaveBeenCalled();
+      } finally {
+        process.env.ANALYTICS_ENABLED = "true";
+      }
+    });
+  });
+
+  describe("GET /api/analytics/dimensions", () => {
+    it("returns privacy-suppressed aggregate buckets to an administrator", async () => {
+      const buckets = [
+        {
+          metric: "file_added_to_drive",
+          dimension: "source",
+          bucket: "upload",
+          count: 12,
+          suppressed: false,
+        },
+      ];
+      mockGetDimensionStats.mockResolvedValue(buckets);
+
+      const response = await request(app)
+        .get("/api/analytics/dimensions")
+        .query({ days: 30 })
+        .set("Cookie", [authCookie()]);
+
+      expect(response.status).toBe(200);
+      expect(response.body.data).toEqual(buckets);
+      expect(mockGetDimensionStats).toHaveBeenCalledWith(30);
+      expect(response.headers["cache-control"]).toContain("no-store");
+    });
   });
 
   describe("GET /api/analytics/daily", () => {
@@ -150,6 +202,23 @@ describe("Analytics Routes Integration", () => {
   });
 
   describe("POST /api/analytics/track", () => {
+    it("returns tracked=false without calling the service when disabled", async () => {
+      process.env.ANALYTICS_ENABLED = "false";
+      try {
+        const response = await request(app)
+          .post("/api/analytics/track")
+          .set("Cookie", [authCookie(), `zerodrive_csrf=${csrfToken}`])
+          .set("x-csrf-token", csrfToken)
+          .send({ event: "file_added_to_drive" });
+
+        expect(response.status).toBe(200);
+        expect(response.body.data.tracked).toBe(false);
+        expect(mockTrackEvent).not.toHaveBeenCalled();
+      } finally {
+        process.env.ANALYTICS_ENABLED = "true";
+      }
+    });
+
     it("accepts only the frontend-safe file-added event", async () => {
       mockTrackEvent.mockResolvedValue(undefined);
 

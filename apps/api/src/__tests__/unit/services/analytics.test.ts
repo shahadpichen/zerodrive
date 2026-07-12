@@ -1,338 +1,231 @@
-/**
- * Unit Tests for Analytics Service
- * Tests anonymous analytics tracking and privacy measures
- */
-
 import {
-  trackEvent,
+  AnalyticsCategory,
+  AnalyticsEvent,
+  cleanupAnalyticsRetention,
   getAnalyticsSummary,
   getDailyStats,
+  getDimensionStats,
   getFileSizeBucket,
   getFileTypeCategory,
-  AnalyticsEvent,
-  AnalyticsCategory,
+  trackEvent,
 } from "../../../services/analytics";
-
-// Mock dependencies
-jest.mock("../../../config/database");
-jest.mock("../../../utils/logger", () => ({
-  info: jest.fn(),
-  warn: jest.fn(),
-  error: jest.fn(),
-}));
 
 const mockQuery = jest.fn();
 jest.mock("../../../config/database", () => ({
-  query: (...args: any[]) => mockQuery(...args),
+  query: (...args: unknown[]) => mockQuery(...args),
 }));
 
-describe("Analytics Service", () => {
+describe("privacy-safe analytics service", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    process.env.ANALYTICS_ENABLED = "true";
     mockQuery.mockResolvedValue({ rows: [] });
   });
 
   describe("trackEvent", () => {
-    it("should track login event successfully", async () => {
-      await trackEvent(AnalyticsEvent.USER_LOGIN, AnalyticsCategory.AUTH);
+    it("does nothing while analytics are disabled", async () => {
+      process.env.ANALYTICS_ENABLED = "false";
 
-      expect(mockQuery).toHaveBeenCalledWith(
-        expect.stringContaining("INSERT INTO analytics_daily_summary"),
-      );
-      expect(mockQuery).toHaveBeenCalledWith(
-        expect.stringContaining("total_logins"),
-      );
-    });
-
-    it("should track new user login", async () => {
-      await trackEvent(AnalyticsEvent.USER_LOGIN_NEW, AnalyticsCategory.AUTH);
-
-      expect(mockQuery).toHaveBeenCalledWith(
-        expect.stringContaining("total_new_users"),
-      );
-    });
-
-    it("should track file added event", async () => {
       await trackEvent(
         AnalyticsEvent.FILE_ADDED_TO_DRIVE,
         AnalyticsCategory.FILES,
       );
 
+      expect(mockQuery).not.toHaveBeenCalled();
+    });
+
+    it("increments one total and separate one-dimensional buckets", async () => {
+      await trackEvent(
+        AnalyticsEvent.FILE_ADDED_TO_DRIVE,
+        AnalyticsCategory.FILES,
+        {
+          source: "upload",
+          size_bucket: "1-10MB",
+          file_category: "image",
+        },
+      );
+
+      expect(mockQuery).toHaveBeenCalledTimes(4);
+      expect(mockQuery.mock.calls[0][0]).toContain(
+        "INSERT INTO analytics_daily_summary",
+      );
+      expect(mockQuery.mock.calls[0][0]).toContain(
+        "total_files_added_to_drive",
+      );
       expect(mockQuery).toHaveBeenCalledWith(
-        expect.stringContaining("total_files_added_to_drive"),
+        expect.stringContaining("analytics_daily_dimensions"),
+        ["file_added_to_drive", "source", "upload"],
+      );
+      expect(mockQuery).toHaveBeenCalledWith(
+        expect.stringContaining("analytics_daily_dimensions"),
+        ["file_added_to_drive", "size_bucket", "1-10MB"],
       );
     });
 
-    it("should track file shared event", async () => {
-      await trackEvent(AnalyticsEvent.FILE_SHARED, AnalyticsCategory.SHARING);
-
-      expect(mockQuery).toHaveBeenCalledWith(
-        expect.stringContaining("total_shares"),
+    it("rejects unknown metadata instead of sanitizing and storing it", async () => {
+      await trackEvent(
+        AnalyticsEvent.FILE_ADDED_TO_DRIVE,
+        AnalyticsCategory.FILES,
+        { email: "person@example.com" },
       );
+
+      expect(mockQuery).not.toHaveBeenCalled();
     });
 
-    it("should use upsert to increment daily counters", async () => {
-      await trackEvent(AnalyticsEvent.USER_LOGIN, AnalyticsCategory.AUTH);
+    it("rejects an event with the wrong category", async () => {
+      await trackEvent(AnalyticsEvent.FILE_SHARED, AnalyticsCategory.AUTH);
 
-      expect(mockQuery).toHaveBeenCalledWith(
-        expect.stringContaining("ON CONFLICT (date)"),
-      );
-      expect(mockQuery).toHaveBeenCalledWith(
-        expect.stringContaining("DO UPDATE SET"),
-      );
+      expect(mockQuery).not.toHaveBeenCalled();
     });
 
-    it("should not throw error for unknown event type", async () => {
-      await expect(
-        trackEvent("unknown_event" as any, AnalyticsCategory.AUTH),
-      ).resolves.not.toThrow();
-    });
-
-    it("should not throw error when database fails", async () => {
-      mockQuery.mockRejectedValue(new Error("Database error"));
+    it("does not break product behavior when PostgreSQL is unavailable", async () => {
+      mockQuery.mockRejectedValue(new Error("database unavailable"));
 
       await expect(
         trackEvent(AnalyticsEvent.USER_LOGIN, AnalyticsCategory.AUTH),
-      ).resolves.not.toThrow();
-    });
-
-    it("should strip forbidden keys from metadata", async () => {
-      const metadataWithForbiddenKeys = {
-        email: "test@example.com", // Forbidden
-        user_id: "123", // Forbidden
-        validKey: "valid-value",
-      };
-
-      await trackEvent(
-        AnalyticsEvent.FILE_SHARED,
-        AnalyticsCategory.SHARING,
-        metadataWithForbiddenKeys,
-      );
-
-      // Should not throw, but forbidden keys removed
-      expect(metadataWithForbiddenKeys.validKey).toBe("valid-value");
-    });
-
-    it("should remove various forbidden identifiers", async () => {
-      const metadata = {
-        ip: "1.2.3.4",
-        ipAddress: "1.2.3.4",
-        session: "abc",
-        sessionId: "123",
-        name: "John",
-        phone: "555-1234",
-      };
-
-      // All these should be removed
-      await trackEvent(
-        AnalyticsEvent.FILE_SHARED,
-        AnalyticsCategory.SHARING,
-        metadata,
-      );
-
-      // Should not throw
-      expect(mockQuery).toHaveBeenCalled();
+      ).resolves.toBeUndefined();
     });
   });
 
-  describe("getAnalyticsSummary", () => {
-    beforeEach(() => {
-      mockQuery.mockResolvedValue({
-        rows: [
-          {
-            logins: "100",
-            new_users: "20",
-            limited_scope_logins: "5",
-            downloads: "50",
-            files_added_to_drive: "75",
-            shares: "30",
-            invitations: "15",
-          },
-        ],
-      });
+  it("returns a typed summary without double-counting login subtypes", async () => {
+    mockQuery.mockResolvedValue({
+      rows: [
+        {
+          existing_logins: "80",
+          new_users: "20",
+          limited_scope_logins: "5",
+          downloads: "50",
+          files_added: "75",
+          shares: "30",
+          invitations: "15",
+          key_setups: "4",
+          key_rotations: "2",
+          shares_finalized: "25",
+          shares_revoked: "3",
+        },
+      ],
     });
 
-    it("should return analytics summary for date range", async () => {
-      const startDate = new Date("2024-01-01");
-      const endDate = new Date("2024-01-31");
+    const summary = await getAnalyticsSummary(
+      new Date("2026-06-01T00:00:00Z"),
+      new Date("2026-07-01T00:00:00Z"),
+    );
 
-      const summary = await getAnalyticsSummary(startDate, endDate);
+    expect(summary.rangeDays).toBe(30);
+    expect(summary.totals).toEqual({
+      logins: 105,
+      newUsers: 20,
+      limitedScopeLogins: 5,
+      filesAdded: 75,
+      shares: 30,
+      downloads: 50,
+      invitations: 15,
+      keySetups: 4,
+      keyRotations: 2,
+      sharesFinalized: 25,
+      sharesRevoked: 3,
+    });
+    expect(summary.categories).toEqual({
+      auth: 105,
+      files: 75,
+      sharing: 123,
+      keys: 6,
+    });
+    expect(summary.totalEvents).toBe(309);
+  });
 
-      expect(summary.totalEvents).toBe(295); // Sum of all events
-      expect(summary.eventsByType["user_login"]).toBe(100);
-      expect(summary.eventsByType["user_login_new"]).toBe(20);
-      expect(summary.eventsByCategory["auth"]).toBe(125); // 100 + 20 + 5
-      expect(summary.eventsByCategory["files"]).toBe(75);
-      expect(summary.eventsByCategory["sharing"]).toBe(95); // 30 + 15 + 50
+  it("returns chronological daily aggregate points using a bound day value", async () => {
+    mockQuery.mockResolvedValue({
+      rows: [
+        {
+          date: "2026-07-01",
+          existing_logins: "4",
+          new_users: "1",
+          limited_scope_logins: "1",
+          files_added: "3",
+          shares: "2",
+          downloads: "1",
+          invitations: "0",
+          key_setups: "1",
+          key_rotations: "2",
+          shares_finalized: "2",
+          shares_revoked: "1",
+        },
+      ],
     });
 
-    it("should query with correct date range", async () => {
-      const startDate = new Date("2024-01-01");
-      const endDate = new Date("2024-01-31");
+    const daily = await getDailyStats(7);
 
-      await getAnalyticsSummary(startDate, endDate);
-
-      expect(mockQuery).toHaveBeenCalledWith(
-        expect.stringContaining("WHERE date BETWEEN $1 AND $2"),
-        [startDate, endDate],
-      );
-    });
-
-    it("should handle null values in database response", async () => {
-      mockQuery.mockResolvedValue({
-        rows: [
-          {
-            logins: null,
-            new_users: null,
-            limited_scope_logins: null,
-            downloads: null,
-            files_added_to_drive: null,
-            shares: null,
-            invitations: null,
-          },
-        ],
-      });
-
-      const summary = await getAnalyticsSummary(new Date(), new Date());
-
-      expect(summary.totalEvents).toBe(0);
-      expect(summary.eventsByCategory["auth"]).toBe(0);
-    });
-
-    it("should throw error when database query fails", async () => {
-      mockQuery.mockRejectedValue(new Error("Database error"));
-
-      await expect(getAnalyticsSummary(new Date(), new Date())).rejects.toThrow(
-        "Database error",
-      );
+    expect(mockQuery).toHaveBeenCalledWith(
+      expect.stringContaining("$1::integer"),
+      [7],
+    );
+    expect(daily[0]).toEqual({
+      date: "2026-07-01",
+      logins: 6,
+      newUsers: 1,
+      limitedScopeLogins: 1,
+      filesAdded: 3,
+      shares: 2,
+      downloads: 1,
+      invitations: 0,
+      keySetups: 1,
+      keyRotations: 2,
+      sharesFinalized: 2,
+      sharesRevoked: 1,
     });
   });
 
-  describe("getDailyStats", () => {
-    beforeEach(() => {
-      mockQuery.mockResolvedValue({
-        rows: [
-          {
-            date: "2024-01-03",
-            logins: "30",
-            files_added: "15",
-            shares: "5",
-            downloads: "10",
-          },
-          {
-            date: "2024-01-02",
-            logins: "25",
-            files_added: "12",
-            shares: "3",
-            downloads: "8",
-          },
-          {
-            date: "2024-01-01",
-            logins: "20",
-            files_added: "10",
-            shares: "2",
-            downloads: "5",
-          },
-        ],
-      });
+  it("suppresses dimension counts smaller than five", async () => {
+    mockQuery.mockResolvedValue({
+      rows: [
+        {
+          metric: "file_added_to_drive",
+          dimension: "source",
+          bucket: "upload",
+          count: 4,
+        },
+        {
+          metric: "file_shared",
+          dimension: "size_bucket",
+          bucket: "1-10MB",
+          count: 8,
+        },
+      ],
     });
 
-    it("should return daily stats for default 30 days", async () => {
-      const stats = await getDailyStats();
+    const buckets = await getDimensionStats(30);
 
-      expect(stats).toHaveLength(3);
-      expect(stats[0].date).toBe("2024-01-03");
-      expect(stats[0].logins).toBe(30);
-      expect(stats[0].filesAdded).toBe(15);
-    });
-
-    it("should return daily stats for custom number of days", async () => {
-      await getDailyStats(7);
-
-      expect(mockQuery).toHaveBeenCalledWith(
-        expect.stringContaining("INTERVAL '7 days'"),
-      );
-    });
-
-    it("should handle null values in database response", async () => {
-      mockQuery.mockResolvedValue({
-        rows: [
-          {
-            date: "2024-01-01",
-            logins: null,
-            files_added: null,
-            shares: null,
-            downloads: null,
-          },
-        ],
-      });
-
-      const stats = await getDailyStats();
-
-      expect(stats[0].logins).toBe(0);
-      expect(stats[0].filesAdded).toBe(0);
-    });
-
-    it("should throw error when database query fails", async () => {
-      mockQuery.mockRejectedValue(new Error("Database error"));
-
-      await expect(getDailyStats()).rejects.toThrow("Database error");
-    });
+    expect(buckets[0]).toMatchObject({ count: null, suppressed: true });
+    expect(buckets[1]).toMatchObject({ count: 8, suppressed: false });
   });
 
-  describe("getFileSizeBucket", () => {
-    it("should return <1MB for files under 1MB", () => {
-      expect(getFileSizeBucket(500 * 1024)).toBe("<1MB");
-      expect(getFileSizeBucket(1024)).toBe("<1MB");
-    });
+  it("purges daily totals and dimensions older than 365 days", async () => {
+    await cleanupAnalyticsRetention();
 
-    it("should return 1-10MB for files between 1-10MB", () => {
-      const MB = 1024 * 1024;
-      expect(getFileSizeBucket(1 * MB)).toBe("1-10MB");
-      expect(getFileSizeBucket(5 * MB)).toBe("1-10MB");
-      expect(getFileSizeBucket(9.9 * MB)).toBe("1-10MB");
-    });
-
-    it("should return 10-50MB for files between 10-50MB", () => {
-      const MB = 1024 * 1024;
-      expect(getFileSizeBucket(10 * MB)).toBe("10-50MB");
-      expect(getFileSizeBucket(25 * MB)).toBe("10-50MB");
-    });
-
-    it("should return 50-100MB for files between 50-100MB", () => {
-      const MB = 1024 * 1024;
-      expect(getFileSizeBucket(50 * MB)).toBe("50-100MB");
-      expect(getFileSizeBucket(75 * MB)).toBe("50-100MB");
-    });
-
-    it("should return >100MB for files over 100MB", () => {
-      const MB = 1024 * 1024;
-      expect(getFileSizeBucket(100 * MB)).toBe(">100MB");
-      expect(getFileSizeBucket(500 * MB)).toBe(">100MB");
-    });
+    expect(mockQuery).toHaveBeenCalledTimes(2);
+    expect(mockQuery.mock.calls[0][0]).toContain(
+      "DELETE FROM analytics_daily_dimensions",
+    );
+    expect(mockQuery.mock.calls[1][0]).toContain(
+      "DELETE FROM analytics_daily_summary",
+    );
   });
 
-  describe("getFileTypeCategory", () => {
-    it("should return correct category for common mime types", () => {
-      expect(getFileTypeCategory("image/jpeg")).toBe("image");
-      expect(getFileTypeCategory("video/mp4")).toBe("video");
-      expect(getFileTypeCategory("audio/mpeg")).toBe("audio");
-      expect(getFileTypeCategory("text/plain")).toBe("text");
-      expect(getFileTypeCategory("application/pdf")).toBe("application");
-    });
+  it("uses coarse file size ranges", () => {
+    const MB = 1024 * 1024;
+    expect(getFileSizeBucket(1)).toBe("<1MB");
+    expect(getFileSizeBucket(5 * MB)).toBe("1-10MB");
+    expect(getFileSizeBucket(25 * MB)).toBe("10-50MB");
+    expect(getFileSizeBucket(75 * MB)).toBe("50-100MB");
+    expect(getFileSizeBucket(200 * MB)).toBe(">100MB");
+  });
 
-    it('should return "other" for unknown mime types', () => {
-      expect(getFileTypeCategory("custom/unknown")).toBe("other");
-      expect(getFileTypeCategory("weird-format")).toBe("other");
-    });
-
-    it('should return "unknown" for empty mime type', () => {
-      expect(getFileTypeCategory("")).toBe("unknown");
-    });
-
-    it("should handle mime types without subtype", () => {
-      expect(getFileTypeCategory("image")).toBe("image");
-      expect(getFileTypeCategory("video")).toBe("video");
-    });
+  it("uses broad file categories", () => {
+    expect(getFileTypeCategory("image/jpeg")).toBe("image");
+    expect(getFileTypeCategory("application/pdf")).toBe("document");
+    expect(getFileTypeCategory("application/zip")).toBe("archive");
+    expect(getFileTypeCategory("custom/type")).toBe("other");
+    expect(getFileTypeCategory("")).toBe("unknown");
   });
 });

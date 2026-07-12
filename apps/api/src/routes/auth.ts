@@ -25,6 +25,7 @@ import {
   AnalyticsEvent,
   AnalyticsCategory,
 } from "../services/analytics";
+import { isAnalyticsAdmin } from "../config/analytics";
 import { query } from "../config/database";
 import logger from "../utils/logger";
 import { deriveLookupCandidates } from "../utils/identity";
@@ -294,6 +295,9 @@ router.get(
       {
         email: req.user.email,
         emailHash: req.user.emailHash,
+        capabilities: {
+          analyticsRead: isAnalyticsAdmin(req.user.email),
+        },
       },
       "User info retrieved",
     );

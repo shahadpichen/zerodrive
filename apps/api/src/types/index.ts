@@ -138,6 +138,8 @@ export interface EnvConfig {
   MINIO_REGION: string;
   LOG_LEVEL: string;
   LOG_FORMAT: string;
+  ANALYTICS_ENABLED: boolean;
+  ANALYTICS_ADMIN_EMAILS: string;
   ENABLE_CLEANUP_JOB: boolean;
   CLEANUP_INTERVAL_HOURS: number;
 }

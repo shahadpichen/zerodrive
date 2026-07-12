@@ -60,6 +60,36 @@ describe("database privacy invariants", () => {
     }
   });
 
+  it("stores analytics as aggregate counters without identity columns", () => {
+    const summarySchema = initSql.match(
+      /CREATE TABLE IF NOT EXISTS analytics_daily_summary \(([\s\S]*?)\n\);/,
+    )?.[1];
+    const dimensionsSchema = initSql.match(
+      /CREATE TABLE IF NOT EXISTS analytics_daily_dimensions \(([\s\S]*?)\n\);/,
+    )?.[1];
+    expect(summarySchema).toBeDefined();
+    expect(dimensionsSchema).toBeDefined();
+
+    const analyticsSchema =
+      `${summarySchema}\n${dimensionsSchema}`.toLowerCase();
+    for (const forbidden of [
+      "email",
+      "user_id",
+      "email_hash",
+      "ip_address",
+      "user_agent",
+      "session_id",
+      "device_id",
+      "file_id",
+      "share_id",
+      "object_key",
+      "request_body",
+      "event_timestamp",
+    ]) {
+      expect(analyticsSchema).not.toContain(forbidden);
+    }
+  });
+
   it("cannot derive recipient identities without the external secret", () => {
     const previousSecret = process.env.DIRECTORY_HMAC_SECRET;
     process.env.DIRECTORY_HMAC_SECRET = "first-independent-secret";

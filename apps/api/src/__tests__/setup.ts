@@ -15,6 +15,8 @@ process.env.GOOGLE_CLIENT_SECRET = "test-client-secret";
 process.env.GOOGLE_REDIRECT_URI =
   "http://localhost:3001/api/auth/callback/google";
 process.env.APP_URL = "http://localhost:3000";
+process.env.ANALYTICS_ENABLED = "true";
+process.env.ANALYTICS_ADMIN_EMAILS = "test@example.com";
 
 // Mock logger to prevent console noise during tests
 jest.mock("../utils/logger", () => ({

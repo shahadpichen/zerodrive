@@ -3,8 +3,17 @@ import express from "express";
 import publicKeysRouter from "../../routes/publicKeys";
 import { query, transaction } from "../../config/database";
 import { deriveLookupCandidates } from "../../utils/identity";
+import { trackEvent } from "../../services/analytics";
 
 jest.mock("../../config/database");
+jest.mock("../../services/analytics", () => ({
+  trackEvent: jest.fn(),
+  AnalyticsEvent: {
+    KEY_SETUP_COMPLETED: "key_setup_completed",
+    KEY_ROTATED: "key_rotated",
+  },
+  AnalyticsCategory: { KEYS: "keys" },
+}));
 
 const ownerLookupId = "a".repeat(64);
 const validPublicKey = JSON.stringify({
@@ -81,6 +90,7 @@ describe("privacy-preserving public key directory", () => {
         expect.stringMatching(/^[0-9a-f]{64}$/),
       ],
     );
+    expect(trackEvent).toHaveBeenCalledWith("key_setup_completed", "keys");
   });
 
   it("retains the previous key and creates a new active version on rotation", async () => {
@@ -121,6 +131,7 @@ describe("privacy-preserving public key directory", () => {
       [ownerLookupId],
     );
     expect(response.body.data.key_version).toBe(2);
+    expect(trackEvent).toHaveBeenCalledWith("key_rotated", "keys");
   });
 
   it("rejects caller-supplied owner identifiers", async () => {
