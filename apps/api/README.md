@@ -163,6 +163,17 @@ The database uses PostgreSQL with the following tables:
 | `DB_PASSWORD`     | `localdev123`                                 | Database password    |
 | `ALLOWED_ORIGINS` | `http://localhost:3000,http://localhost:5173` | CORS allowed origins |
 | `LOG_LEVEL`       | `debug`                                       | Logging level        |
+| `ANALYTICS_ENABLED` | `false`                                     | Enable local aggregate analytics |
+| `ANALYTICS_ADMIN_EMAILS` | none                                  | Comma-separated Google accounts allowed to read analytics |
+
+### Private analytics administration
+
+Analytics are disabled by default and remain inside the deployment's own
+PostgreSQL database. To enable the private `/admin/analytics` dashboard, set
+`ANALYTICS_ENABLED=true` and configure one or more Google accounts in
+`ANALYTICS_ADMIN_EMAILS`. Never commit real administrator addresses or create a
+shared password in the source code. Analytics API reads are authorized by the
+backend; hiding the dashboard link is not the security boundary.
 
 ## Docker Configuration
 

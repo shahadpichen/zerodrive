@@ -55,6 +55,7 @@ router.get("/", (req, res) => {
         "GET /api/invitations/rate-limit/:email": "Check rate limit status",
         "GET /api/analytics/summary": "Get anonymous analytics summary",
         "GET /api/analytics/daily": "Get daily analytics stats",
+        "GET /api/analytics/dimensions": "Get aggregate analytics buckets",
       },
     },
     "ZeroDrive Backend API",

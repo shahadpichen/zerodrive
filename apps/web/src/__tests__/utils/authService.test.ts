@@ -6,6 +6,7 @@
 import {
   isAuthenticated,
   getUserEmail,
+  getAuthenticatedUser,
   logout,
   getCsrfToken,
   getGoogleTokenFromStorage,
@@ -138,6 +139,29 @@ describe("AuthService", () => {
       const result = await getUserEmail();
 
       expect(result).toBeNull();
+    });
+  });
+
+  describe("getAuthenticatedUser", () => {
+    it("returns backend-granted analytics capability without exposing the allowlist", async () => {
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: true,
+        status: 200,
+        headers: new Headers({ "content-type": "application/json" }),
+        json: async () => ({
+          success: true,
+          data: {
+            email: "admin@example.com",
+            emailHash: "a".repeat(64),
+            capabilities: { analyticsRead: true },
+          },
+        }),
+      });
+
+      const user = await getAuthenticatedUser();
+
+      expect(user?.capabilities.analyticsRead).toBe(true);
+      expect(user).not.toHaveProperty("analyticsAdminEmails");
     });
   });
 

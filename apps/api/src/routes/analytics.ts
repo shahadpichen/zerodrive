@@ -12,10 +12,14 @@ import Joi from "joi";
 import {
   getAnalyticsSummary,
   getDailyStats,
+  getDimensionStats,
   trackEvent,
   AnalyticsEvent,
   AnalyticsCategory,
 } from "../services/analytics";
+import { requireAnalyticsAdmin } from "../middleware/analyticsAdmin";
+import { accountLimit } from "../middleware/accountLimits";
+import { isAnalyticsEnabled } from "../config/analytics";
 
 const router = Router();
 const daysSchema = Joi.number().integer().min(1).max(365).default(30);
@@ -31,7 +35,24 @@ const trackEventSchema = Joi.object({
     .default(AnalyticsCategory.FILES),
   metadata: Joi.object({
     source: Joi.string().valid("upload", "download").optional(),
-  }).optional(),
+    size_bucket: Joi.string()
+      .valid("<1MB", "1-10MB", "10-50MB", "50-100MB", ">100MB")
+      .optional(),
+    file_category: Joi.string()
+      .valid(
+        "image",
+        "video",
+        "audio",
+        "text",
+        "document",
+        "archive",
+        "other",
+        "unknown",
+      )
+      .optional(),
+  })
+    .min(1)
+    .optional(),
 }).options({ allowUnknown: false });
 
 function parseDays(value: unknown): number {
@@ -50,6 +71,7 @@ function parseDays(value: unknown): number {
  */
 router.get(
   "/summary",
+  requireAnalyticsAdmin,
   asyncHandler(async (req: Request, res: Response) => {
     const daysNum = parseDays(req.query.days);
     const endDate = new Date();
@@ -68,11 +90,22 @@ router.get(
  */
 router.get(
   "/daily",
+  requireAnalyticsAdmin,
   asyncHandler(async (req: Request, res: Response) => {
     const daysNum = parseDays(req.query.days);
     const stats = await getDailyStats(daysNum);
 
     res.apiSuccess(stats, `Daily stats for last ${daysNum} days`);
+  }),
+);
+
+router.get(
+  "/dimensions",
+  requireAnalyticsAdmin,
+  asyncHandler(async (req: Request, res: Response) => {
+    const daysNum = parseDays(req.query.days);
+    const stats = await getDimensionStats(daysNum);
+    res.apiSuccess(stats, `Analytics dimensions for last ${daysNum} days`);
   }),
 );
 
@@ -82,6 +115,11 @@ router.get(
  */
 router.post(
   "/track",
+  accountLimit({
+    name: "analytics-track",
+    max: process.env.NODE_ENV === "test" ? 1000 : 120,
+    windowMs: 60 * 60 * 1000,
+  }),
   asyncHandler(async (req: Request, res: Response) => {
     // Validate request body
     const { error, value } = trackEventSchema.validate(req.body);
@@ -90,6 +128,11 @@ router.post(
     }
 
     const { event, category, metadata } = value;
+
+    if (!isAnalyticsEnabled()) {
+      res.apiSuccess({ tracked: false }, "Analytics are disabled");
+      return;
+    }
 
     // Track the event
     await trackEvent(

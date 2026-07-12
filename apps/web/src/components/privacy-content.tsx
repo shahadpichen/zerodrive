@@ -7,7 +7,7 @@ export const privacyPolicy = [
   {
     heading: "Data Collection",
     content:
-      "ZeroDrive does not collect or store any personal data. All files uploaded via ZeroDrive are encrypted locally on your device before being stored in your Google Drive account. We do not: collect or store your Google account details, access, view, or track the files you upload, or use third-party analytics or advertising tools that track user activity.",
+      "ZeroDrive does not use third-party analytics, advertising trackers, user profiles, or raw activity logs. Files are encrypted on your device before being stored in Google Drive. A deployment may enable first-party daily aggregate counters to understand whether core features work. These counters contain no emails, account identifiers, IP addresses, sessions, filenames, file IDs, or browser fingerprints.",
   },
   {
     heading: "Local Data Storage",

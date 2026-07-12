@@ -12,6 +12,11 @@ import { PublicKey } from "../types";
 import { deriveLookupCandidates } from "../utils/identity";
 import crypto from "crypto";
 import { accountLimit } from "../middleware/accountLimits";
+import {
+  AnalyticsCategory,
+  AnalyticsEvent,
+  trackEvent,
+} from "../services/analytics";
 
 const router = Router();
 
@@ -135,6 +140,15 @@ router.post(
         );
         return { record: inserted.rows[0], created: true };
       });
+
+      if (stored.created) {
+        void trackEvent(
+          Number(stored.record.key_version) === 1
+            ? AnalyticsEvent.KEY_SETUP_COMPLETED
+            : AnalyticsEvent.KEY_ROTATED,
+          AnalyticsCategory.KEYS,
+        );
+      }
 
       res.apiSuccess(
         toClientPublicKey(stored.record),

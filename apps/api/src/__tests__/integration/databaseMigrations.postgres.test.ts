@@ -75,12 +75,24 @@ describeWithPostgres("database migrations against PostgreSQL", () => {
          EXISTS (
            SELECT 1 FROM information_schema.columns
            WHERE table_name = 'shared_files' AND column_name = 'encrypted_metadata'
-         ) AS encrypted_metadata`,
+         ) AS encrypted_metadata,
+         to_regclass('public.analytics_daily_summary') IS NOT NULL
+           AS analytics_summary,
+         to_regclass('public.analytics_daily_dimensions') IS NOT NULL
+           AS analytics_dimensions,
+         EXISTS (
+           SELECT 1 FROM information_schema.columns
+           WHERE table_name = 'analytics_daily_summary'
+             AND column_name = 'total_key_rotations'
+         ) AS analytics_lifecycle`,
     );
     expect(result.rows[0]).toEqual({
       oauth_exchanges: true,
       capability_index: true,
       encrypted_metadata: true,
+      analytics_summary: true,
+      analytics_dimensions: true,
+      analytics_lifecycle: true,
     });
   });
 });

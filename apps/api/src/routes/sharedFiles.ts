@@ -266,6 +266,8 @@ router.post(
       throw ApiErrors.Conflict("Share could not be finalized");
     }
 
+    void trackEvent(AnalyticsEvent.SHARE_FINALIZED, AnalyticsCategory.SHARING);
+
     res.apiSuccess(toClientSharedFile(activated.rows[0]), "Share finalized");
   }),
 );
@@ -579,6 +581,7 @@ router.delete(
       }
 
       await query("DELETE FROM shared_files WHERE id = $1", [id]);
+      void trackEvent(AnalyticsEvent.SHARE_REVOKED, AnalyticsCategory.SHARING);
       res.apiSuccess({ deleted: true }, "File sharing revoked successfully");
     } catch (error) {
       if (error instanceof ApiError) {

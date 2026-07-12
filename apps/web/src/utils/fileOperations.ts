@@ -120,7 +120,7 @@ export const uploadAndSyncFile = async (
     });
 
     // Track analytics
-    await trackFileAddedToDrive('upload');
+    await trackFileAddedToDrive("upload", file.size, file.type);
 
     return newFileMeta;
   } catch (error: any) {
