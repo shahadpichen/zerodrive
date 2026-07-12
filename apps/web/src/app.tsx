@@ -22,6 +22,7 @@ import KeyTestPage from "./pages/KeyTestPage";
 import { isAuthenticated as checkAuth } from "./utils/authService";
 import { useRsaKeyRecovery } from "./hooks/useRsaKeyRecovery";
 import { AuthenticatedLayout } from "./components/layout/authenticated-layout";
+import AnalyticsDashboard from "./pages/analytics-dashboard";
 
 // Polyfill global Buffer for libraries that expect it (e.g., bip39)
 window.Buffer = Buffer as any;
@@ -126,6 +127,16 @@ function App() {
             <ProtectedRoute>
               <AuthenticatedLayout>
                 <KeyTestPage />
+              </AuthenticatedLayout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/analytics"
+          element={
+            <ProtectedRoute>
+              <AuthenticatedLayout>
+                <AnalyticsDashboard />
               </AuthenticatedLayout>
             </ProtectedRoute>
           }

@@ -32,6 +32,7 @@ global.fetch = jest.fn();
 
 const mockAddFile = jest.fn();
 const mockGetAllFilesForUser = jest.fn();
+const mockGetFoldersForUser = jest.fn();
 const mockDeleteFileFromDB = jest.fn();
 const mockSendToGoogleDrive = jest.fn();
 const mockClearUserFilesFromDB = jest.fn();
@@ -39,6 +40,7 @@ const mockClearUserFilesFromDB = jest.fn();
 jest.mock('../../utils/dexieDB', () => ({
   addFile: (...args: any[]) => mockAddFile(...args),
   getAllFilesForUser: (...args: any[]) => mockGetAllFilesForUser(...args),
+  getFoldersForUser: (...args: any[]) => mockGetFoldersForUser(...args),
   deleteFileFromDB: (...args: any[]) => mockDeleteFileFromDB(...args),
   sendToGoogleDrive: (...args: any[]) => mockSendToGoogleDrive(...args),
   clearUserFilesFromDB: (...args: any[]) => mockClearUserFilesFromDB(...args),
@@ -75,6 +77,7 @@ describe('FileOperations', () => {
     mockGetStoredKey.mockResolvedValue(mockKey);
     mockGetGoogleAccessToken.mockResolvedValue(mockToken);
     mockEncryptFile.mockResolvedValue(mockEncryptedBlob);
+    mockGetFoldersForUser.mockResolvedValue([]);
     (global.fetch as jest.Mock).mockClear();
   });
 
@@ -108,7 +111,11 @@ describe('FileOperations', () => {
         })
       );
       expect(mockSendToGoogleDrive).toHaveBeenCalled();
-      expect(mockTrackFileAddedToDrive).toHaveBeenCalledWith('upload');
+      expect(mockTrackFileAddedToDrive).toHaveBeenCalledWith(
+        "upload",
+        testFile.size,
+        testFile.type,
+      );
       expect(toast.success).toHaveBeenCalled();
     });
 
@@ -314,7 +321,7 @@ describe('FileOperations', () => {
       expect(result).toBe(true);
       expect(global.fetch).toHaveBeenCalledTimes(2); // 2 files deleted
       expect(mockClearUserFilesFromDB).toHaveBeenCalledWith(testUser);
-      expect(mockSendToGoogleDrive).toHaveBeenCalledWith([]); // Empty array
+      expect(mockSendToGoogleDrive).toHaveBeenCalledWith([], []); // Empty files and folders
       expect(toast.success).toHaveBeenCalled();
     });
 

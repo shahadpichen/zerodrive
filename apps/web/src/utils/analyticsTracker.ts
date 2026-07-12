@@ -126,11 +126,43 @@ export async function trackLogin(
  */
 export async function trackFileAddedToDrive(
   source: "upload" | "download",
+  sizeBytes?: number,
+  mimeType?: string,
 ): Promise<void> {
+  const metadata: Record<string, string> = { source };
+  if (typeof sizeBytes === "number") {
+    const MB = 1024 * 1024;
+    metadata.size_bucket =
+      sizeBytes < MB
+        ? "<1MB"
+        : sizeBytes < 10 * MB
+          ? "1-10MB"
+          : sizeBytes < 50 * MB
+            ? "10-50MB"
+            : sizeBytes < 100 * MB
+              ? "50-100MB"
+              : ">100MB";
+  }
+  if (mimeType) {
+    const broadType = mimeType.split("/")[0];
+    const archiveTypes = [
+      "application/zip",
+      "application/gzip",
+      "application/x-rar-compressed",
+      "application/x-7z-compressed",
+    ];
+    metadata.file_category = archiveTypes.includes(mimeType)
+      ? "archive"
+      : ["image", "video", "audio", "text"].includes(broadType)
+        ? broadType
+        : broadType === "application"
+          ? "document"
+          : "other";
+  }
   await trackEvent(
     AnalyticsEvent.FILE_ADDED_TO_DRIVE,
     AnalyticsCategory.FILES,
-    { source },
+    metadata,
   );
 }
 

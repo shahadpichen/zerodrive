@@ -82,6 +82,20 @@ describe("AnalyticsTracker", () => {
     });
   });
 
+  it("sends only coarse size and file-category buckets", async () => {
+    await trackFileAddedToDrive("upload", 5 * 1024 * 1024, "image/png");
+
+    expect(mockPost).toHaveBeenCalledWith("/analytics/track", {
+      event: AnalyticsEvent.FILE_ADDED_TO_DRIVE,
+      category: AnalyticsCategory.FILES,
+      metadata: {
+        source: "upload",
+        size_bucket: "1-10MB",
+        file_category: "image",
+      },
+    });
+  });
+
   it("keeps the default export stable", () => {
     expect(analyticsTracker.trackEvent).toBe(trackEvent);
     expect(analyticsTracker.trackLogin).toBe(trackLogin);

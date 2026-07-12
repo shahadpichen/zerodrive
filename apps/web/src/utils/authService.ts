@@ -5,6 +5,7 @@
 
 import apiClient from "./apiClient";
 import logger from "./logger";
+import type { AuthenticatedUser } from "@zerodrive/shared-types";
 
 const API_URL = process.env.REACT_APP_API_URL || "http://localhost:3001/api";
 
@@ -105,9 +106,7 @@ export async function isAuthenticated(): Promise<boolean> {
   }
 
   try {
-    const response = await apiClient.get<{ email: string; emailHash: string }>(
-      "/auth/me",
-    );
+    const response = await apiClient.get<AuthenticatedUser>("/auth/me");
     return response.success && !!response.data?.email;
   } catch (error) {
     logger.error("[Auth] Authentication check failed:", error);
@@ -120,12 +119,20 @@ export async function isAuthenticated(): Promise<boolean> {
  */
 export async function getUserEmail(): Promise<string | null> {
   try {
-    const response = await apiClient.get<{ email: string; emailHash: string }>(
-      "/auth/me",
-    );
+    const response = await apiClient.get<AuthenticatedUser>("/auth/me");
     return response.data?.email || null;
   } catch (error) {
     logger.error("Failed to get user email:", error);
+    return null;
+  }
+}
+
+export async function getAuthenticatedUser(): Promise<AuthenticatedUser | null> {
+  try {
+    const response = await apiClient.get<AuthenticatedUser>("/auth/me");
+    return response.success && response.data ? response.data : null;
+  } catch (error) {
+    logger.error("Failed to get authenticated user:", error);
     return null;
   }
 }

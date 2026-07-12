@@ -9,6 +9,7 @@ import {
   Check,
   AlertTriangle,
   LogOut,
+  BarChart3,
 } from "lucide-react";
 import { AppProvider, useApp } from "../contexts/app-context";
 import { ModeToggle } from "../components/mode-toggle";
@@ -74,24 +75,30 @@ function HomeContent() {
 
   const [counts, setCounts] = useState({ files: 0, folders: 0 });
   const [recent, setRecent] = useState<FileMeta[]>([]);
+  const [canReadAnalytics, setCanReadAnalytics] = useState(false);
   const [tip] = useState(() => TIPS[Math.floor(Math.random() * TIPS.length)]);
 
   useEffect(() => {
     const bootstrap = async () => {
       try {
         const {
-          getUserEmail,
           hasGoogleTokensInStorage,
           logout,
           getUserProfile,
+          getAuthenticatedUser,
         } = await import("../utils/authService");
 
-        const email = await getUserEmail();
+        const authenticatedUser = await getAuthenticatedUser();
+        const email = authenticatedUser?.email;
         if (!email) {
           await logout();
           window.location.href = "/";
           return;
         }
+
+        setCanReadAnalytics(
+          !!authenticatedUser?.capabilities.analyticsRead,
+        );
 
         if (!hasGoogleTokensInStorage()) {
           await logout();
@@ -192,6 +199,16 @@ function HomeContent() {
       icon: Key,
       path: "/key-management",
     },
+    ...(canReadAnalytics
+      ? [
+          {
+            title: "Analytics",
+            subtitle: "Private aggregate operator metrics",
+            icon: BarChart3,
+            path: "/admin/analytics",
+          },
+        ]
+      : []),
   ];
 
   return (

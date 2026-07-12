@@ -1,8 +1,13 @@
-import React, { useState, useEffect } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Button } from "../components/ui/button";
-import { ArrowLeft } from "lucide-react";
+import type {
+  AnalyticsDailyStat,
+  AnalyticsDimensionBucket,
+  AnalyticsSummary,
+} from "@zerodrive/shared-types";
 import { toast } from "sonner";
+import apiClient, { ApiError } from "../utils/apiClient";
+import { Button } from "../components/ui/button";
 import {
   Card,
   CardContent,
@@ -10,244 +15,408 @@ import {
   CardHeader,
   CardTitle,
 } from "../components/ui/card";
-import apiClient from "../utils/apiClient";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "../components/ui/table";
 
-interface AnalyticsSummary {
-  totalEvents: number;
-  eventsByType: Record<string, number>;
-  eventsByCategory: Record<string, number>;
+type RangeDays = 7 | 30 | 90 | 365;
+
+const RANGES: RangeDays[] = [7, 30, 90, 365];
+
+function formatDate(date: string): string {
+  return new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+  }).format(new Date(`${date.slice(0, 10)}T00:00:00`));
 }
 
-interface DailyStat {
-  date: string;
-  logins: number;
-  uploads: number;
-  shares: number;
-  errors: number;
+function LoadingState() {
+  return (
+    <div className="space-y-8 p-6 md:p-10" aria-label="Loading analytics">
+      <div className="h-28 animate-pulse border bg-muted/40" />
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        {[0, 1, 2, 3].map((item) => (
+          <div key={item} className="h-32 animate-pulse border bg-muted/40" />
+        ))}
+      </div>
+      <div className="h-72 animate-pulse border bg-muted/40" />
+    </div>
+  );
 }
 
-const AnalyticsDashboard: React.FC = () => {
-  const navigate = useNavigate();
-  const [summary, setSummary] = useState<AnalyticsSummary | null>(null);
-  const [dailyStats, setDailyStats] = useState<DailyStat[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [days, setDays] = useState(30);
+function DailyBars({ stats }: { stats: AnalyticsDailyStat[] }) {
+  const visible = stats.slice(-30);
+  const max = Math.max(
+    1,
+    ...visible.map(
+      (day) =>
+        day.logins +
+        day.filesAdded +
+        day.shares +
+        day.downloads +
+        day.sharesFinalized +
+        day.sharesRevoked +
+        day.keySetups +
+        day.keyRotations,
+    ),
+  );
 
-  useEffect(() => {
-    const loadAnalytics = async () => {
-      setIsLoading(true);
-      try {
-        // Load summary
-        const summaryResponse = await apiClient.get<AnalyticsSummary>(`/analytics/summary?days=${days}`);
-        if (summaryResponse.success && summaryResponse.data) {
-          setSummary(summaryResponse.data);
-        }
-
-        // Load daily stats
-        const dailyResponse = await apiClient.get<DailyStat[]>(`/analytics/daily?days=${days}`);
-        if (dailyResponse.success && dailyResponse.data) {
-          setDailyStats(dailyResponse.data);
-        }
-      } catch (error) {
-        console.error("Error loading analytics:", error);
-        toast.error("Failed to load analytics");
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    loadAnalytics();
-  }, [days]);
-
-  if (isLoading) {
+  if (visible.length === 0) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <p>Loading analytics...</p>
+      <div className="flex h-52 items-center justify-center border border-dashed text-sm text-muted-foreground">
+        No activity has been counted in this period.
       </div>
     );
   }
 
-  const totalLogins = Object.entries(summary?.eventsByType || {})
-    .find(([key]) => key === "user_login")?.[1] || 0;
-  const totalUploads = Object.entries(summary?.eventsByType || {})
-    .find(([key]) => key === "file_uploaded")?.[1] || 0;
-  const totalShares = Object.entries(summary?.eventsByType || {})
-    .find(([key]) => key === "file_shared")?.[1] || 0;
-  const totalInvitations = Object.entries(summary?.eventsByType || {})
-    .find(([key]) => key === "invitation_sent")?.[1] || 0;
-
   return (
-    <div className="container mx-auto min-h-screen bg-background p-6">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-bold">Anonymous Analytics</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Privacy-safe usage statistics (no user tracking)
-          </p>
-        </div>
-        <Button
-          variant="outline"
-          size="icon"
-          onClick={() => navigate("/storage")}
-          aria-label="Back to Storage"
-        >
-          <ArrowLeft className="h-4 w-4" />
-        </Button>
+    <div className="overflow-x-auto pb-2">
+      <div className="flex h-56 min-w-[680px] items-end gap-2 border-b px-2 pt-4">
+        {visible.map((day) => {
+          const total =
+            day.logins +
+            day.filesAdded +
+            day.shares +
+            day.downloads +
+            day.sharesFinalized +
+            day.sharesRevoked +
+            day.keySetups +
+            day.keyRotations;
+          const height = Math.max(total > 0 ? 6 : 2, (total / max) * 100);
+          return (
+            <div
+              key={day.date}
+              className="group flex min-w-0 flex-1 flex-col items-center justify-end gap-2"
+            >
+              <span className="text-[10px] text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100">
+                {total}
+              </span>
+              <div
+                className="w-full bg-card-foreground/85 transition-colors group-hover:bg-primary"
+                style={{ height: `${height}%` }}
+                title={`${formatDate(day.date)}: ${total} counted events`}
+              />
+              <span className="whitespace-nowrap text-[9px] text-muted-foreground">
+                {formatDate(day.date)}
+              </span>
+            </div>
+          );
+        })}
       </div>
-
-      {/* Time range selector */}
-      <div className="mb-6">
-        <div className="flex gap-2">
-          <Button
-            variant={days === 7 ? "default" : "outline"}
-            size="sm"
-            onClick={() => setDays(7)}
-          >
-            7 Days
-          </Button>
-          <Button
-            variant={days === 30 ? "default" : "outline"}
-            size="sm"
-            onClick={() => setDays(30)}
-          >
-            30 Days
-          </Button>
-          <Button
-            variant={days === 90 ? "default" : "outline"}
-            size="sm"
-            onClick={() => setDays(90)}
-          >
-            90 Days
-          </Button>
-        </div>
-      </div>
-
-      {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium">Total Logins</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{totalLogins}</div>
-            <p className="text-xs text-muted-foreground mt-1">
-              Last {days} days
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium">Files Uploaded</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{totalUploads}</div>
-            <p className="text-xs text-muted-foreground mt-1">
-              Last {days} days
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium">Files Shared</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{totalShares}</div>
-            <p className="text-xs text-muted-foreground mt-1">
-              Last {days} days
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium">Invitations Sent</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{totalInvitations}</div>
-            <p className="text-xs text-muted-foreground mt-1">
-              Last {days} days
-            </p>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Events by Category */}
-      <Card className="mb-6">
-        <CardHeader>
-          <CardTitle>Events by Category</CardTitle>
-          <CardDescription>Breakdown of all events</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-2">
-            {Object.entries(summary?.eventsByCategory || {}).map(
-              ([category, count]) => (
-                <div key={category} className="flex justify-between items-center">
-                  <span className="text-sm capitalize">{category}</span>
-                  <span className="text-sm font-medium">{count}</span>
-                </div>
-              )
-            )}
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Daily Activity Table */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Daily Activity</CardTitle>
-          <CardDescription>Event counts per day</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b">
-                  <th className="text-left py-2 px-4 text-sm font-medium">Date</th>
-                  <th className="text-right py-2 px-4 text-sm font-medium">Logins</th>
-                  <th className="text-right py-2 px-4 text-sm font-medium">Uploads</th>
-                  <th className="text-right py-2 px-4 text-sm font-medium">Shares</th>
-                  <th className="text-right py-2 px-4 text-sm font-medium">Errors</th>
-                </tr>
-              </thead>
-              <tbody>
-                {dailyStats.map((stat) => (
-                  <tr key={stat.date} className="border-b">
-                    <td className="py-2 px-4 text-sm">
-                      {new Date(stat.date).toLocaleDateString()}
-                    </td>
-                    <td className="py-2 px-4 text-sm text-right">{stat.logins}</td>
-                    <td className="py-2 px-4 text-sm text-right">{stat.uploads}</td>
-                    <td className="py-2 px-4 text-sm text-right">{stat.shares}</td>
-                    <td className="py-2 px-4 text-sm text-right">
-                      <span className={stat.errors > 0 ? "text-red-500" : ""}>
-                        {stat.errors}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Privacy Notice */}
-      <Card className="mt-6 border-blue-200 bg-blue-50/50 dark:border-blue-800 dark:bg-blue-950/50">
-        <CardHeader>
-          <CardTitle className="text-sm">🔒 Privacy-First Analytics</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="text-xs text-muted-foreground">
-            These analytics are completely anonymous. We track event counts, not users.
-            No emails, IP addresses, or personal identifiers are stored.
-          </p>
-        </CardContent>
-      </Card>
     </div>
   );
-};
+}
 
-export default AnalyticsDashboard;
+function DimensionList({
+  title,
+  description,
+  buckets,
+}: {
+  title: string;
+  description: string;
+  buckets: AnalyticsDimensionBucket[];
+}) {
+  const visibleCounts = buckets
+    .map((bucket) => bucket.count || 0)
+    .filter((count) => count > 0);
+  const max = Math.max(1, ...visibleCounts);
+
+  return (
+    <Card className="shadow-none">
+      <CardHeader>
+        <CardTitle className="text-base">{title}</CardTitle>
+        <CardDescription>{description}</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {buckets.length === 0 && (
+          <p className="text-sm text-muted-foreground">No bucket data yet.</p>
+        )}
+        {buckets.map((bucket) => (
+          <div key={`${bucket.metric}-${bucket.dimension}-${bucket.bucket}`}>
+            <div className="mb-1.5 flex items-center justify-between gap-4 text-xs">
+              <span className="truncate">{bucket.bucket}</span>
+              <span className="text-muted-foreground">
+                {bucket.suppressed ? "< 5" : bucket.count}
+              </span>
+            </div>
+            <div className="h-1.5 bg-muted">
+              <div
+                className="h-full bg-card-foreground"
+                style={{
+                  width: bucket.suppressed
+                    ? "4%"
+                    : `${Math.max(4, ((bucket.count || 0) / max) * 100)}%`,
+                }}
+              />
+            </div>
+          </div>
+        ))}
+      </CardContent>
+    </Card>
+  );
+}
+
+export default function AnalyticsDashboard() {
+  const navigate = useNavigate();
+  const [days, setDays] = useState<RangeDays>(30);
+  const [summary, setSummary] = useState<AnalyticsSummary | null>(null);
+  const [daily, setDaily] = useState<AnalyticsDailyStat[]>([]);
+  const [dimensions, setDimensions] = useState<AnalyticsDimensionBucket[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let active = true;
+    const load = async () => {
+      setLoading(true);
+      try {
+        const [summaryResponse, dailyResponse, dimensionResponse] =
+          await Promise.all([
+            apiClient.get<AnalyticsSummary>(`/analytics/summary?days=${days}`),
+            apiClient.get<AnalyticsDailyStat[]>(`/analytics/daily?days=${days}`),
+            apiClient.get<AnalyticsDimensionBucket[]>(
+              `/analytics/dimensions?days=${days}`,
+            ),
+          ]);
+
+        if (!active) return;
+        setSummary(summaryResponse.data || null);
+        setDaily(dailyResponse.data || []);
+        setDimensions(dimensionResponse.data || []);
+      } catch (error) {
+        if (!active) return;
+        if (error instanceof ApiError && [401, 403].includes(error.statusCode)) {
+          toast.error("Analytics administrator access is required");
+          navigate("/home", { replace: true });
+          return;
+        }
+        toast.error(
+          error instanceof ApiError && error.statusCode === 503
+            ? "Analytics are disabled for this deployment"
+            : "Analytics could not be loaded",
+        );
+      } finally {
+        if (active) setLoading(false);
+      }
+    };
+    void load();
+    return () => {
+      active = false;
+    };
+  }, [days, navigate]);
+
+  const dimensionsByName = useMemo(() => {
+    const grouped = new Map<string, AnalyticsDimensionBucket[]>();
+    dimensions.forEach((bucket) => {
+      const key = `${bucket.metric}:${bucket.dimension}`;
+      grouped.set(key, [...(grouped.get(key) || []), bucket]);
+    });
+    return grouped;
+  }, [dimensions]);
+
+  if (loading && !summary) return <LoadingState />;
+
+  const totals = summary?.totals;
+  const cards = [
+    ["Successful logins", totals?.logins || 0, "Authentication events"],
+    ["Files added", totals?.filesAdded || 0, "Client-reported Drive actions"],
+    ["Shares created", totals?.shares || 0, "Encrypted share records"],
+    ["Files accessed", totals?.downloads || 0, "Recipient access events"],
+  ] as const;
+
+  return (
+    <main className="w-full space-y-10 p-6 md:p-10">
+      <section className="border px-6 py-8 md:px-10 md:py-12">
+        <div className="flex flex-col justify-between gap-8 lg:flex-row lg:items-end">
+          <div className="max-w-3xl">
+            <p className="mb-4 text-xs uppercase tracking-[0.22em] text-muted-foreground">
+              Private operator view
+            </p>
+            <h1 className="text-3xl leading-tight md:text-5xl">
+              Understand ZeroDrive without tracking its users.
+            </h1>
+            <p className="mt-5 max-w-2xl text-sm leading-7 text-muted-foreground md:text-base">
+              Daily aggregate counters from this deployment. These numbers
+              count events, not people, and cannot be used to inspect an
+              individual account or file.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2" aria-label="Analytics period">
+            {RANGES.map((range) => (
+              <Button
+                key={range}
+                size="sm"
+                variant={days === range ? "default" : "outline"}
+                onClick={() => setDays(range)}
+              >
+                {range === 365 ? "1 year" : `${range} days`}
+              </Button>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <Card className="shadow-none">
+        <CardHeader>
+          <CardTitle>Lifecycle outcomes</CardTitle>
+          <CardDescription>
+            Server-confirmed key and sharing transitions.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-6 sm:grid-cols-2 lg:grid-cols-5">
+          {[
+            ["Key setups", totals?.keySetups || 0],
+            ["Key rotations", totals?.keyRotations || 0],
+            ["Shares finalized", totals?.sharesFinalized || 0],
+            ["Shares revoked", totals?.sharesRevoked || 0],
+            ["Invitations", totals?.invitations || 0],
+          ].map(([label, value]) => (
+            <div key={label} className="border-l-2 pl-4">
+              <p className="text-xs text-muted-foreground">{label}</p>
+              <p className="mt-2 text-2xl">{value}</p>
+            </div>
+          ))}
+        </CardContent>
+      </Card>
+
+      <section>
+        <div className="mb-5 flex items-end justify-between gap-4">
+          <div>
+            <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
+              Overview
+            </p>
+            <h2 className="mt-2 text-2xl">Last {days} days</h2>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            {summary?.totalEvents || 0} total counted events
+          </p>
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          {cards.map(([label, value, description]) => (
+            <Card key={label} className="shadow-none">
+              <CardHeader className="pb-3">
+                <CardDescription>{label}</CardDescription>
+                <CardTitle className="text-3xl font-normal">{value}</CardTitle>
+              </CardHeader>
+              <CardContent className="text-xs text-muted-foreground">
+                {description}
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </section>
+
+      <Card className="shadow-none">
+        <CardHeader>
+          <CardTitle>Daily activity</CardTitle>
+          <CardDescription>
+            Up to the latest 30 days are drawn for readability.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <DailyBars stats={daily} />
+        </CardContent>
+      </Card>
+
+      <section>
+        <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
+          Coarse distributions
+        </p>
+        <h2 className="mb-5 mt-2 text-2xl">Patterns without identities</h2>
+        <div className="grid gap-4 lg:grid-cols-2">
+          <DimensionList
+            title="Drive action source"
+            description="How encrypted files entered Drive."
+            buckets={dimensionsByName.get("file_added_to_drive:source") || []}
+          />
+          <DimensionList
+            title="File categories"
+            description="Broad categories only; exact MIME types are never retained."
+            buckets={
+              dimensionsByName.get("file_added_to_drive:file_category") || []
+            }
+          />
+          <DimensionList
+            title="Drive file sizes"
+            description="Coarse size ranges reported by the client."
+            buckets={
+              dimensionsByName.get("file_added_to_drive:size_bucket") || []
+            }
+          />
+          <DimensionList
+            title="Shared file sizes"
+            description="Coarse encrypted-share size ranges."
+            buckets={dimensionsByName.get("file_shared:size_bucket") || []}
+          />
+        </div>
+      </section>
+
+      <Card className="shadow-none">
+        <CardHeader>
+          <CardTitle>Daily counters</CardTitle>
+          <CardDescription>
+            Aggregate records retained for a maximum of 365 days.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Date</TableHead>
+                <TableHead className="text-right">Logins</TableHead>
+                <TableHead className="text-right">New setup</TableHead>
+                <TableHead className="text-right">Files</TableHead>
+                <TableHead className="text-right">Shares</TableHead>
+                <TableHead className="text-right">Finalized</TableHead>
+                <TableHead className="text-right">Accessed</TableHead>
+                <TableHead className="text-right">Keys</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {daily.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={8} className="h-24 text-center text-muted-foreground">
+                    No aggregate counters are available for this period.
+                  </TableCell>
+                </TableRow>
+              )}
+              {[...daily].reverse().map((stat) => (
+                <TableRow key={stat.date}>
+                  <TableCell>{formatDate(stat.date)}</TableCell>
+                  <TableCell className="text-right">{stat.logins}</TableCell>
+                  <TableCell className="text-right">{stat.newUsers}</TableCell>
+                  <TableCell className="text-right">{stat.filesAdded}</TableCell>
+                  <TableCell className="text-right">{stat.shares}</TableCell>
+                  <TableCell className="text-right">
+                    {stat.sharesFinalized}
+                  </TableCell>
+                  <TableCell className="text-right">{stat.downloads}</TableCell>
+                  <TableCell className="text-right">
+                    {stat.keySetups + stat.keyRotations}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+
+      <section className="border-2 px-6 py-7 md:px-8">
+        <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
+          Privacy boundary
+        </p>
+        <h2 className="mt-2 text-xl">What this dashboard cannot show</h2>
+        <p className="mt-3 max-w-4xl text-sm leading-7 text-muted-foreground">
+          ZeroDrive does not keep raw analytics events, unique-user counts,
+          sessions, emails, IP addresses, filenames, exact file sizes, object
+          keys, or sender identities. Buckets containing fewer than five events
+          are suppressed in this view.
+        </p>
+      </section>
+    </main>
+  );
+}
