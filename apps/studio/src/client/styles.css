@@ -46,37 +46,76 @@ textarea:focus-visible {
 .studio-shell {
   min-height: 100vh;
   display: grid;
-  grid-template-rows: auto auto 1fr auto;
+  grid-template-rows: auto 1fr auto;
 }
 .topbar {
-  min-height: 72px;
-  padding: 0 3vw;
+  height: clamp(72px, 10vh, 96px);
+  padding: 0 clamp(16px, 3vw, 40px);
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 32px;
   border-bottom: 1px solid var(--border);
+  position: relative;
+  background: var(--background);
+  z-index: 10;
 }
 .brand {
   border: 0;
   background: transparent;
   display: inline-flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   cursor: pointer;
   padding: 0;
 }
-.brand > span {
-  width: 38px;
-  height: 38px;
-  display: grid;
-  place-items: center;
-  background: var(--foreground);
-  color: var(--background);
-  font-size: 13px;
-  font-weight: 600;
+.brand-logo-frame {
+  width: 44px;
+  height: 44px;
+  display: block;
+  overflow: hidden;
+  flex: 0 0 auto;
+}
+.brand-logo {
+  display: block;
+  width: 68px;
+  height: 68px;
+  max-width: none;
+  transform: translate(-12px, -9px);
 }
 .brand strong {
-  font-size: 16px;
+  font-size: 18px;
+  font-weight: 600;
+}
+.desktop-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 22px;
+}
+.header-nav {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+.header-nav-link {
+  border: 0;
+  background: transparent;
+  padding: 5px 0;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--muted);
+  text-underline-offset: 4px;
+}
+.header-nav-link:hover,
+.header-nav-link--active {
+  color: var(--foreground);
+  text-decoration: underline;
+}
+.header-divider {
+  width: 1px;
+  height: 26px;
+  background: var(--border);
 }
 .topbar-status {
   display: flex;
@@ -106,27 +145,55 @@ textarea:focus-visible {
   border-color: #a58d3d;
   background: #fff9dd;
 }
-
-.primary-nav {
-  padding: 0 3vw;
-  display: flex;
-  gap: 30px;
-  border-bottom: 1px solid var(--border);
-  overflow-x: auto;
+.mobile-header-actions {
+  display: none;
+  align-items: center;
+  gap: 10px;
 }
-.nav-link {
-  padding: 16px 0 13px;
-  border: 0;
-  border-bottom: 3px solid transparent;
+.menu-trigger {
+  min-height: 38px;
+  padding: 0 14px;
+  border: 1px solid var(--border);
   background: transparent;
   cursor: pointer;
-  white-space: nowrap;
-  color: var(--muted);
+  font-size: 14px;
+  font-weight: 500;
+}
+.menu-trigger:hover {
+  background: var(--soft);
+}
+.mobile-menu {
+  position: absolute;
+  top: calc(100% - 1px);
+  right: 16px;
+  width: min(280px, calc(100vw - 32px));
+  border: 1px solid var(--border);
+  background: var(--background);
+  box-shadow: 8px 8px 0 rgba(16, 16, 15, 0.1);
+}
+.mobile-menu nav {
+  display: grid;
+}
+.mobile-menu-link {
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+  padding: 14px 16px;
+  text-align: left;
+  cursor: pointer;
   font-size: 14px;
 }
-.nav-link--active {
-  color: var(--foreground);
-  border-bottom-color: var(--foreground);
+.mobile-menu-link:hover,
+.mobile-menu-link--active {
+  background: var(--soft);
+  color: var(--navy);
+}
+.mobile-menu-status {
+  display: grid;
+  gap: 8px;
+  padding: 14px 16px;
+  color: var(--muted);
+  font-size: 12px;
 }
 .studio-main {
   width: min(1180px, 94vw);
@@ -622,6 +689,12 @@ textarea:focus-visible {
 }
 
 @media (max-width: 900px) {
+  .desktop-header-actions {
+    display: none;
+  }
+  .mobile-header-actions {
+    display: flex;
+  }
   .metric-grid {
     grid-template-columns: repeat(2, 1fr);
   }
@@ -647,11 +720,23 @@ textarea:focus-visible {
 
 @media (max-width: 640px) {
   .topbar {
-    min-height: 64px;
+    height: 72px;
+    gap: 14px;
   }
-  .brand strong,
-  .connection-state {
+  .brand strong {
     display: none;
+  }
+  .brand-logo-frame {
+    width: 40px;
+    height: 40px;
+  }
+  .brand-logo {
+    width: 62px;
+    height: 62px;
+    transform: translate(-11px, -8px);
+  }
+  .mobile-header-actions .profile-pill {
+    font-size: 10px;
   }
   .studio-main {
     padding-top: 30px;

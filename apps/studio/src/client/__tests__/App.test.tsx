@@ -39,6 +39,12 @@ describe("ZeroDrive Studio shell", () => {
     expect(
       await screen.findByText("Your database, without the guesswork."),
     ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "ZeroDrive Studio" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("navigation", { name: "Studio navigation" }),
+    ).toBeInTheDocument();
     expect(screen.getByText("PostgreSQL connected")).toBeInTheDocument();
     expect(screen.getByText("zerodrive_app")).toBeInTheDocument();
   });
