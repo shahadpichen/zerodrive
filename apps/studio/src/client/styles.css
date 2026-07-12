@@ -23,6 +23,8 @@ body {
   min-height: 100vh;
   background: var(--background);
   color: var(--foreground);
+  font-size: 16px;
+  line-height: 1.5;
 }
 button,
 input,
@@ -80,7 +82,7 @@ textarea:focus-visible {
   display: flex;
   align-items: center;
   gap: 18px;
-  font-size: 12px;
+  font-size: 14px;
 }
 .connection-state::before,
 .health-dot::before {
@@ -97,7 +99,7 @@ textarea:focus-visible {
   padding: 6px 10px;
   text-transform: uppercase;
   letter-spacing: 0.12em;
-  font-size: 10px;
+  font-size: 12px;
 }
 .profile-pill--production {
   color: var(--warning);
@@ -120,7 +122,7 @@ textarea:focus-visible {
   cursor: pointer;
   white-space: nowrap;
   color: var(--muted);
-  font-size: 13px;
+  font-size: 14px;
 }
 .nav-link--active {
   color: var(--foreground);
@@ -144,7 +146,7 @@ textarea:focus-visible {
   gap: 20px;
   border-top: 1px solid var(--border);
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .page-stack {
@@ -162,7 +164,7 @@ textarea:focus-visible {
 .page-heading h1,
 .relation-header h1 {
   margin: 10px 0 18px;
-  font-size: clamp(28px, 4vw, 52px);
+  font-size: clamp(24px, 3vw, 36px);
   font-weight: 400;
   letter-spacing: 0.01em;
   line-height: 1.08;
@@ -172,19 +174,20 @@ textarea:focus-visible {
   line-height: 1.75;
   max-width: 760px;
   margin: 0;
+  font-size: 16px;
 }
 .eyebrow {
   margin: 0;
   color: var(--muted);
   text-transform: uppercase;
   letter-spacing: 0.22em;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 600;
 }
 .muted-copy {
   color: var(--muted);
   line-height: 1.6;
-  font-size: 13px;
+  font-size: 14px;
 }
 .metric-grid {
   display: grid;
@@ -200,11 +203,11 @@ textarea:focus-visible {
 }
 .metric-card span {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 14px;
 }
 .metric-card strong {
   color: var(--navy);
-  font-size: 28px;
+  font-size: 30px;
   font-weight: 500;
 }
 .detail-panel {
@@ -220,10 +223,10 @@ textarea:focus-visible {
 }
 .section-heading h2 {
   margin: 8px 0 0;
-  font-size: 22px;
+  font-size: 24px;
 }
 .health-dot {
-  font-size: 11px;
+  font-size: 13px;
   color: var(--muted);
 }
 .definition-grid {
@@ -240,13 +243,13 @@ textarea:focus-visible {
 }
 .definition-grid dt {
   color: var(--muted);
-  font-size: 10px;
+  font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 0.12em;
 }
 .definition-grid dd {
   margin: 10px 0 0;
-  font-size: 13px;
+  font-size: 14px;
   overflow-wrap: anywhere;
 }
 
@@ -257,6 +260,7 @@ textarea:focus-visible {
   background: var(--foreground);
   color: var(--background);
   cursor: pointer;
+  font-size: 14px;
 }
 .button:hover:not(:disabled) {
   background: var(--navy);
@@ -277,7 +281,7 @@ textarea:focus-visible {
 .button--small {
   min-height: 32px;
   padding: 0 12px;
-  font-size: 11px;
+  font-size: 12px;
 }
 .button-row {
   display: flex;
@@ -295,8 +299,8 @@ textarea:focus-visible {
   display: grid;
   grid-template-columns: minmax(160px, 0.35fr) 1fr;
   gap: 28px;
-  font-size: 12px;
-  line-height: 1.6;
+  font-size: 14px;
+  line-height: 1.7;
 }
 .notice > div {
   color: var(--muted);
@@ -355,7 +359,7 @@ textarea:focus-visible {
   gap: 8px;
 }
 .sidebar-heading strong {
-  font-size: 13px;
+  font-size: 14px;
 }
 .relation-group {
   display: grid;
@@ -366,7 +370,7 @@ textarea:focus-visible {
   color: var(--muted);
   text-transform: uppercase;
   letter-spacing: 0.16em;
-  font-size: 9px;
+  font-size: 11px;
 }
 .relation-link {
   border: 0;
@@ -379,7 +383,7 @@ textarea:focus-visible {
   padding: 9px 20px;
   cursor: pointer;
   text-align: left;
-  font-size: 12px;
+  font-size: 14px;
 }
 .relation-link:hover,
 .relation-link--active {
@@ -388,7 +392,7 @@ textarea:focus-visible {
 }
 .relation-link small {
   color: var(--muted);
-  font-size: 8px;
+  font-size: 10px;
   text-transform: uppercase;
 }
 .explorer-main {
@@ -404,9 +408,13 @@ textarea:focus-visible {
   align-items: flex-end;
   gap: 20px;
 }
+.relation-header > div {
+  min-width: 0;
+}
 .relation-header h1 {
-  font-size: clamp(24px, 3vw, 36px);
+  font-size: clamp(24px, 2.5vw, 32px);
   margin-bottom: 0;
+  overflow-wrap: anywhere;
 }
 .toolbar {
   display: flex;
@@ -420,7 +428,7 @@ textarea:focus-visible {
   display: grid;
   gap: 6px;
   color: var(--muted);
-  font-size: 9px;
+  font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.08em;
 }
@@ -432,7 +440,7 @@ textarea:focus-visible {
   background: var(--background);
   padding: 0 8px;
   color: var(--foreground);
-  font-size: 11px;
+  font-size: 13px;
 }
 .toolbar-spacer {
   flex: 1;
@@ -442,7 +450,7 @@ textarea:focus-visible {
   border: 1px solid var(--border);
   background: var(--background);
   cursor: pointer;
-  font-size: 10px;
+  font-size: 12px;
 }
 .data-table-wrap {
   border: 1px solid var(--border);
@@ -452,7 +460,7 @@ textarea:focus-visible {
 .data-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 11px;
+  font-size: 13px;
   white-space: nowrap;
 }
 .data-table th {
@@ -479,7 +487,7 @@ textarea:focus-visible {
 .data-table th > small {
   color: var(--muted);
   margin-top: 5px;
-  font-size: 8px;
+  font-size: 10px;
   font-weight: 400;
 }
 .data-table tbody tr:hover {
@@ -500,7 +508,7 @@ textarea:focus-visible {
   background: transparent;
   color: var(--warning);
   cursor: pointer;
-  font-size: 10px;
+  font-size: 12px;
 }
 .row-actions {
   display: flex;
@@ -512,7 +520,7 @@ textarea:focus-visible {
   padding: 0;
   text-decoration: underline;
   cursor: pointer;
-  font-size: 10px;
+  font-size: 12px;
 }
 .danger-link {
   color: var(--danger) !important;
@@ -522,7 +530,7 @@ textarea:focus-visible {
   align-items: center;
   justify-content: space-between;
   color: var(--muted);
-  font-size: 10px;
+  font-size: 12px;
 }
 .schema-details {
   border-top: 1px solid var(--border);
@@ -531,7 +539,7 @@ textarea:focus-visible {
 }
 .schema-details summary {
   cursor: pointer;
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 600;
 }
 .schema-grid {
@@ -541,7 +549,7 @@ textarea:focus-visible {
   margin-top: 24px;
 }
 .schema-grid h3 {
-  font-size: 12px;
+  font-size: 14px;
   margin: 18px 0;
 }
 .schema-grid p {
@@ -550,7 +558,7 @@ textarea:focus-visible {
   margin: 0;
   padding: 10px 0;
   border-bottom: 1px solid #dedbd3;
-  font-size: 10px;
+  font-size: 12px;
 }
 .schema-grid p span {
   color: var(--muted);
@@ -566,7 +574,7 @@ textarea:focus-visible {
   background: #151515;
   color: #f2efe7;
   font:
-    13px/1.7 "Fira Code",
+    14px/1.7 "Fira Code",
     monospace;
   tab-size: 2;
 }
@@ -583,7 +591,7 @@ textarea:focus-visible {
   display: flex;
   justify-content: space-between;
   color: var(--muted);
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .modal-backdrop {
@@ -606,11 +614,11 @@ textarea:focus-visible {
 }
 .modal h2 {
   margin: 10px 0;
-  font-size: 22px;
+  font-size: 24px;
 }
 .form-error {
   color: var(--danger);
-  font-size: 11px;
+  font-size: 13px;
 }
 
 @media (max-width: 900px) {
