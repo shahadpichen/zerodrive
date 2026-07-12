@@ -34,7 +34,11 @@ jest.mock("../../../utils/logger", () => ({
   },
 }));
 
-import { normalizeMigrationSql, runMigrations } from "../../../config/database";
+import {
+  isCompatibleMigrationChecksum,
+  normalizeMigrationSql,
+  runMigrations,
+} from "../../../config/database";
 
 describe("database migration runner", () => {
   beforeEach(() => {
@@ -52,6 +56,34 @@ describe("database migration runner", () => {
     expect(normalizeMigrationSql("BEGIN;\nSELECT 1;\nCOMMIT;")).toBe(
       "SELECT 1;",
     );
+  });
+
+  it("accepts only the pinned historical analytics checksum", () => {
+    const historical =
+      "4c746cb73ef01e715dc14848e31ef5e3ef0516c77d8726010bee26593fff469a";
+    const canonical =
+      "a8dbdcce4af445cad98e50263029de8625dc6a9c22a14606280fbc0d2a2ffc6e";
+    expect(
+      isCompatibleMigrationChecksum(
+        "009_privacy_safe_analytics.sql",
+        historical,
+        canonical,
+      ),
+    ).toBe(true);
+    expect(
+      isCompatibleMigrationChecksum(
+        "009_privacy_safe_analytics.sql",
+        "0".repeat(64),
+        canonical,
+      ),
+    ).toBe(false);
+    expect(
+      isCompatibleMigrationChecksum(
+        "009_privacy_safe_analytics.sql",
+        historical,
+        "f".repeat(64),
+      ),
+    ).toBe(false);
   });
 
   it("applies migrations in order under a lock and records checksums", async () => {
