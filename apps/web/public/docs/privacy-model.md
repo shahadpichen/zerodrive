@@ -22,9 +22,9 @@ The database stores only a hash of that capability. The sender’s browser keeps
 
 Analytics can be useful. They help answer questions like “are people using file sharing?” or “did uploads fail more often today?”
 
-But analytics should not become a second identity database. ZeroDrive should avoid third-party analytics and advertising scripts. Product analytics should be first-party aggregate counters, not detailed event streams tied to people.
+But analytics should not become a second identity database. ZeroDrive does not use third-party analytics or advertising scripts. Analytics are disabled by default. When a deployment enables them, it stores first-party daily aggregate counters in its own PostgreSQL database rather than detailed event streams tied to people.
 
-Good analytics for ZeroDrive should avoid account identifiers, emails, IP addresses, filenames, object keys, capabilities, browser fingerprints, and session identifiers.
+The counters exclude account identifiers, emails, IP addresses, filenames, object keys, capabilities, browser fingerprints, and session identifiers. Coarse breakdowns are stored independently, low-volume buckets are hidden, and records older than 365 days are deleted. Only deployment-configured administrators can read them.
 
 The goal is to learn whether the product works without tracking exactly who did what with which file.
 

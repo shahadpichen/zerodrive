@@ -28,12 +28,19 @@ memory, so CSP and dependency integrity remain part of the security boundary.
 
 ZeroDrive does not load third-party analytics or advertising scripts. Product
 analytics are first-party daily counters stored in
-`analytics_daily_summary`. They contain no event rows, account identifiers,
+`analytics_daily_summary` and single-dimension aggregate buckets stored in
+`analytics_daily_dimensions`. They contain no event rows, account identifiers,
 emails, IP addresses, session identifiers, file identifiers, filenames,
 capabilities, or browser fingerprints. Authentication, sharing, invitation,
 and shared-file access counters are incremented by the backend. The frontend
 may report only the predefined file-added event because direct Google Drive
-uploads do not pass through the backend.
+uploads do not pass through the backend. Analytics are disabled by default,
+retained for at most 365 days when enabled, and never sent to a central service.
+
+Analytics reads require a valid Google-authenticated ZeroDrive session whose
+verified email appears in the deployment-only `ANALYTICS_ADMIN_EMAILS`
+allowlist. The allowlist is never returned to the browser or stored in the
+database. Low-volume dimension buckets are suppressed in API responses.
 
 ## Deployment constraints
 
