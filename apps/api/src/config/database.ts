@@ -46,6 +46,21 @@ pool.on("connect", () => {
 });
 
 const MIGRATION_LOCK_ID = 907_031_202;
+const MIGRATION_CHECKSUM_COMPATIBILITY: Record<
+  string,
+  { canonical: string; historical: ReadonlySet<string> }
+> = {
+  "009_privacy_safe_analytics.sql": {
+    // 009 was made self-contained after its first development release. The
+    // original form produced the same deployed schema when init.sql had
+    // already created analytics_daily_summary.
+    canonical:
+      "a8dbdcce4af445cad98e50263029de8625dc6a9c22a14606280fbc0d2a2ffc6e",
+    historical: new Set([
+      "4c746cb73ef01e715dc14848e31ef5e3ef0516c77d8726010bee26593fff469a",
+    ]),
+  },
+};
 const MIGRATIONS_DIRECTORY = path.resolve(
   __dirname,
   "..",
@@ -59,6 +74,19 @@ export function normalizeMigrationSql(sql: string): string {
     .replace(/^\s*BEGIN\s*;\s*/i, "")
     .replace(/\s*COMMIT\s*;\s*$/i, "")
     .trim();
+}
+
+export function isCompatibleMigrationChecksum(
+  name: string,
+  previousChecksum: string,
+  currentChecksum: string,
+): boolean {
+  const compatibility = MIGRATION_CHECKSUM_COMPATIBILITY[name];
+  return Boolean(
+    compatibility &&
+    compatibility.canonical === currentChecksum &&
+    compatibility.historical.has(previousChecksum),
+  );
 }
 
 /**
@@ -98,7 +126,20 @@ export const runMigrationsWithPool = async (
       const previousChecksum = appliedByName.get(file);
       if (previousChecksum) {
         if (previousChecksum !== checksum) {
-          throw new Error(`Applied migration checksum changed: ${file}`);
+          if (
+            !isCompatibleMigrationChecksum(file, previousChecksum, checksum)
+          ) {
+            throw new Error(`Applied migration checksum changed: ${file}`);
+          }
+          await client.query(
+            `UPDATE schema_migrations
+             SET checksum = $1
+             WHERE name = $2 AND checksum = $3`,
+            [checksum, file, previousChecksum],
+          );
+          logger.info("Database migration checksum normalized", {
+            migration: file,
+          });
         }
         continue;
       }

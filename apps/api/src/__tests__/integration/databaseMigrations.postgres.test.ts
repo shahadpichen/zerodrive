@@ -1,3 +1,4 @@
+import crypto from "crypto";
 import fs from "fs";
 import path from "path";
 import { Pool } from "pg";
@@ -55,6 +56,28 @@ describeWithPostgres("database migrations against PostgreSQL", () => {
     expect(
       applied.rows.every((row) => /^[0-9a-f]{64}$/.test(row.checksum)),
     ).toBe(true);
+  });
+
+  it("normalizes the known historical analytics migration checksum", async () => {
+    const name = "009_privacy_safe_analytics.sql";
+    const historical =
+      "4c746cb73ef01e715dc14848e31ef5e3ef0516c77d8726010bee26593fff469a";
+    const current = crypto
+      .createHash("sha256")
+      .update(fs.readFileSync(path.join(migrationsDirectory, name), "utf8"))
+      .digest("hex");
+    await testPool.query(
+      "UPDATE schema_migrations SET checksum = $1 WHERE name = $2",
+      [historical, name],
+    );
+
+    await runMigrationsWithPool(testPool, migrationsDirectory);
+
+    const result = await testPool.query(
+      "SELECT checksum FROM schema_migrations WHERE name = $1",
+      [name],
+    );
+    expect(result.rows[0]?.checksum).toBe(current);
   });
 
   it("purges legacy plaintext metadata on a real database", async () => {

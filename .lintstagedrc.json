@@ -7,5 +7,6 @@
     "prettier --write",
     "pnpm --dir apps/api exec eslint --fix"
   ],
+  "apps/studio/**/*.{ts,tsx}": ["prettier --write"],
   "**/*.{json,css,md}": ["prettier --write"]
 }

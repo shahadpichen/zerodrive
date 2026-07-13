@@ -9,6 +9,7 @@ Files are encrypted in the browser before upload. The backend coordinates authen
 ```txt
 apps/web       React frontend
 apps/api       Express API
+apps/studio    Local-only PostgreSQL operations studio
 packages       Shared TypeScript packages
 ```
 
@@ -46,12 +47,22 @@ Frontend: http://localhost:3000
 
 Backend: http://localhost:3001
 
+Inspect the local PostgreSQL database in ZeroDrive Studio:
+
+```bash
+pnpm db:studio
+```
+
+Studio binds only to `127.0.0.1` and opens a short-lived, one-time launch URL.
+See `apps/studio/README.md` for the read-only production workflow.
+
 ## Useful commands
 
 ```bash
 pnpm build
 pnpm typecheck
 pnpm test
+pnpm test:studio
 pnpm format:check
 pnpm infra:down
 ```

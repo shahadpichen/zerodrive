@@ -11,10 +11,12 @@
 # production
 **/build/
 **/dist/
+**/dist-server/
 .pnpm-store/
 
 # environment files
 **/.env
+**/.env.studio.*
 
 # build artifacts
 *.tsbuildinfo
