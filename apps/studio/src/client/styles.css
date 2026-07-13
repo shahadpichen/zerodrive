@@ -49,8 +49,11 @@ textarea:focus-visible {
   grid-template-rows: auto 1fr auto;
 }
 .topbar {
-  height: clamp(72px, 10vh, 96px);
-  padding: 0 clamp(16px, 3vw, 40px);
+  width: 85%;
+  min-height: 80px;
+  height: 10vh;
+  margin: 0 auto;
+  padding: 0 2.25vw;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -123,8 +126,7 @@ textarea:focus-visible {
   gap: 18px;
   font-size: 14px;
 }
-.connection-state::before,
-.health-dot::before {
+.connection-state::before {
   content: "";
   display: inline-block;
   width: 7px;
@@ -256,70 +258,6 @@ textarea:focus-visible {
   line-height: 1.6;
   font-size: 14px;
 }
-.metric-grid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 12px;
-}
-.metric-card {
-  border: 1px solid var(--border);
-  padding: 26px;
-  display: grid;
-  gap: 22px;
-  min-height: 132px;
-}
-.metric-card span {
-  color: var(--muted);
-  font-size: 14px;
-}
-.metric-card strong {
-  color: var(--navy);
-  font-size: 30px;
-  font-weight: 500;
-}
-.detail-panel {
-  border: 1px solid var(--border);
-}
-.section-heading {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 20px;
-  padding: 28px 32px;
-  border-bottom: 1px solid var(--border);
-}
-.section-heading h2 {
-  margin: 8px 0 0;
-  font-size: 24px;
-}
-.health-dot {
-  font-size: 13px;
-  color: var(--muted);
-}
-.definition-grid {
-  margin: 0;
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-}
-.definition-grid > div {
-  padding: 24px 32px;
-  border-bottom: 1px solid var(--border);
-}
-.definition-grid > div:nth-child(odd) {
-  border-right: 1px solid var(--border);
-}
-.definition-grid dt {
-  color: var(--muted);
-  font-size: 12px;
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
-}
-.definition-grid dd {
-  margin: 10px 0 0;
-  font-size: 14px;
-  overflow-wrap: anywhere;
-}
-
 .button {
   min-height: 38px;
   padding: 0 18px;
@@ -695,8 +633,9 @@ textarea:focus-visible {
   .mobile-header-actions {
     display: flex;
   }
-  .metric-grid {
-    grid-template-columns: repeat(2, 1fr);
+  .topbar {
+    width: calc(100% - 32px);
+    padding: 0;
   }
   .explorer {
     grid-template-columns: 1fr;
@@ -744,13 +683,6 @@ textarea:focus-visible {
   .page-heading {
     align-items: flex-start;
     flex-direction: column;
-  }
-  .metric-grid,
-  .definition-grid {
-    grid-template-columns: 1fr;
-  }
-  .definition-grid > div:nth-child(odd) {
-    border-right: 0;
   }
   .notice {
     grid-template-columns: 1fr;

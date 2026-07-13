@@ -1,30 +1,23 @@
 import { useEffect, useState } from "react";
-import type {
-  ConnectionOverview,
-  RelationSummary,
-  StudioSession,
-} from "../shared/types";
+import type { RelationSummary, StudioSession } from "../shared/types";
 import { loadSession, studioApi } from "./api";
 import { DataExplorer } from "./components/DataExplorer";
-import { Overview } from "./components/Overview";
 import { QueryWorkspace } from "./components/QueryWorkspace";
 import { StatusNotice } from "./components/StatusNotice";
 
-type Screen = "overview" | "data" | "query";
+type Screen = "data" | "query";
 
 export default function App() {
-  const [screen, setScreen] = useState<Screen>("overview");
+  const [screen, setScreen] = useState<Screen>("data");
   const [menuOpen, setMenuOpen] = useState(false);
   const [session, setSession] = useState<StudioSession | null>(null);
-  const [overview, setOverview] = useState<ConnectionOverview | null>(null);
   const [relations, setRelations] = useState<RelationSummary[]>([]);
   const [error, setError] = useState("");
 
   useEffect(() => {
-    Promise.all([loadSession(), studioApi.overview(), studioApi.relations()])
-      .then(([nextSession, nextOverview, nextRelations]) => {
+    Promise.all([loadSession(), studioApi.relations()])
+      .then(([nextSession, nextRelations]) => {
         setSession(nextSession);
-        setOverview(nextOverview);
         setRelations(nextRelations);
       })
       .catch((caught) =>
@@ -42,7 +35,7 @@ export default function App() {
         </StatusNotice>
       </main>
     );
-  if (!session || !overview)
+  if (!session)
     return (
       <main className="centered-state">
         <div className="loading-mark" />
@@ -55,17 +48,10 @@ export default function App() {
     setMenuOpen(false);
   };
 
-  const navigation = (["overview", "data", "query"] as Screen[]).map(
-    (item) => ({
-      id: item,
-      label:
-        item === "data"
-          ? "Data explorer"
-          : item === "query"
-            ? "SQL workspace"
-            : "Overview",
-    }),
-  );
+  const navigation = (["data", "query"] as Screen[]).map((item) => ({
+    id: item,
+    label: item === "data" ? "Data explorer" : "SQL workspace",
+  }));
 
   const studioLogo = new URL(
     "../../assets/zerodrive-studio-logo.png",
@@ -78,7 +64,7 @@ export default function App() {
         <button
           className="brand"
           aria-label="ZeroDrive Studio"
-          onClick={() => navigateTo("overview")}
+          onClick={() => navigateTo("data")}
         >
           <span className="brand-logo-frame">
             <img
@@ -161,7 +147,6 @@ export default function App() {
           screen === "data" ? "studio-main studio-main--wide" : "studio-main"
         }
       >
-        {screen === "overview" && <Overview overview={overview} />}
         {screen === "data" && (
           <DataExplorer relations={relations} profile={session.profile} />
         )}

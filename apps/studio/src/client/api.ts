@@ -1,6 +1,5 @@
 import type {
   ApiErrorShape,
-  ConnectionOverview,
   QueryResponse,
   RelationDetails,
   RelationSummary,
@@ -54,7 +53,6 @@ export async function loadSession(): Promise<StudioSession> {
 }
 
 export const studioApi = {
-  overview: () => request<ConnectionOverview>("/api/overview"),
   relations: () => request<RelationSummary[]>("/api/relations"),
   relation: (schema: string, name: string) =>
     request<RelationDetails>(

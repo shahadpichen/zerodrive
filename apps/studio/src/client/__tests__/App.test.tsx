@@ -10,20 +10,7 @@ describe("ZeroDrive Studio shell", () => {
         const path = String(input);
         const body = path.endsWith("/api/session")
           ? { profile: "local", readOnly: false, csrfToken: "csrf" }
-          : path.endsWith("/api/overview")
-            ? {
-                profile: "local",
-                database: "zerodrive",
-                user: "zerodrive_app",
-                version: "PostgreSQL 15",
-                latencyMs: 2,
-                readOnly: false,
-                tableCount: 4,
-                viewCount: 1,
-                migrationCount: 9,
-                latestMigration: "009.sql",
-              }
-            : [];
+          : [];
         return Promise.resolve(
           new Response(JSON.stringify(body), {
             status: 200,
@@ -34,10 +21,10 @@ describe("ZeroDrive Studio shell", () => {
     );
   });
 
-  it("shows connection status and the ZeroDrive overview", async () => {
+  it("opens the data explorer with the ZeroDrive header", async () => {
     render(<App />);
     expect(
-      await screen.findByText("Your database, without the guesswork."),
+      await screen.findByRole("region", { name: "Database explorer" }),
     ).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "ZeroDrive Studio" }),
@@ -46,6 +33,6 @@ describe("ZeroDrive Studio shell", () => {
       screen.getByRole("navigation", { name: "Studio navigation" }),
     ).toBeInTheDocument();
     expect(screen.getByText("PostgreSQL connected")).toBeInTheDocument();
-    expect(screen.getByText("zerodrive_app")).toBeInTheDocument();
+    expect(screen.queryByText("Overview")).not.toBeInTheDocument();
   });
 });
