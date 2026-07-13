@@ -1,5 +1,9 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
 :root {
-  font-family: "Fira Code", ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: "Fira Code", monospace;
   color: #10100f;
   background: #fffdf6;
   font-synthesis: none;
@@ -21,6 +25,11 @@ body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
+  font-family: "Fira Code", monospace;
+  font-optical-sizing: auto;
+  font-weight: 400;
+  font-style: normal;
+  font-variation-settings: "wdth" 100;
   background: var(--background);
   color: var(--foreground);
   font-size: 16px;
@@ -348,14 +357,24 @@ textarea:focus-visible {
   grid-template-columns: 250px minmax(0, 1fr);
   border: 1px solid var(--border);
   min-height: 720px;
+  position: relative;
+}
+.explorer::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 250px;
+  width: 1px;
+  background: var(--border);
+  pointer-events: none;
 }
 .relation-sidebar {
-  border-right: 1px solid var(--border);
   padding-bottom: 24px;
   overflow-y: auto;
   max-height: calc(100vh - 180px);
   position: sticky;
   top: 12px;
+  z-index: 1;
+  background: var(--background);
 }
 .sidebar-heading {
   padding: 24px 20px;
@@ -429,33 +448,24 @@ textarea:focus-visible {
   background: var(--soft);
   border: 1px solid var(--border);
 }
-.toolbar label {
-  display: grid;
-  gap: 6px;
-  color: var(--muted);
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
+.toolbar-field {
+  width: 260px;
+  max-width: 100%;
 }
-.toolbar select,
-.toolbar input {
-  height: 32px;
-  min-width: 130px;
-  border: 1px solid var(--border);
-  background: var(--background);
-  padding: 0 8px;
-  color: var(--foreground);
-  font-size: 13px;
+.toolbar-control {
+  width: 100%;
+  min-width: 0;
 }
 .toolbar-spacer {
   flex: 1;
 }
+.toolbar-button {
+  height: 40px;
+  padding-inline: 18px;
+}
 .direction-button {
-  height: 32px;
-  border: 1px solid var(--border);
-  background: var(--background);
-  cursor: pointer;
-  font-size: 12px;
+  height: 40px;
+  min-width: 54px;
 }
 .data-table-wrap {
   border: 1px solid var(--border);
@@ -640,10 +650,12 @@ textarea:focus-visible {
   .explorer {
     grid-template-columns: 1fr;
   }
+  .explorer::before {
+    display: none;
+  }
   .relation-sidebar {
     position: static;
     max-height: 260px;
-    border-right: 0;
     border-bottom: 1px solid var(--border);
   }
   .schema-grid {

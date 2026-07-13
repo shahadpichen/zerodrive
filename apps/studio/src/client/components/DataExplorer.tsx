@@ -8,6 +8,16 @@ import type {
 import { studioApi } from "../api";
 import { RowEditor } from "./RowEditor";
 import { StatusNotice } from "./StatusNotice";
+import { Button } from "./ui/button";
+import { Input } from "./ui/input";
+import { Label } from "./ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "./ui/select";
 
 function displayValue(value: unknown): string {
   if (value === null) return "NULL";
@@ -167,16 +177,11 @@ export function DataExplorer({
                 </h1>
               </div>
               <div className="button-row">
-                <button
-                  className="button button--ghost"
-                  onClick={() => void load()}
-                >
+                <Button variant="outline" onClick={() => void load()}>
                   Refresh
-                </button>
+                </Button>
                 {details?.editable && (
-                  <button className="button" onClick={() => setEditorRow(null)}>
-                    Add row
-                  </button>
+                  <Button onClick={() => setEditorRow(null)}>Add row</Button>
                 )}
               </div>
             </header>
@@ -193,28 +198,39 @@ export function DataExplorer({
             )}
 
             <div className="toolbar">
-              <label>
+              <Label className="toolbar-field">
                 Filter column
-                <select
-                  value={filterColumn}
-                  onChange={(event) => setFilterColumn(event.target.value)}
+                <Select
+                  value={filterColumn || "__none"}
+                  onValueChange={(value) =>
+                    setFilterColumn(value === "__none" ? "" : value)
+                  }
                 >
-                  <option value="">None</option>
-                  {details?.columns.map((column) => (
-                    <option key={column.name}>{column.name}</option>
-                  ))}
-                </select>
-              </label>
-              <label>
+                  <SelectTrigger className="toolbar-control">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none">None</SelectItem>
+                    {details?.columns.map((column) => (
+                      <SelectItem key={column.name} value={column.name}>
+                        {column.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </Label>
+              <Label className="toolbar-field">
                 Contains
-                <input
+                <Input
+                  className="toolbar-control"
                   value={filterValue}
                   onChange={(event) => setFilterValue(event.target.value)}
                   disabled={!filterColumn}
                 />
-              </label>
-              <button
-                className="button button--small"
+              </Label>
+              <Button
+                size="sm"
+                className="toolbar-button"
                 onClick={() => {
                   setOffset(0);
                   setAppliedFilter({
@@ -224,31 +240,40 @@ export function DataExplorer({
                 }}
               >
                 Apply filter
-              </button>
+              </Button>
               <span className="toolbar-spacer" />
-              <label>
+              <Label className="toolbar-field">
                 Sort
-                <select
-                  value={sort}
-                  onChange={(event) => {
-                    setSort(event.target.value);
+                <Select
+                  value={sort || "__default"}
+                  onValueChange={(value) => {
+                    setSort(value === "__default" ? "" : value);
                     setOffset(0);
                   }}
                 >
-                  <option value="">Default</option>
-                  {details?.columns.map((column) => (
-                    <option key={column.name}>{column.name}</option>
-                  ))}
-                </select>
-              </label>
-              <button
+                  <SelectTrigger className="toolbar-control">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__default">Default</SelectItem>
+                    {details?.columns.map((column) => (
+                      <SelectItem key={column.name} value={column.name}>
+                        {column.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </Label>
+              <Button
+                variant="outline"
+                size="sm"
                 className="direction-button"
                 onClick={() =>
                   setDirection(direction === "asc" ? "desc" : "asc")
                 }
               >
                 {direction.toUpperCase()}
-              </button>
+              </Button>
             </div>
 
             <div className="data-table-wrap" aria-busy={loading}>
@@ -342,20 +367,22 @@ export function DataExplorer({
                 Rows {offset + 1}–{offset + (data?.rows.length || 0)}
               </span>
               <div className="button-row">
-                <button
-                  className="button button--small button--ghost"
+                <Button
+                  variant="outline"
+                  size="sm"
                   disabled={offset === 0}
                   onClick={() => setOffset(Math.max(0, offset - 50))}
                 >
                   Previous
-                </button>
-                <button
-                  className="button button--small button--ghost"
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
                   disabled={!data?.hasMore}
                   onClick={() => setOffset(offset + 50)}
                 >
                   Next
-                </button>
+                </Button>
               </div>
             </div>
 

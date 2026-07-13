@@ -53,11 +53,6 @@ export default function App() {
     label: item === "data" ? "Data explorer" : "SQL workspace",
   }));
 
-  const studioLogo = new URL(
-    "../../assets/zerodrive-studio-logo.png",
-    import.meta.url,
-  ).href;
-
   return (
     <div className="studio-shell">
       <header className="topbar">
@@ -66,15 +61,7 @@ export default function App() {
           aria-label="ZeroDrive Studio"
           onClick={() => navigateTo("data")}
         >
-          <span className="brand-logo-frame">
-            <img
-              className="brand-logo"
-              src={studioLogo}
-              alt=""
-              aria-hidden="true"
-            />
-          </span>
-          <strong>ZeroDrive Studio</strong>
+          <strong className="text-lg font-semibold">ZeroDrive Studio</strong>
         </button>
 
         <div className="desktop-header-actions">
