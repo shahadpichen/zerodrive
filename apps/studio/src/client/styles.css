@@ -292,6 +292,13 @@ textarea:focus-visible {
   background: var(--soft);
   color: var(--foreground);
 }
+.button--danger {
+  border-color: var(--danger);
+  background: var(--danger);
+}
+.button--danger:hover:not(:disabled) {
+  background: #7f241c;
+}
 .button--small {
   min-height: 32px;
   padding: 0 12px;
@@ -630,6 +637,19 @@ textarea:focus-visible {
 .modal h2 {
   margin: 10px 0;
   font-size: 24px;
+}
+.modal--confirm {
+  width: min(560px, 95vw);
+}
+.row-key-preview {
+  overflow: auto;
+  border: 1px solid var(--border);
+  background: var(--soft);
+  padding: 14px;
+  color: var(--foreground);
+  font-size: 13px;
+  line-height: 1.6;
+  white-space: pre-wrap;
 }
 .form-error {
   color: var(--danger);

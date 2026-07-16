@@ -31,6 +31,22 @@ function normalizeResult(result: QueryResult | QueryResult[]): QueryResult {
   return Array.isArray(result) ? result[result.length - 1]! : result;
 }
 
+function presentationColumnRank(column: ColumnInfo): number {
+  if (column.name === "id") return 0;
+  if (column.name === "deployment_id") return 1;
+  if (column.name === "created_at") return 3;
+  if (column.name === "updated_at") return 4;
+  return 2;
+}
+
+function orderColumnsForPresentation(columns: ColumnInfo[]): ColumnInfo[] {
+  return [...columns].sort((left, right) => {
+    const rankDiff =
+      presentationColumnRank(left) - presentationColumnRank(right);
+    return rankDiff || columns.indexOf(left) - columns.indexOf(right);
+  });
+}
+
 export class StudioDatabase {
   readonly pool: Pool;
 
@@ -222,15 +238,17 @@ export class StudioDatabase {
        ORDER BY a.attnum`,
       [schema, name],
     );
-    const columns = columnsResult.rows.map((row) => ({
-      name: row.name,
-      dataType: row.data_type,
-      nullable: row.nullable,
-      defaultValue: row.default_value,
-      primaryKey: row.primary_key,
-      foreignKey: row.foreign_key,
-      sensitive: isSensitiveColumn(row.name),
-    }));
+    const columns = orderColumnsForPresentation(
+      columnsResult.rows.map((row) => ({
+        name: row.name,
+        dataType: row.data_type,
+        nullable: row.nullable,
+        defaultValue: row.default_value,
+        primaryKey: row.primary_key,
+        foreignKey: row.foreign_key,
+        sensitive: isSensitiveColumn(row.name),
+      })),
+    );
     return {
       relation: {
         schema: relationRow.schema,

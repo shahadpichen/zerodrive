@@ -32,6 +32,11 @@ describeWithPostgres("database migrations against PostgreSQL", () => {
           'legacy-secret.txt', 42, 'text/plain')`,
       ["a".repeat(64)],
     );
+    await testPool.query(
+      `INSERT INTO public_keys (user_id, public_key)
+       VALUES ($1, 'legacy-public-key')`,
+      ["b".repeat(64)],
+    );
     await runMigrationsWithPool(testPool, migrationsDirectory);
   });
 
@@ -92,6 +97,7 @@ describeWithPostgres("database migrations against PostgreSQL", () => {
   it("creates the current security and lifecycle structures", async () => {
     const result = await testPool.query(
       `SELECT
+         to_regclass('public.deployments') IS NOT NULL AS deployments,
          to_regclass('public.oauth_exchanges') IS NOT NULL AS oauth_exchanges,
          to_regclass('public.idx_shared_files_management_capability_hash_unique')
            IS NOT NULL AS capability_index,
@@ -107,15 +113,94 @@ describeWithPostgres("database migrations against PostgreSQL", () => {
            SELECT 1 FROM information_schema.columns
            WHERE table_name = 'analytics_daily_summary'
              AND column_name = 'total_key_rotations'
-         ) AS analytics_lifecycle`,
+         ) AS analytics_lifecycle,
+         EXISTS (
+           SELECT 1 FROM information_schema.columns
+           WHERE table_name = 'oauth_exchanges'
+             AND column_name = 'id'
+         ) AS oauth_uuid_id,
+         EXISTS (
+           SELECT 1 FROM information_schema.columns
+           WHERE table_name = 'analytics_daily_dimensions'
+             AND column_name = 'deployment_id'
+         ) AS analytics_deployment_id,
+         to_regclass('public.idx_analytics_daily_summary_deployment_date_unique')
+           IS NOT NULL AS analytics_summary_deployment_unique,
+         to_regclass('public.idx_analytics_daily_dimensions_deployment_key_unique')
+           IS NOT NULL AS analytics_dimensions_deployment_unique,
+         to_regclass('public.idx_oauth_exchanges_deployment_code_hash_unique')
+           IS NOT NULL AS oauth_deployment_unique,
+         to_regclass('public.idx_public_keys_deployment_user_id')
+           IS NOT NULL AS public_keys_deployment_index,
+         to_regclass('public.idx_shared_files_deployment_recipient')
+           IS NOT NULL AS shared_files_deployment_index,
+         EXISTS (
+           SELECT 1 FROM information_schema.columns
+           WHERE table_name = 'active_shared_files'
+             AND column_name = 'deployment_id'
+         ) AS active_shared_files_deployment_id`,
     );
     expect(result.rows[0]).toEqual({
+      deployments: true,
       oauth_exchanges: true,
       capability_index: true,
       encrypted_metadata: true,
       analytics_summary: true,
       analytics_dimensions: true,
       analytics_lifecycle: true,
+      oauth_uuid_id: true,
+      analytics_deployment_id: true,
+      analytics_summary_deployment_unique: true,
+      analytics_dimensions_deployment_unique: true,
+      oauth_deployment_unique: true,
+      public_keys_deployment_index: true,
+      shared_files_deployment_index: true,
+      active_shared_files_deployment_id: true,
     });
+  });
+
+  it("backfills the deployment foundation for legacy production rows", async () => {
+    const result = await testPool.query(
+      `SELECT
+         (SELECT count(*)::integer FROM deployments) AS deployment_count,
+         (SELECT deployment_id IS NOT NULL
+            FROM shared_files
+           WHERE file_id = 'shared/legacy-object') AS shared_file_backfilled,
+         (SELECT deployment_id IS NOT NULL
+            FROM public_keys
+           WHERE user_id = $1) AS public_key_backfilled`,
+      ["b".repeat(64)],
+    );
+
+    expect(result.rows[0]).toEqual({
+      deployment_count: 1,
+      shared_file_backfilled: true,
+      public_key_backfilled: true,
+    });
+  });
+
+  it("exposes only finalized active shares through the active view", async () => {
+    const recipientId = "c".repeat(64);
+    await testPool.query(
+      `INSERT INTO shared_files
+         (file_id, recipient_user_id, encrypted_file_key,
+          encrypted_metadata, file_size, expected_encrypted_size, status)
+       VALUES
+         ('shared/pending-view-test', $1, 'pending-key',
+          '{"version":1,"ciphertext":"pending"}', 10, 12, 'pending'),
+         ('shared/active-view-test', $1, 'active-key',
+          '{"version":1,"ciphertext":"active"}', 10, 12, 'active')`,
+      [recipientId],
+    );
+
+    const result = await testPool.query(
+      `SELECT file_id
+         FROM active_shared_files
+        WHERE recipient_user_id = $1
+        ORDER BY file_id`,
+      [recipientId],
+    );
+
+    expect(result.rows).toEqual([{ file_id: "shared/active-view-test" }]);
   });
 });

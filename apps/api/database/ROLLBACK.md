@@ -3,6 +3,13 @@
 Back up PostgreSQL and MinIO before rolling back. Application code must be
 deployed in a version compatible with the resulting schema.
 
+- `010`: Prefer rolling forward. This migration is additive and backfills
+  `deployment_id`/UUID row ids for production data. If rollback is unavoidable,
+  first deploy code that does not use deployment-scoped analytics or OAuth
+  exchanges, confirm no migration `011+` has run, then drop the new indexes,
+  foreign keys, UUID id columns on analytics/OAuth tables, deployment columns,
+  `zerodrive_default_deployment_id()`, and `deployments`. Do not drop existing
+  legacy columns or data.
 - `008`: Deploy code that no longer creates durable exchange capabilities,
   wait at least 60 seconds for outstanding exchanges to expire, then drop
   `oauth_exchanges`. Active authenticated sessions are unaffected.

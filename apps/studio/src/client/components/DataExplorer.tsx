@@ -48,6 +48,12 @@ export function DataExplorer({
   const [editorRow, setEditorRow] = useState<
     Record<string, unknown> | null | undefined
   >(undefined);
+  const [deleteCandidate, setDeleteCandidate] = useState<Record<
+    string,
+    unknown
+  > | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
   const [revealed, setRevealed] = useState(() => new Set<string>());
   const grouped = useMemo(() => {
     const groups = new Map<string, RelationSummary[]>();
@@ -104,6 +110,11 @@ export function DataExplorer({
       (details?.primaryKey || []).map((key) => [key, row[key]]),
     );
 
+  const primaryKeyLabel = (row: Record<string, unknown>) => {
+    const key = primaryKeyFor(row);
+    return Object.keys(key).length ? JSON.stringify(key) : "selected row";
+  };
+
   const saveRow = async (values: Record<string, unknown>) => {
     if (!selected || !details) return;
     if (editorRow)
@@ -118,18 +129,25 @@ export function DataExplorer({
     await load();
   };
 
-  const deleteRow = async (row: Record<string, unknown>) => {
-    if (
-      !selected ||
-      !window.confirm("Delete this local row? This cannot be undone.")
-    )
-      return;
-    await studioApi.deleteRow(
-      selected.schema,
-      selected.name,
-      primaryKeyFor(row),
-    );
-    await load();
+  const confirmDelete = async () => {
+    if (!selected || !deleteCandidate) return;
+    setDeleting(true);
+    setDeleteError("");
+    try {
+      await studioApi.deleteRow(
+        selected.schema,
+        selected.name,
+        primaryKeyFor(deleteCandidate),
+      );
+      setDeleteCandidate(null);
+      await load();
+    } catch (caught) {
+      setDeleteError(
+        caught instanceof Error ? caught.message : "Unable to delete this row",
+      );
+    } finally {
+      setDeleting(false);
+    }
   };
 
   return (
@@ -350,7 +368,10 @@ export function DataExplorer({
                             </button>
                             <button
                               className="danger-link"
-                              onClick={() => void deleteRow(row)}
+                              onClick={() => {
+                                setDeleteError("");
+                                setDeleteCandidate(row);
+                              }}
                             >
                               Delete
                             </button>
@@ -431,6 +452,50 @@ export function DataExplorer({
           onCancel={() => setEditorRow(undefined)}
           onSave={saveRow}
         />
+      )}
+      {deleteCandidate && details && (
+        <div className="modal-backdrop" role="presentation">
+          <section
+            className="modal modal--confirm"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="delete-row-title"
+          >
+            <p className="eyebrow">Delete local row</p>
+            <h2 id="delete-row-title">
+              {details.relation.schema}.{details.relation.name}
+            </h2>
+            <p className="muted-copy">
+              This will permanently delete the row identified by:
+            </p>
+            <pre className="row-key-preview">
+              {primaryKeyLabel(deleteCandidate)}
+            </pre>
+            <p className="muted-copy">
+              This action cannot be undone. Production Studio remains read-only,
+              so this confirmation is only available in local mode.
+            </p>
+            {deleteError && <p className="form-error">{deleteError}</p>}
+            <div className="button-row button-row--end">
+              <button
+                className="button button--ghost"
+                type="button"
+                onClick={() => setDeleteCandidate(null)}
+                disabled={deleting}
+              >
+                Cancel
+              </button>
+              <button
+                className="button button--danger"
+                type="button"
+                onClick={() => void confirmDelete()}
+                disabled={deleting}
+              >
+                {deleting ? "Deleting…" : "Delete row"}
+              </button>
+            </div>
+          </section>
+        </div>
       )}
     </section>
   );

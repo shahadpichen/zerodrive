@@ -166,18 +166,19 @@ export async function trackEvent(
 
   try {
     await query(`
-      INSERT INTO analytics_daily_summary (date, ${contract.column})
-      VALUES (CURRENT_DATE, 1)
-      ON CONFLICT (date)
+      INSERT INTO analytics_daily_summary
+        (deployment_id, date, ${contract.column})
+      VALUES (zerodrive_default_deployment_id(), CURRENT_DATE, 1)
+      ON CONFLICT (deployment_id, date)
       DO UPDATE SET ${contract.column} = analytics_daily_summary.${contract.column} + 1
     `);
 
     for (const { dimension, bucket } of dimensions) {
       await query(
         `INSERT INTO analytics_daily_dimensions
-          (date, metric, dimension, bucket, count)
-         VALUES (CURRENT_DATE, $1, $2, $3, 1)
-         ON CONFLICT (date, metric, dimension, bucket)
+          (deployment_id, date, metric, dimension, bucket, count)
+         VALUES (zerodrive_default_deployment_id(), CURRENT_DATE, $1, $2, $3, 1)
+         ON CONFLICT (deployment_id, date, metric, dimension, bucket)
          DO UPDATE SET count = analytics_daily_dimensions.count + 1`,
         [eventType, dimension, bucket],
       );
@@ -243,7 +244,8 @@ export async function getAnalyticsSummary(
        SUM(total_shares_finalized) AS shares_finalized,
        SUM(total_shares_revoked) AS shares_revoked
      FROM analytics_daily_summary
-     WHERE date BETWEEN $1 AND $2`,
+     WHERE deployment_id = zerodrive_default_deployment_id()
+       AND date BETWEEN $1 AND $2`,
     [startDate, endDate],
   );
 
@@ -308,7 +310,8 @@ export async function getDailyStats(
        total_shares_finalized AS shares_finalized,
        total_shares_revoked AS shares_revoked
      FROM analytics_daily_summary
-     WHERE date >= CURRENT_DATE - ($1::integer - 1)
+     WHERE deployment_id = zerodrive_default_deployment_id()
+       AND date >= CURRENT_DATE - ($1::integer - 1)
      ORDER BY date ASC`,
     [days],
   );
@@ -342,7 +345,8 @@ export async function getDimensionStats(
   const result = await query(
     `SELECT metric, dimension, bucket, SUM(count)::integer AS count
      FROM analytics_daily_dimensions
-     WHERE date >= CURRENT_DATE - ($1::integer - 1)
+     WHERE deployment_id = zerodrive_default_deployment_id()
+       AND date >= CURRENT_DATE - ($1::integer - 1)
      GROUP BY metric, dimension, bucket
      ORDER BY metric, dimension, count DESC, bucket ASC`,
     [days],
@@ -366,10 +370,14 @@ export async function cleanupAnalyticsRetention(): Promise<void> {
 
   try {
     await query(
-      "DELETE FROM analytics_daily_dimensions WHERE date < CURRENT_DATE - 365",
+      `DELETE FROM analytics_daily_dimensions
+       WHERE deployment_id = zerodrive_default_deployment_id()
+         AND date < CURRENT_DATE - 365`,
     );
     await query(
-      "DELETE FROM analytics_daily_summary WHERE date < CURRENT_DATE - 365",
+      `DELETE FROM analytics_daily_summary
+       WHERE deployment_id = zerodrive_default_deployment_id()
+         AND date < CURRENT_DATE - 365`,
     );
     logger.info("[Analytics] Retention cleanup completed");
   } catch (error) {

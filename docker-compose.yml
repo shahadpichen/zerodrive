@@ -71,9 +71,9 @@ services:
       /bin/sh -c "
       echo 'Waiting for MinIO to be ready...';
       sleep 10;
-      /usr/bin/mc config host add myminio http://minio:9000 minioadmin minioadmin123;
+      /usr/bin/mc alias set myminio http://minio:9000 minioadmin minioadmin123;
       /usr/bin/mc mb myminio/zerodrive-files --ignore-existing;
-      /usr/bin/mc policy set public myminio/zerodrive-files;
+      /usr/bin/mc anonymous set download myminio/zerodrive-files;
       echo 'MinIO setup complete';
       "
 

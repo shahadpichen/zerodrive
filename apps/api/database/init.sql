@@ -5,11 +5,45 @@
 
 -- Enable UUID extension for generating UUIDs
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
+-- Create deployments table
+-- Represents this ZeroDrive installation, not a user or tenant identity.
+CREATE TABLE IF NOT EXISTS deployments (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE OR REPLACE FUNCTION zerodrive_default_deployment_id()
+RETURNS UUID AS $$
+DECLARE
+    deployment UUID;
+BEGIN
+    SELECT id
+      INTO deployment
+      FROM deployments
+     ORDER BY created_at ASC, id ASC
+     LIMIT 1;
+
+    IF deployment IS NULL THEN
+        INSERT INTO deployments DEFAULT VALUES
+        RETURNING id INTO deployment;
+    END IF;
+
+    RETURN deployment;
+END;
+$$ language 'plpgsql';
+
+INSERT INTO deployments (id)
+SELECT gen_random_uuid()
+WHERE NOT EXISTS (SELECT 1 FROM deployments);
 
 -- Create public_keys table
 -- Stores RSA public keys for users to enable encrypted file sharing
 CREATE TABLE IF NOT EXISTS public_keys (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    deployment_id UUID NOT NULL DEFAULT zerodrive_default_deployment_id()
+        REFERENCES deployments(id),
     user_id VARCHAR(255) NOT NULL,
     public_key TEXT NOT NULL,
     key_version INTEGER NOT NULL DEFAULT 1 CHECK (key_version > 0),
@@ -23,6 +57,8 @@ CREATE TABLE IF NOT EXISTS public_keys (
 -- Stores metadata about files shared between users
 CREATE TABLE IF NOT EXISTS shared_files (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    deployment_id UUID NOT NULL DEFAULT zerodrive_default_deployment_id()
+        REFERENCES deployments(id),
     file_id VARCHAR(255) NOT NULL,
     recipient_user_id VARCHAR(255) NOT NULL,
     management_capability_hash CHAR(64) CHECK (
@@ -55,11 +91,15 @@ CREATE TABLE IF NOT EXISTS shared_files (
 
 -- Create indexes for better query performance
 CREATE INDEX IF NOT EXISTS idx_public_keys_user_id ON public_keys(user_id);
+CREATE INDEX IF NOT EXISTS idx_public_keys_deployment_user_id
+    ON public_keys(deployment_id, user_id);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_public_keys_owner_version
     ON public_keys(user_id, key_version);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_public_keys_one_active
     ON public_keys(user_id) WHERE is_active;
 CREATE INDEX IF NOT EXISTS idx_shared_files_recipient ON shared_files(recipient_user_id);
+CREATE INDEX IF NOT EXISTS idx_shared_files_deployment_recipient
+    ON shared_files(deployment_id, recipient_user_id, created_at DESC);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_shared_files_file_id_unique ON shared_files(file_id);
 CREATE INDEX IF NOT EXISTS idx_shared_files_expires_at ON shared_files(expires_at);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_shared_files_management_capability_hash_unique
@@ -96,7 +136,10 @@ CREATE TRIGGER update_shared_files_updated_at
 -- Create analytics_daily_summary table
 -- Stores anonymous daily analytics (privacy-first: no user tracking)
 CREATE TABLE IF NOT EXISTS analytics_daily_summary (
-    date DATE PRIMARY KEY,
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    deployment_id UUID NOT NULL DEFAULT zerodrive_default_deployment_id()
+        REFERENCES deployments(id),
+    date DATE NOT NULL,
     total_logins INTEGER DEFAULT 0,
     total_new_users INTEGER DEFAULT 0,
     total_limited_scope_logins INTEGER DEFAULT 0,
@@ -113,6 +156,10 @@ CREATE TABLE IF NOT EXISTS analytics_daily_summary (
 );
 
 -- Create index for date-based queries
+CREATE UNIQUE INDEX IF NOT EXISTS idx_analytics_daily_summary_deployment_date_unique
+    ON analytics_daily_summary(deployment_id, date);
+CREATE INDEX IF NOT EXISTS idx_analytics_daily_summary_deployment_date
+    ON analytics_daily_summary(deployment_id, date DESC);
 CREATE INDEX IF NOT EXISTS idx_analytics_daily_summary_date ON analytics_daily_summary(date DESC);
 
 -- Create trigger for analytics_daily_summary
@@ -125,24 +172,37 @@ CREATE TRIGGER update_analytics_daily_summary_updated_at
 -- Aggregate-only analytics dimensions. No identity, request, session, file,
 -- share, IP, or device identifiers are stored.
 CREATE TABLE IF NOT EXISTS analytics_daily_dimensions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    deployment_id UUID NOT NULL DEFAULT zerodrive_default_deployment_id()
+        REFERENCES deployments(id),
     date DATE NOT NULL,
     metric VARCHAR(64) NOT NULL CHECK (metric IN ('file_added_to_drive', 'file_shared', 'invitation_sent')),
     dimension VARCHAR(32) NOT NULL CHECK (dimension IN ('source', 'size_bucket', 'file_category', 'has_expiration', 'has_custom_message')),
     bucket VARCHAR(32) NOT NULL,
-    count INTEGER NOT NULL DEFAULT 0 CHECK (count >= 0),
-    PRIMARY KEY (date, metric, dimension, bucket)
+    count INTEGER NOT NULL DEFAULT 0 CHECK (count >= 0)
 );
 
+CREATE UNIQUE INDEX IF NOT EXISTS idx_analytics_daily_dimensions_deployment_key_unique
+    ON analytics_daily_dimensions(deployment_id, date, metric, dimension, bucket);
+CREATE INDEX IF NOT EXISTS idx_analytics_daily_dimensions_deployment_date
+    ON analytics_daily_dimensions(deployment_id, date DESC);
 CREATE INDEX IF NOT EXISTS idx_analytics_daily_dimensions_date
     ON analytics_daily_dimensions(date DESC);
 
 -- One-time OAuth capabilities. Only non-reversible capability hashes are
 -- persisted; the encrypted capability carries its short-lived payload.
 CREATE TABLE IF NOT EXISTS oauth_exchanges (
-    code_hash CHAR(64) PRIMARY KEY,
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    deployment_id UUID NOT NULL DEFAULT zerodrive_default_deployment_id()
+        REFERENCES deployments(id),
+    code_hash CHAR(64) NOT NULL,
     expires_at TIMESTAMP WITH TIME ZONE NOT NULL
 );
 
+CREATE UNIQUE INDEX IF NOT EXISTS idx_oauth_exchanges_code_hash_unique
+    ON oauth_exchanges(code_hash);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_oauth_exchanges_deployment_code_hash_unique
+    ON oauth_exchanges(deployment_id, code_hash);
 CREATE INDEX IF NOT EXISTS idx_oauth_exchanges_expiry
     ON oauth_exchanges(expires_at);
 
@@ -157,17 +217,14 @@ CREATE INDEX IF NOT EXISTS idx_oauth_exchanges_expiry
 -- See: apps/web/src/utils/authService.ts for encrypted storage implementation
 -- See: apps/web/src/utils/cryptoUtils.ts for PBKDF2 encryption functions
 
--- Create a view for active shared files (not expired)
+-- Create a view for finalized active shared files (not expired)
 CREATE OR REPLACE VIEW active_shared_files AS
 SELECT
     sf.*,
-    CASE
-        WHEN sf.expires_at IS NULL THEN true
-        WHEN sf.expires_at > CURRENT_TIMESTAMP THEN true
-        ELSE false
-    END as is_active
+    true AS is_active
 FROM shared_files sf
-WHERE (sf.expires_at IS NULL OR sf.expires_at > CURRENT_TIMESTAMP);
+WHERE sf.status = 'active'
+  AND (sf.expires_at IS NULL OR sf.expires_at > CURRENT_TIMESTAMP);
 
 -- Grant necessary permissions (adjust as needed for your setup)
 -- GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO zerodrive_app;
