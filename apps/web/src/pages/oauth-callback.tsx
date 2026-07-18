@@ -13,6 +13,7 @@ import { storeGoogleTokens } from "../utils/authService";
 import { getUserEmail } from "../utils/authService";
 import apiClient from "../utils/apiClient";
 import logger from "../utils/logger";
+import { queueHomeLoginWelcome } from "../utils/homeWelcome";
 
 const OAuthCallback: React.FC = () => {
   const navigate = useNavigate();
@@ -113,6 +114,8 @@ const OAuthCallback: React.FC = () => {
             "[OAuth] Verification - tokens exist in sessionStorage:",
             !!storedData,
           );
+          queueHomeLoginWelcome();
+
           const isNewUser = tokenData.isNewUser;
           const hasLimitedScope = tokenData.hasLimitedScope;
 
