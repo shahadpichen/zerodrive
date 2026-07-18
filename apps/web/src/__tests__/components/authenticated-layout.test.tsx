@@ -4,6 +4,7 @@ import { MemoryRouter } from "react-router-dom";
 import { AuthenticatedLayout } from "../../components/layout/authenticated-layout";
 import { useApp } from "../../contexts/app-context";
 import { getStoredKey } from "../../utils/cryptoUtils";
+import { AppProvider } from "../../contexts/app-context";
 
 jest.mock("../../utils/cryptoUtils", () => ({
   getStoredKey: jest.fn(),
@@ -27,9 +28,11 @@ function TriggerDecryptionIssue() {
 function renderLayout(initialPath = "/storage") {
   return render(
     <MemoryRouter initialEntries={[initialPath]}>
-      <AuthenticatedLayout>
-        <TriggerDecryptionIssue />
-      </AuthenticatedLayout>
+      <AppProvider>
+        <AuthenticatedLayout>
+          <TriggerDecryptionIssue />
+        </AuthenticatedLayout>
+      </AppProvider>
     </MemoryRouter>,
   );
 }
@@ -56,7 +59,9 @@ describe("AuthenticatedLayout vault access notice", () => {
     expect(
       await screen.findByText(/could not open existing vault metadata/i),
     ).toBeInTheDocument();
-    expect(screen.getByText(/start fresh by uploading a file/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/start fresh by uploading a file/i),
+    ).toBeInTheDocument();
     expect(screen.getByText(/review access/i)).toBeInTheDocument();
   });
 
@@ -70,9 +75,7 @@ describe("AuthenticatedLayout vault access notice", () => {
     expect(await screen.findByText(/vault locked/i)).toBeInTheDocument();
 
     await act(async () => {
-      window.dispatchEvent(
-        new Event("zerodrive-vault-key-storage-changed"),
-      );
+      window.dispatchEvent(new Event("zerodrive-vault-key-storage-changed"));
     });
 
     expect(

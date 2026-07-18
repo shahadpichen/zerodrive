@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { FileList } from "../components/storage/file-list";
 import { Button } from "../components/ui/button";
@@ -6,10 +6,7 @@ import { toast } from "sonner";
 import { useApp } from "../contexts/app-context";
 
 import { getStoredKey } from "../utils/cryptoUtils";
-import {
-  getAllFilesForUser,
-  fetchAndStoreFileMetadata,
-} from "../utils/dexieDB";
+import { fetchAndStoreFileMetadata } from "../utils/dexieDB";
 import {
   uploadAndSyncFile,
   deleteAllAndSyncFiles,
@@ -44,6 +41,7 @@ import {
 } from "../components/ui/dialog";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
+import { useVaultData } from "../contexts/vault-data-context";
 
 // Imports for sharing key functionality (kept for potential future use)
 import { recoverRsaKeysIfNeeded } from "../utils/rsaKeyRecovery";
@@ -69,6 +67,16 @@ function PrivateStorageContent() {
     hasDecryptionError,
     setDecryptionError,
   } = useApp();
+  const {
+    state: vaultState,
+    refreshVaultFromLocal,
+    setVaultKeyStatus,
+    setVaultMetadataStatus,
+  } = useVaultData();
+  const hasCurrentVaultSnapshot =
+    !!userEmail &&
+    vaultState.userEmail === userEmail.trim().toLowerCase() &&
+    !vaultState.isHydrating;
   const [uploading, setUploading] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -80,14 +88,25 @@ function PrivateStorageContent() {
     null,
   );
   const [refreshFileListKey, setRefreshFileListKey] = useState(0);
-  const [userHasFiles, setUserHasFiles] = useState<boolean>(false);
-  const [isLoadingUserFiles, setIsLoadingUserFiles] = useState<boolean>(true);
+  const [isLoadingUserFiles, setIsLoadingUserFiles] = useState<boolean>(
+    !hasCurrentVaultSnapshot,
+  );
   const [isRefreshingFiles, setIsRefreshingFiles] = useState<boolean>(false);
   const [isVerifyingVaultMetadata, setIsVerifyingVaultMetadata] =
     useState<boolean>(false);
   const [showCreateFolder, setShowCreateFolder] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
-  const [hasVaultKey, setHasVaultKey] = useState<boolean | null>(null);
+  const [hasVaultKey, setHasVaultKey] = useState<boolean | null>(
+    hasCurrentVaultSnapshot ? vaultState.hasVaultKey : null,
+  );
+  const initialVaultStateRef = useRef(vaultState);
+  const isVaultSafetyCheckPending =
+    isLoadingUserFiles ||
+    isVerifyingVaultMetadata ||
+    isRefreshingFiles ||
+    (vaultState.userEmail === userEmail.trim().toLowerCase() &&
+      vaultState.metadataStatus !== "ready" &&
+      vaultState.metadataStatus !== "decryption_error");
 
   const openRecoveryAccess = useCallback(() => {
     navigate("/key-management?returnTo=%2Fstorage");
@@ -126,6 +145,10 @@ function PrivateStorageContent() {
           return;
         }
 
+        // Make the verified account available to the persistent providers
+        // before Drive/profile work so local vault data can render at once.
+        setUserInfo(email, email.split("@")[0]);
+
         // Account switch detection
         const { getSessionUser, setSessionUser, clearSession } =
           await import("../utils/sessionManager");
@@ -145,6 +168,7 @@ function PrivateStorageContent() {
 
         const key = await getStoredKey();
         setHasVaultKey(!!key);
+        setVaultKeyStatus(email, !!key);
 
         // Initialize GAPI first so we can fetch profile info
         const { hasGoogleTokensInStorage, logout } =
@@ -202,25 +226,46 @@ function PrivateStorageContent() {
           setUserInfo(email, email.split("@")[0]);
         }
 
-        // Load user files
-        setIsVerifyingVaultMetadata(true);
-        try {
-          await fetchAndStoreFileMetadata();
-          setDecryptionError(false); // Clear error if successful
-        } catch (metadataError: any) {
-          if (metadataError.name === "DecryptionError") {
-            setDecryptionError(true); // Set error flag for banner
-            console.error("Decryption error:", metadataError);
-            // Don't throw, just log - user will see banner
-          } else {
-            throw metadataError; // Re-throw other errors
+        // A verified snapshot survives route navigation in VaultDataProvider.
+        // Direct page loads still verify Drive in the background while the
+        // account-scoped local snapshot remains visible.
+        const hasVerifiedVaultSnapshot =
+          initialVaultStateRef.current.userEmail ===
+            email.trim().toLowerCase() &&
+          initialVaultStateRef.current.metadataStatus === "ready";
+        let metadataStatus = initialVaultStateRef.current.metadataStatus;
+        if (!hasVerifiedVaultSnapshot) {
+          setIsVerifyingVaultMetadata(true);
+          setVaultMetadataStatus(email, "verifying");
+          try {
+            await fetchAndStoreFileMetadata();
+            setDecryptionError(false); // Clear error if successful
+            metadataStatus = "ready";
+          } catch (metadataError: any) {
+            if (metadataError.name === "DecryptionError") {
+              setDecryptionError(true); // Set error flag for banner
+              metadataStatus = "decryption_error";
+              console.error("Decryption error:", metadataError);
+              // Don't throw, just log - user will see banner
+            } else {
+              metadataStatus = "error";
+              setVaultMetadataStatus(
+                email,
+                "error",
+                metadataError instanceof Error
+                  ? metadataError.message
+                  : "Could not verify vault metadata",
+              );
+              throw metadataError; // Re-throw other errors
+            }
+          } finally {
+            setIsVerifyingVaultMetadata(false);
           }
-        } finally {
-          setIsVerifyingVaultMetadata(false);
         }
 
-        const files = await getAllFilesForUser(email);
-        setUserHasFiles(files.length > 0);
+        await refreshVaultFromLocal(email, {
+          metadataStatus,
+        });
 
         // Check for sharing keys and attempt recovery if needed
         await recoverRsaKeysIfNeeded(email, false);
@@ -236,22 +281,23 @@ function PrivateStorageContent() {
     };
 
     loadInitialData();
-  }, [setUserInfo, setDecryptionError]);
+  }, [
+    refreshVaultFromLocal,
+    setDecryptionError,
+    setUserInfo,
+    setVaultKeyStatus,
+    setVaultMetadataStatus,
+  ]);
 
   useEffect(() => {
-    if (userEmail) {
-      setIsLoadingUserFiles(true);
-      getAllFilesForUser(userEmail)
-        .then((files) => {
-          setUserHasFiles(files.length > 0);
-        })
-        .catch((err) => {
-          console.error("Error checking user files:", err);
-          setUserHasFiles(false);
-        })
-        .finally(() => setIsLoadingUserFiles(false));
+    if (!userEmail) return;
+    if (vaultState.userEmail !== userEmail.trim().toLowerCase()) return;
+
+    setIsLoadingUserFiles(vaultState.isHydrating);
+    if (vaultState.hasVaultKey !== null) {
+      setHasVaultKey(vaultState.hasVaultKey);
     }
-  }, [userEmail, refreshFileListKey]);
+  }, [userEmail, vaultState]);
 
   // Listen for sidebar delete all trigger
   useEffect(() => {
@@ -272,6 +318,7 @@ function PrivateStorageContent() {
     }
     setIsRefreshingFiles(true);
     setIsVerifyingVaultMetadata(true);
+    setVaultMetadataStatus(userEmail, "verifying");
     const refreshToastId = toast.loading("Refreshing file list...");
     try {
       try {
@@ -280,6 +327,7 @@ function PrivateStorageContent() {
       } catch (metadataError: any) {
         if (metadataError.name === "DecryptionError") {
           setDecryptionError(true); // Set error flag for banner
+          setVaultMetadataStatus(userEmail, "decryption_error");
           console.error("Decryption error:", metadataError);
           toast.error("Failed to decrypt metadata file.", {
             description: "Please ensure you have the correct encryption key.",
@@ -292,8 +340,9 @@ function PrivateStorageContent() {
         }
       }
 
-      const files = await getAllFilesForUser(userEmail);
-      setUserHasFiles(files.length > 0);
+      await refreshVaultFromLocal(userEmail, {
+        metadataStatus: "ready",
+      });
       setRefreshFileListKey((prev) => prev + 1);
       await refreshAll(); // Refresh storage
       toast.success("File list refreshed successfully.", {
@@ -312,7 +361,7 @@ function PrivateStorageContent() {
   };
 
   const handleUploadTriggerInternal = useCallback(async () => {
-    if (isVerifyingVaultMetadata || isRefreshingFiles || isLoadingUserFiles) {
+    if (isVaultSafetyCheckPending) {
       toast.info("Checking vault metadata", {
         description:
           "Wait for ZeroDrive to finish checking your encrypted file list before uploading.",
@@ -322,6 +371,7 @@ function PrivateStorageContent() {
 
     const key = await getStoredKey();
     setHasVaultKey(!!key);
+    if (userEmail) setVaultKeyStatus(userEmail, !!key);
     if (!key) {
       toast.info("Set up vault access first", {
         description:
@@ -332,10 +382,10 @@ function PrivateStorageContent() {
     }
     document.getElementById("file-upload")?.click();
   }, [
-    isLoadingUserFiles,
-    isRefreshingFiles,
-    isVerifyingVaultMetadata,
+    isVaultSafetyCheckPending,
     openRecoveryAccess,
+    setVaultKeyStatus,
+    userEmail,
   ]);
 
   // Listen for sidebar upload trigger. Keep the handler fresh so global upload
@@ -356,7 +406,7 @@ function PrivateStorageContent() {
   ) => {
     if (filesToUpload.length === 0 || !userEmail) return;
 
-    if (isVerifyingVaultMetadata || isRefreshingFiles || isLoadingUserFiles) {
+    if (isVaultSafetyCheckPending) {
       toast.info("Checking vault metadata", {
         description:
           "Wait for ZeroDrive to finish checking your encrypted file list before uploading.",
@@ -367,6 +417,7 @@ function PrivateStorageContent() {
     // Encryption key is required to upload (files are encrypted client-side)
     const key = await getStoredKey();
     setHasVaultKey(!!key);
+    setVaultKeyStatus(userEmail, !!key);
     if (!key) {
       toast.info("Set up vault access first", {
         description:
@@ -392,8 +443,10 @@ function PrivateStorageContent() {
     setUploading(false);
 
     if (successCount > 0) {
+      await refreshVaultFromLocal(userEmail, {
+        metadataStatus: "ready",
+      });
       setRefreshFileListKey((prev) => prev + 1);
-      setUserHasFiles(true);
       setDecryptionError(false);
       await refreshAll(); // Refresh storage after upload
     }
@@ -453,6 +506,7 @@ function PrivateStorageContent() {
     // Check for encryption key before allowing deletion
     const key = await getStoredKey();
     setHasVaultKey(!!key);
+    setVaultKeyStatus(userEmail, !!key);
     if (!key) {
       toast.error("Encryption key required", {
         description:
@@ -468,8 +522,8 @@ function PrivateStorageContent() {
     setIsDeleting(false);
     setShowDeleteConfirm(false);
     if (success) {
+      await refreshVaultFromLocal(userEmail, { metadataStatus: "ready" });
       setRefreshFileListKey((prev) => prev + 1);
-      setUserHasFiles(false);
       await refreshAll(); // Refresh storage after delete
     }
   };
@@ -591,6 +645,9 @@ function PrivateStorageContent() {
           onUploadClick={handleUploadTriggerInternal}
           hasVaultKey={hasVaultKey}
           onRecoverAccessClick={openRecoveryAccess}
+          isVaultMetadataLoading={
+            (!userEmail && isLoadingUserFiles) || isVaultSafetyCheckPending
+          }
         />
 
         {/* Persistent drop hint */}
@@ -609,8 +666,8 @@ function PrivateStorageContent() {
             parentFolderId={currentFolderId}
             userEmail={userEmail}
             onSuccess={() => {
+              void refreshVaultFromLocal(userEmail);
               setRefreshFileListKey((prev) => prev + 1);
-              setUserHasFiles(true);
             }}
           />
         )}
@@ -643,8 +700,8 @@ function PrivateStorageContent() {
                     Existing vault index could not be opened
                   </DialogTitle>
                   <DialogDescription className="mt-2 leading-relaxed">
-                    ZeroDrive found an encrypted file list in Google Drive{" "}
-                    (<code>db-list.json</code>), but this browser could not open
+                    ZeroDrive found an encrypted file list in Google Drive (
+                    <code>db-list.json</code>), but this browser could not open
                     it with the current recovery phrase.
                   </DialogDescription>
                 </div>
@@ -685,10 +742,7 @@ function PrivateStorageContent() {
             </div>
 
             <DialogFooter>
-              <Button
-                variant="outline"
-                onClick={closeMetadataReplaceConfirm}
-              >
+              <Button variant="outline" onClick={closeMetadataReplaceConfirm}>
                 Cancel
               </Button>
               <Button

@@ -13,9 +13,15 @@ import {
 } from "../../utils/dexieDB";
 import { uploadAndSyncFile } from "../../utils/fileOperations";
 import { toast } from "sonner";
+import { useVaultData } from "../../contexts/vault-data-context";
 
 jest.mock("../../contexts/app-context", () => ({
   useApp: jest.fn(),
+}));
+
+jest.mock("../../contexts/vault-data-context", () => ({
+  useVaultData: jest.fn(),
+  useOptionalVaultData: jest.fn().mockReturnValue(null),
 }));
 
 jest.mock("../../utils/cryptoUtils", () => ({
@@ -71,6 +77,9 @@ jest.mock("sonner", () => ({
 }));
 
 const mockUseApp = useApp as jest.MockedFunction<typeof useApp>;
+const mockUseVaultData = useVaultData as jest.MockedFunction<
+  typeof useVaultData
+>;
 const mockGetStoredKey = getStoredKey as jest.MockedFunction<
   typeof getStoredKey
 >;
@@ -92,6 +101,8 @@ const mockUploadAndSyncFile = uploadAndSyncFile as jest.MockedFunction<
 >;
 const mockToastInfo = toast.info as jest.MockedFunction<typeof toast.info>;
 let mockSetDecryptionError: jest.Mock;
+let mockRefreshVaultFromLocal: jest.Mock;
+let mockSetVaultMetadataStatus: jest.Mock;
 
 const typeConfirmationCode = () => {
   const confirmationCode = screen.getByText((content) =>
@@ -106,9 +117,11 @@ const typeConfirmationCode = () => {
 describe("PrivateStorage metadata replacement warning", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    sessionStorage.clear();
 
-    jest.spyOn(global.crypto, "getRandomValues").mockImplementation(
-      <T extends ArrayBufferView | null>(array: T): T => {
+    jest
+      .spyOn(global.crypto, "getRandomValues")
+      .mockImplementation(<T extends ArrayBufferView | null>(array: T): T => {
         const values = array as unknown as {
           length: number;
           [key: number]: number;
@@ -119,10 +132,32 @@ describe("PrivateStorage metadata replacement warning", () => {
           }
         }
         return array;
-      },
-    );
+      });
 
     mockSetDecryptionError = jest.fn();
+    mockRefreshVaultFromLocal = jest.fn().mockResolvedValue({
+      files: [],
+      folders: [],
+    });
+    mockSetVaultMetadataStatus = jest.fn();
+    mockUseVaultData.mockReturnValue({
+      state: {
+        userEmail: "owner@example.com",
+        files: [],
+        folders: [],
+        isHydrating: false,
+        isRefreshing: false,
+        metadataStatus: "decryption_error",
+        hasVaultKey: true,
+        lastSyncedAt: null,
+        error: null,
+      },
+      replaceVaultData: jest.fn(),
+      refreshVaultFromLocal: mockRefreshVaultFromLocal,
+      setVaultMetadataStatus: mockSetVaultMetadataStatus,
+      setVaultKeyStatus: jest.fn(),
+      clearVaultData: jest.fn(),
+    });
     mockUseApp.mockReturnValue({
       userEmail: "owner@example.com",
       userName: "Owner",
@@ -225,6 +260,24 @@ describe("PrivateStorage metadata replacement warning", () => {
       refreshAll: jest.fn().mockResolvedValue(undefined),
       setUserInfo: jest.fn(),
     });
+    mockUseVaultData.mockReturnValue({
+      state: {
+        userEmail: "owner@example.com",
+        files: [],
+        folders: [],
+        isHydrating: false,
+        isRefreshing: true,
+        metadataStatus: "verifying",
+        hasVaultKey: true,
+        lastSyncedAt: null,
+        error: null,
+      },
+      replaceVaultData: jest.fn(),
+      refreshVaultFromLocal: mockRefreshVaultFromLocal,
+      setVaultMetadataStatus: mockSetVaultMetadataStatus,
+      setVaultKeyStatus: jest.fn(),
+      clearVaultData: jest.fn(),
+    });
 
     const file = new File(["hello"], "notes.pdf", {
       type: "application/pdf",
@@ -255,4 +308,51 @@ describe("PrivateStorage metadata replacement warning", () => {
     expect(mockUploadAndSyncFile).not.toHaveBeenCalled();
   });
 
+  it("uses Home's verified shared vault state instead of checking Drive again", async () => {
+    mockUseVaultData.mockReturnValue({
+      state: {
+        userEmail: "owner@example.com",
+        files: [],
+        folders: [],
+        isHydrating: false,
+        isRefreshing: false,
+        metadataStatus: "ready",
+        hasVaultKey: true,
+        lastSyncedAt: Date.now(),
+        error: null,
+      },
+      replaceVaultData: jest.fn(),
+      refreshVaultFromLocal: mockRefreshVaultFromLocal,
+      setVaultMetadataStatus: mockSetVaultMetadataStatus,
+      setVaultKeyStatus: jest.fn(),
+      clearVaultData: jest.fn(),
+    });
+    mockUseApp.mockReturnValue({
+      userEmail: "owner@example.com",
+      userName: "Owner",
+      userImage: "",
+      storageInfo: null,
+      isLoadingStorage: false,
+      hasDecryptionError: false,
+      setDecryptionError: mockSetDecryptionError,
+      refreshStorage: jest.fn().mockResolvedValue(undefined),
+      refreshAll: jest.fn().mockResolvedValue(undefined),
+      setUserInfo: jest.fn(),
+    });
+    mockFetchAndStoreFileMetadata.mockResolvedValue(undefined);
+    mockGetAllFilesForUser.mockResolvedValue([]);
+
+    render(
+      <MemoryRouter>
+        <PrivateStorage />
+      </MemoryRouter>,
+    );
+
+    await screen.findByText("Your encrypted vault is empty.");
+
+    expect(mockFetchAndStoreFileMetadata).not.toHaveBeenCalled();
+    expect(
+      screen.queryByText("Checking encrypted vault..."),
+    ).not.toBeInTheDocument();
+  });
 });

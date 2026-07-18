@@ -1,11 +1,8 @@
 import React, { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { ArrowLeft, AlertTriangle } from "lucide-react";
-import { AppProvider, useApp } from "../../contexts/app-context";
-import {
-  getStoredKey,
-  VAULT_KEY_STORAGE_EVENT,
-} from "../../utils/cryptoUtils";
+import { useApp } from "../../contexts/app-context";
+import { getStoredKey, VAULT_KEY_STORAGE_EVENT } from "../../utils/cryptoUtils";
 
 function AuthenticatedLayoutContent({
   children,
@@ -105,9 +102,5 @@ export function AuthenticatedLayout({
 }: {
   children: React.ReactNode;
 }) {
-  return (
-    <AppProvider>
-      <AuthenticatedLayoutContent>{children}</AuthenticatedLayoutContent>
-    </AppProvider>
-  );
+  return <AuthenticatedLayoutContent>{children}</AuthenticatedLayoutContent>;
 }

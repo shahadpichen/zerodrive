@@ -17,6 +17,8 @@ import {
 import { queueHomeLoginWelcome } from "../../utils/homeWelcome";
 import { writeCachedHomeDashboard } from "../../utils/homeDashboardCache";
 import { getAuthenticatedUser } from "../../utils/authService";
+import { AppProvider } from "../../contexts/app-context";
+import { VaultDataProvider } from "../../contexts/vault-data-context";
 
 const mockNavigate = jest.fn();
 
@@ -150,7 +152,11 @@ let currentVaultSetupState = needsKeyState;
 function renderHome() {
   return render(
     <MemoryRouter>
-      <Home />
+      <AppProvider>
+        <VaultDataProvider>
+          <Home />
+        </VaultDataProvider>
+      </AppProvider>
     </MemoryRouter>,
   );
 }
@@ -210,7 +216,9 @@ describe("Home guided vault setup", () => {
 
     renderHome();
 
-    expect(screen.getByText("Setting up your private vault")).toBeInTheDocument();
+    expect(
+      screen.getByText("Setting up your private vault"),
+    ).toBeInTheDocument();
     expect(screen.queryByText(/Welcome back/i)).not.toBeInTheDocument();
     await waitFor(() => expect(mockGetAuthenticatedUser).toHaveBeenCalled());
   });
@@ -218,7 +226,9 @@ describe("Home guided vault setup", () => {
   it("shows a stable loading headline while vault state is checked", () => {
     renderHome();
 
-    expect(screen.getByText("Setting up your private vault")).toBeInTheDocument();
+    expect(
+      screen.getByText("Setting up your private vault"),
+    ).toBeInTheDocument();
     expect(screen.queryByText(/Welcome back/i)).not.toBeInTheDocument();
   });
 
@@ -232,7 +242,9 @@ describe("Home guided vault setup", () => {
     unmount();
     renderHome();
 
-    expect(screen.getByText("Setting up your private vault")).toBeInTheDocument();
+    expect(
+      screen.getByText("Setting up your private vault"),
+    ).toBeInTheDocument();
     expect(screen.queryByText(/Welcome back/i)).not.toBeInTheDocument();
   });
 
@@ -267,7 +279,9 @@ describe("Home guided vault setup", () => {
 
     renderHome();
 
-    expect(await screen.findByText("Could not check your vault")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Could not check your vault"),
+    ).toBeInTheDocument();
     expect(
       screen.queryByText("Setting up your private vault"),
     ).not.toBeInTheDocument();

@@ -5,7 +5,6 @@ import {
   getAllFilesForUser,
   deleteFileFromDB,
   sendToGoogleDrive,
-  getFilesInFolder,
   getFoldersForUser,
 } from "../../utils/dexieDB";
 
@@ -41,6 +40,7 @@ import { FolderItem } from "./folder-item";
 import { FolderActions } from "./folder-actions";
 import { FolderBreadcrumb } from "./folder-breadcrumb";
 import { moveFile } from "../../utils/folderOperations";
+import { useOptionalVaultData } from "../../contexts/vault-data-context";
 
 interface FileListProps {
   view?: "compact" | "recent" | "full";
@@ -49,6 +49,7 @@ interface FileListProps {
   onUploadClick?: () => void;
   hasVaultKey?: boolean | null;
   onRecoverAccessClick?: () => void;
+  isVaultMetadataLoading?: boolean;
 }
 
 // Helper hook to safely get folder context
@@ -67,6 +68,16 @@ function useSafeFolderContext() {
   }
 }
 
+const filesForFolder = (files: FileMeta[], folderId: string | null) =>
+  files.filter((file) => {
+    const fileFolderId = file.folderId === undefined ? null : file.folderId;
+    const targetFolderId = folderId === undefined ? null : folderId;
+    return fileFolderId === targetFolderId;
+  });
+
+const foldersForFolder = (folderList: FolderMeta[], folderId: string | null) =>
+  folderList.filter((folder) => (folder.parentId || null) === folderId);
+
 export const FileList: React.FC<FileListProps> = ({
   view = "full",
   refreshKey,
@@ -74,14 +85,30 @@ export const FileList: React.FC<FileListProps> = ({
   onUploadClick,
   hasVaultKey = null,
   onRecoverAccessClick,
+  isVaultMetadataLoading = false,
 }) => {
   const { currentFolderId, currentPath, navigateToFolder, setCurrentPath } =
     useSafeFolderContext();
-  const [allUserFiles, setAllUserFiles] = useState<FileMeta[]>([]);
-  const [filteredFiles, setFilteredFiles] = useState<FileMeta[]>([]);
-  const [folders, setFolders] = useState<FolderMeta[]>([]);
   const userEmail = userEmailProp || null;
-  const [isLoadingFiles, setIsLoadingFiles] = useState<boolean>(true);
+  const vaultData = useOptionalVaultData();
+  const replaceVaultData = vaultData?.replaceVaultData;
+  const hasSharedVaultSnapshot =
+    view === "full" &&
+    !!userEmail &&
+    vaultData?.state.userEmail === userEmail.trim().toLowerCase() &&
+    !vaultData.state.isHydrating;
+  const initialFiles = hasSharedVaultSnapshot
+    ? filesForFolder(vaultData.state.files, currentFolderId)
+    : [];
+  const initialFolders = hasSharedVaultSnapshot
+    ? foldersForFolder(vaultData.state.folders, currentFolderId)
+    : [];
+  const [allUserFiles, setAllUserFiles] = useState<FileMeta[]>(initialFiles);
+  const [filteredFiles, setFilteredFiles] = useState<FileMeta[]>(initialFiles);
+  const [folders, setFolders] = useState<FolderMeta[]>(initialFolders);
+  const [isLoadingFiles, setIsLoadingFiles] = useState<boolean>(
+    !hasSharedVaultSnapshot,
+  );
   const [filter, setFilter] = useState<MimeTypeCategory | "All Files">(
     "All Files",
   );
@@ -105,6 +132,7 @@ export const FileList: React.FC<FileListProps> = ({
   } | null>(null);
   const [draggingFileId, setDraggingFileId] = useState<string | null>(null);
   const [dragOverFolderId, setDragOverFolderId] = useState<string | null>(null);
+  const [showVaultLoadingMessage, setShowVaultLoadingMessage] = useState(false);
 
   useEffect(() => {
     const fetchFiles = async () => {
@@ -122,24 +150,28 @@ export const FileList: React.FC<FileListProps> = ({
       console.log(
         `[FileList - ${view}] Fetching files for ${userEmail}, Key: ${refreshKey}, FolderId: ${currentFolderId}`,
       );
-      setIsLoadingFiles(true);
+      setIsLoadingFiles(!hasSharedVaultSnapshot);
       try {
         let userFiles: FileMeta[];
 
         // Get files based on view and folder
         if (view === "full") {
-          // In full view, filter by current folder
-          userFiles = await getFilesInFolder(userEmail, currentFolderId);
+          const allFilesResult = await getAllFilesForUser(userEmail);
+          const allFiles = Array.isArray(allFilesResult) ? allFilesResult : [];
+          const allFoldersResult = await getFoldersForUser(userEmail);
+          const allFolders = Array.isArray(allFoldersResult)
+            ? allFoldersResult
+            : [];
 
-          // Also get folders in current directory
-          const allFolders = await getFoldersForUser(userEmail);
-          const currentFolders = allFolders.filter(
-            (f) => (f.parentId || null) === currentFolderId,
-          );
+          userFiles = filesForFolder(allFiles, currentFolderId);
+
+          const currentFolders = foldersForFolder(allFolders, currentFolderId);
           setFolders(currentFolders);
+          replaceVaultData?.(userEmail, allFiles, allFolders);
         } else {
           // For compact/recent views, get all files (no folder filtering)
-          userFiles = await getAllFilesForUser(userEmail);
+          const allFilesResult = await getAllFilesForUser(userEmail);
+          userFiles = Array.isArray(allFilesResult) ? allFilesResult : [];
         }
 
         console.log(
@@ -171,7 +203,33 @@ export const FileList: React.FC<FileListProps> = ({
     };
 
     fetchFiles();
-  }, [userEmail, view, refreshKey, currentFolderId, refreshFileListKey]);
+  }, [
+    userEmail,
+    view,
+    refreshKey,
+    currentFolderId,
+    refreshFileListKey,
+    replaceVaultData,
+    hasSharedVaultSnapshot,
+  ]);
+
+  // Provider updates are synchronous across routes and mutations. Mirror the
+  // shared snapshot without waiting for a new IndexedDB transaction.
+  useEffect(() => {
+    if (view !== "full" || !userEmail || !vaultData) return;
+    if (vaultData.state.userEmail !== userEmail.trim().toLowerCase()) return;
+    if (vaultData.state.isHydrating) return;
+
+    const sharedFiles = filesForFolder(vaultData.state.files, currentFolderId);
+    const sharedFolders = foldersForFolder(
+      vaultData.state.folders,
+      currentFolderId,
+    );
+    setAllUserFiles(sharedFiles);
+    setFilteredFiles(sharedFiles);
+    setFolders(sharedFolders);
+    setIsLoadingFiles(false);
+  }, [currentFolderId, userEmail, vaultData, view]);
 
   useEffect(() => {
     console.log(
@@ -214,6 +272,23 @@ export const FileList: React.FC<FileListProps> = ({
       `[FileList - ${view}] Filtering applied, ${results.length} files shown.`,
     );
   }, [filter, searchQuery, sortKey, sortDir, allUserFiles, view]);
+
+  const isVaultLoading = isLoadingFiles || isVaultMetadataLoading;
+  const hasLocalVaultItems = allUserFiles.length > 0 || folders.length > 0;
+  const shouldShowVaultLoadingState = isVaultLoading && !hasLocalVaultItems;
+
+  useEffect(() => {
+    if (!shouldShowVaultLoadingState) {
+      setShowVaultLoadingMessage(false);
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setShowVaultLoadingMessage(true);
+    }, 450);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [shouldShowVaultLoadingState]);
 
   const downloadAndDecryptFile = async (fileId: string, fileName: string) => {
     setDownloadingFileId(fileId);
@@ -361,6 +436,7 @@ export const FileList: React.FC<FileListProps> = ({
       const updatedFolders = await getFoldersForUser(userEmail);
       setAllUserFiles(updatedFiles);
       setFilteredFiles(updatedFiles);
+      replaceVaultData?.(userEmail, updatedFiles, updatedFolders);
 
       console.log("[FileList] Deletion complete, syncing metadata...");
       await sendToGoogleDrive(updatedFiles, updatedFolders);
@@ -409,10 +485,17 @@ export const FileList: React.FC<FileListProps> = ({
   if (view === "compact" || view === "recent") {
     return (
       <div className="p-1">
-        {isLoadingFiles ? (
-          <p className="text-center text-xs text-muted-foreground py-4">
-            Loading...
-          </p>
+        {shouldShowVaultLoadingState ? (
+          showVaultLoadingMessage ? (
+            <p
+              className="text-center text-xs text-muted-foreground py-4"
+              aria-live="polite"
+            >
+              Checking encrypted vault...
+            </p>
+          ) : (
+            <div className="py-4" aria-hidden="true" />
+          )
         ) : filteredFiles.length > 0 ? (
           <div className="space-y-3">
             {/* Files */}
@@ -564,12 +647,12 @@ export const FileList: React.FC<FileListProps> = ({
 
   const isEmpty = visibleFolders.length === 0 && filteredFiles.length === 0;
   const isQuietEmptyVault =
-    !isLoadingFiles &&
-    allUserFiles.length === 0 &&
-    folders.length === 0 &&
+    !isVaultLoading &&
+    !hasLocalVaultItems &&
     filter === "All Files" &&
     searchQuery.length === 0;
-  const showToolbar = !isQuietEmptyVault;
+  const showToolbar =
+    !isQuietEmptyVault && (!isVaultLoading || hasLocalVaultItems);
 
   return (
     <div className="space-y-4">
@@ -681,8 +764,17 @@ export const FileList: React.FC<FileListProps> = ({
         />
       )}
 
-      {isLoadingFiles ? (
-        <p className="text-center text-muted-foreground py-8">Loading...</p>
+      {shouldShowVaultLoadingState ? (
+        showVaultLoadingMessage ? (
+          <p
+            className="text-center text-muted-foreground py-8"
+            aria-live="polite"
+          >
+            Checking encrypted vault...
+          </p>
+        ) : (
+          <div className="py-8" aria-hidden="true" />
+        )
       ) : isEmpty ? (
         searchQuery ? (
           <p className="text-center text-muted-foreground py-8">
@@ -729,12 +821,12 @@ export const FileList: React.FC<FileListProps> = ({
               </button>
             ) : (
               onUploadClick && (
-              <button
-                onClick={onUploadClick}
-                className="mt-6 border bg-foreground px-5 py-2 text-sm font-semibold text-background hover:bg-foreground/90"
-              >
-                Upload first encrypted file
-              </button>
+                <button
+                  onClick={onUploadClick}
+                  className="mt-6 border bg-foreground px-5 py-2 text-sm font-semibold text-background hover:bg-foreground/90"
+                >
+                  Upload first encrypted file
+                </button>
               )
             )}
           </div>

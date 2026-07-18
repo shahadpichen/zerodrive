@@ -11,7 +11,7 @@ import {
   LogOut,
   BarChart3,
 } from "lucide-react";
-import { AppProvider, useApp } from "../contexts/app-context";
+import { useApp } from "../contexts/app-context";
 import { ModeToggle } from "../components/mode-toggle";
 import { Avatar, AvatarFallback, AvatarImage } from "../components/ui/avatar";
 import {
@@ -53,6 +53,7 @@ import {
   readCachedHomeDashboardForUser,
   writeCachedHomeDashboard,
 } from "../utils/homeDashboardCache";
+import { useVaultData } from "../contexts/vault-data-context";
 
 function formatBytes(bytes: number) {
   if (!bytes || bytes === 0) return "0 B";
@@ -69,20 +70,6 @@ function initials(name: string, email: string) {
   return (base[0] || "?").toUpperCase();
 }
 
-// A fresh, useful tip is shown on each visit.
-const TIPS = [
-  "Your files are encrypted on your device before they ever reach Google Drive.",
-  "Drag a file onto a folder — or the breadcrumb — to move it.",
-  "Your 12-word recovery phrase is the only way to restore access. Keep it somewhere safe.",
-  "Lose your recovery phrase and no one can recover your files — not even us. That's the point.",
-  "Drop files anywhere on the Storage page to upload them.",
-  "Share a file by email and only the intended recipient can decrypt it.",
-  "Switch between grid and list view, sort, and filter from the toolbar.",
-  "Rename or delete a folder from its menu — in both grid and list view.",
-  "Your keys are backed up to Google Drive, encrypted, so you can recover on any device.",
-  "Everything here is open source — you can audit exactly how your files are protected.",
-];
-
 function HomeContent() {
   const navigate = useNavigate();
   const {
@@ -93,6 +80,8 @@ function HomeContent() {
     setUserInfo,
     setDecryptionError,
   } = useApp();
+  const { replaceVaultData, setVaultMetadataStatus, clearVaultData } =
+    useVaultData();
 
   const [showLoginWelcome] = useState(() => hasPendingHomeLoginWelcome());
   const [counts, setCounts] = useState({ files: 0, folders: 0 });
@@ -100,7 +89,6 @@ function HomeContent() {
   const [canReadAnalytics, setCanReadAnalytics] = useState(false);
   const [vaultSetup, setVaultSetup] = useState<VaultSetupState | null>(null);
   const [isVaultStateLoading, setIsVaultStateLoading] = useState(true);
-  const [tip] = useState(() => TIPS[Math.floor(Math.random() * TIPS.length)]);
 
   useEffect(() => {
     if (showLoginWelcome) {
@@ -120,6 +108,10 @@ function HomeContent() {
           window.location.href = "/";
           return;
         }
+
+        // Establish the authenticated account before any Drive work so the
+        // shared vault provider can hydrate its account-scoped IndexedDB data.
+        setUserInfo(email, email.split("@")[0]);
 
         const nextCanReadAnalytics =
           !!authenticatedUser?.capabilities.analyticsRead;
@@ -160,13 +152,18 @@ function HomeContent() {
         }
 
         let hasMetadataDecryptionError = false;
+        let metadataStatus: "ready" | "decryption_error" | "error" = "ready";
+        setVaultMetadataStatus(email, "verifying");
         try {
           await fetchAndStoreFileMetadata();
           setDecryptionError(false);
         } catch (err: any) {
           if (err?.name === "DecryptionError") {
             hasMetadataDecryptionError = true;
+            metadataStatus = "decryption_error";
             setDecryptionError(true);
+          } else {
+            metadataStatus = "error";
           }
         }
 
@@ -174,6 +171,7 @@ function HomeContent() {
           getAllFilesForUser(email),
           getFoldersForUser(email),
         ]);
+        replaceVaultData(email, files, folders, { metadataStatus });
         const nextCounts = { files: files.length, folders: folders.length };
         const nextRecent = [...files]
           .sort(
@@ -222,11 +220,18 @@ function HomeContent() {
     return () => {
       isMounted = false;
     };
-  }, [setUserInfo, setDecryptionError, showLoginWelcome]);
+  }, [
+    replaceVaultData,
+    setDecryptionError,
+    setUserInfo,
+    setVaultMetadataStatus,
+    showLoginWelcome,
+  ]);
 
   const handleLogout = async () => {
     try {
       localStorage.removeItem("zerodrive-storage-cache");
+      clearVaultData();
       await logout();
       navigate("/");
     } catch {
@@ -561,11 +566,7 @@ function HomeContent() {
 }
 
 function Home() {
-  return (
-    <AppProvider>
-      <HomeContent />
-    </AppProvider>
-  );
+  return <HomeContent />;
 }
 
 export default Home;
