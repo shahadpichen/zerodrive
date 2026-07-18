@@ -386,8 +386,12 @@ function PrivateStorageContent() {
 
         {/* Page Header */}
         <div className="flex items-center justify-between">
-          <div className="flex flex-col gap-2">
+          <div className="flex max-w-2xl flex-col gap-2">
             <h1 className="text-2xl tracking-tight">Storage</h1>
+            <p className="text-sm font-light leading-relaxed text-muted-foreground">
+              This is your encrypted vault. Files are encrypted in this browser
+              before the protected copy is saved to your Google Drive.
+            </p>
           </div>
           <div className="flex gap-2">
             <Button
@@ -450,6 +454,7 @@ function PrivateStorageContent() {
           view="full"
           refreshKey={refreshFileListKey}
           userEmail={userEmail}
+          onUploadClick={handleUploadTriggerInternal}
         />
 
         {/* Persistent drop hint */}
@@ -477,10 +482,10 @@ function PrivateStorageContent() {
         <ConfirmationDialog
           open={showDeleteConfirm}
           onOpenChange={setShowDeleteConfirm}
-          title="Delete All Files?"
-          description="Are you sure you want to delete ALL files? This action cannot be undone."
+          title="Permanently delete every encrypted file?"
+          description="This removes every encrypted file ZeroDrive knows about from your vault and syncs the deletion to Google Drive. Downloads or recovery are not possible from ZeroDrive after this completes."
           onConfirm={performDeleteAllFiles}
-          confirmText={isDeleting ? "Deleting..." : "Delete All"}
+          confirmText={isDeleting ? "Deleting..." : "Delete every file"}
         />
       </div>
     </>
