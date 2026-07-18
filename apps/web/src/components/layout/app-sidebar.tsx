@@ -36,7 +36,12 @@ const navigationItems: NavItem[] = [
     icon: Inbox,
     path: "/shared-with-me",
   },
-  { id: "keys", label: "Key Management", icon: Key, path: "/key-management" },
+  {
+    id: "keys",
+    label: "Recovery & Access",
+    icon: Key,
+    path: "/recovery-access",
+  },
 ];
 
 function formatBytes(bytes: number) {

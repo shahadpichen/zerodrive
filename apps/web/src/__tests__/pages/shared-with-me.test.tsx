@@ -206,10 +206,10 @@ describe("SharedWithMePage", () => {
       await screen.findByText("Recover your encryption key"),
     ).toBeInTheDocument();
     fireEvent.click(
-      screen.getByRole("button", { name: /open key management/i }),
+      screen.getByRole("button", { name: /open recovery & access/i }),
     );
     expect(mockNavigate).toHaveBeenCalledWith(
-      "/key-management?returnTo=%2Fshared-with-me",
+      "/recovery-access?returnTo=%2Fshared-with-me",
     );
   });
 

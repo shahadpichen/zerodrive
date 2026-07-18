@@ -29,10 +29,10 @@ function AuthenticatedLayoutContent({
             <span className="text-xs font-medium text-accent-foreground">
               Decryption failed —
               <button
-                onClick={() => navigate("/key-management")}
+                onClick={() => navigate("/recovery-access")}
                 className="ml-1 underline hover:no-underline"
               >
-                update encryption key
+                open Recovery & Access
               </button>
             </span>
           </div>

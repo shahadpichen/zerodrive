@@ -5,8 +5,10 @@ import { KeyManagementPage } from "../../pages/key-management-page";
 import {
   deriveKeyFromMnemonic,
   generateMnemonic,
+  getStoredKey,
   storeKey,
 } from "../../utils/cryptoUtils";
+import { getMnemonic } from "../../utils/mnemonicManager";
 
 const mockNavigate = jest.fn();
 
@@ -18,10 +20,12 @@ jest.mock("react-router-dom", () => ({
 jest.mock("../../utils/cryptoUtils", () => ({
   deriveKeyFromMnemonic: jest.fn(),
   generateMnemonic: jest.fn(),
+  getStoredKey: jest.fn(),
   storeKey: jest.fn(),
 }));
 
 jest.mock("../../utils/mnemonicManager", () => ({
+  getMnemonic: jest.fn(),
   setMnemonic: jest.fn(),
 }));
 
@@ -64,11 +68,15 @@ const mockGenerateMnemonic = generateMnemonic as jest.MockedFunction<
   typeof generateMnemonic
 >;
 const mockStoreKey = storeKey as jest.MockedFunction<typeof storeKey>;
+const mockGetStoredKey = getStoredKey as jest.MockedFunction<
+  typeof getStoredKey
+>;
+const mockGetMnemonic = getMnemonic as jest.MockedFunction<typeof getMnemonic>;
 
 const mnemonic =
   "abandon ability able about above absent absorb abstract absurd abuse access accident";
 
-function renderPage(initialEntry = "/key-management") {
+function renderPage(initialEntry = "/recovery-access") {
   return render(
     <MemoryRouter initialEntries={[initialEntry]}>
       <KeyManagementPage />
@@ -86,7 +94,7 @@ async function generateNewKey() {
   fireEvent.click(
     screen.getByRole("button", { name: /create encryption key/i }),
   );
-  await screen.findByText("Your encryption key is ready");
+  await screen.findAllByText("Your vault is ready");
 }
 
 describe("KeyManagementPage", () => {
@@ -95,12 +103,15 @@ describe("KeyManagementPage", () => {
     mockNavigate.mockReset();
     mockGenerateMnemonic.mockReturnValue(mnemonic);
     mockDeriveKey.mockResolvedValue({} as CryptoKey);
+    mockGetStoredKey.mockResolvedValue(null);
+    mockGetMnemonic.mockReturnValue(null);
     mockStoreKey.mockResolvedValue(undefined);
   });
 
   it("opens in a focused recovery mode", () => {
     renderPage();
 
+    expect(screen.getByText("Recovery & Access")).toBeInTheDocument();
     expect(screen.getByText("Recover your key")).toBeInTheDocument();
     expect(screen.getByLabelText("Recovery phrase")).toBeInTheDocument();
     expect(screen.getByText(/never sent to the server/i)).toBeInTheDocument();
@@ -152,7 +163,7 @@ describe("KeyManagementPage", () => {
       screen.getByRole("button", { name: /download phrase/i }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: /continue to storage/i }),
+      screen.getByRole("button", { name: /upload first encrypted file/i }),
     ).toBeInTheDocument();
   });
 
@@ -170,8 +181,8 @@ describe("KeyManagementPage", () => {
     expect(mockStoreKey).toHaveBeenCalled();
   });
 
-  it("returns to sharing when Key Management was opened from /share", async () => {
-    renderPage("/key-management?returnTo=%2Fshare");
+  it("returns to sharing when Recovery & Access was opened from /share", async () => {
+    renderPage("/recovery-access?returnTo=%2Fshare");
     fireEvent.change(screen.getByLabelText("Recovery phrase"), {
       target: { value: mnemonic },
     });

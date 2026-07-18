@@ -302,7 +302,7 @@ const SharedWithMePage: React.FC = () => {
     if (keyState === "sharing-missing") {
       navigate("/share");
     } else if (keyState === "primary-missing") {
-      navigate("/key-management?returnTo=%2Fshared-with-me");
+      navigate("/recovery-access?returnTo=%2Fshared-with-me");
     }
     return false;
   };
@@ -488,8 +488,9 @@ const SharedWithMePage: React.FC = () => {
         title: "Recover your encryption key",
         description:
           "Your primary recovery phrase is required before shared files can be decrypted.",
-        action: "Open Key Management",
-        onClick: () => navigate("/key-management?returnTo=%2Fshared-with-me"),
+        action: "Open Recovery & Access",
+        onClick: () =>
+          navigate("/recovery-access?returnTo=%2Fshared-with-me"),
       },
       "sharing-missing": {
         title: "Enable encrypted sharing",
