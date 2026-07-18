@@ -12,6 +12,7 @@ import {
   getFoldersForUser,
 } from "../../utils/dexieDB";
 import { uploadAndSyncFile } from "../../utils/fileOperations";
+import { toast } from "sonner";
 
 jest.mock("../../contexts/app-context", () => ({
   useApp: jest.fn(),
@@ -89,6 +90,18 @@ const mockGetFoldersForUser = getFoldersForUser as jest.MockedFunction<
 const mockUploadAndSyncFile = uploadAndSyncFile as jest.MockedFunction<
   typeof uploadAndSyncFile
 >;
+const mockToastInfo = toast.info as jest.MockedFunction<typeof toast.info>;
+let mockSetDecryptionError: jest.Mock;
+
+const typeConfirmationCode = () => {
+  const confirmationCode = screen.getByText((content) =>
+    /^[A-Z2-9]{6}$/.test(content),
+  ).textContent!;
+
+  fireEvent.change(screen.getByLabelText(/type this code to continue/i), {
+    target: { value: confirmationCode },
+  });
+};
 
 describe("PrivateStorage metadata replacement warning", () => {
   beforeEach(() => {
@@ -96,7 +109,10 @@ describe("PrivateStorage metadata replacement warning", () => {
 
     jest.spyOn(global.crypto, "getRandomValues").mockImplementation(
       <T extends ArrayBufferView | null>(array: T): T => {
-        const values = array as unknown as { length: number; [key: number]: number };
+        const values = array as unknown as {
+          length: number;
+          [key: number]: number;
+        };
         if (values?.length) {
           for (let index = 0; index < values.length; index += 1) {
             values[index] = index;
@@ -106,6 +122,7 @@ describe("PrivateStorage metadata replacement warning", () => {
       },
     );
 
+    mockSetDecryptionError = jest.fn();
     mockUseApp.mockReturnValue({
       userEmail: "owner@example.com",
       userName: "Owner",
@@ -113,7 +130,7 @@ describe("PrivateStorage metadata replacement warning", () => {
       storageInfo: null,
       isLoadingStorage: false,
       hasDecryptionError: true,
-      setDecryptionError: jest.fn(),
+      setDecryptionError: mockSetDecryptionError,
       refreshStorage: jest.fn().mockResolvedValue(undefined),
       refreshAll: jest.fn().mockResolvedValue(undefined),
       setUserInfo: jest.fn(),
@@ -155,6 +172,10 @@ describe("PrivateStorage metadata replacement warning", () => {
 
     const dropHint = await screen.findByText(/drop files anywhere to upload/i);
 
+    await waitFor(() => {
+      expect(mockSetDecryptionError).toHaveBeenCalledWith(true);
+    });
+
     fireEvent.drop(dropHint, {
       dataTransfer: {
         types: ["Files"],
@@ -172,13 +193,7 @@ describe("PrivateStorage metadata replacement warning", () => {
     });
     expect(confirmButton).toBeDisabled();
 
-    const confirmationCode = screen.getByText((content) =>
-      /^[A-Z2-9]{6}$/.test(content),
-    ).textContent!;
-
-    fireEvent.change(screen.getByLabelText(/type this code to continue/i), {
-      target: { value: confirmationCode },
-    });
+    typeConfirmationCode();
 
     await waitFor(() => {
       expect(confirmButton).toBeEnabled();
@@ -193,4 +208,51 @@ describe("PrivateStorage metadata replacement warning", () => {
       );
     });
   });
+
+  it("blocks uploads while vault metadata verification is still pending", async () => {
+    const neverResolves = new Promise<void>(() => {});
+    mockFetchAndStoreFileMetadata.mockReturnValue(neverResolves);
+    mockSetDecryptionError = jest.fn();
+    mockUseApp.mockReturnValue({
+      userEmail: "owner@example.com",
+      userName: "Owner",
+      userImage: "",
+      storageInfo: null,
+      isLoadingStorage: false,
+      hasDecryptionError: false,
+      setDecryptionError: mockSetDecryptionError,
+      refreshStorage: jest.fn().mockResolvedValue(undefined),
+      refreshAll: jest.fn().mockResolvedValue(undefined),
+      setUserInfo: jest.fn(),
+    });
+
+    const file = new File(["hello"], "notes.pdf", {
+      type: "application/pdf",
+    });
+
+    render(
+      <MemoryRouter>
+        <PrivateStorage />
+      </MemoryRouter>,
+    );
+
+    await screen.findByText(/drop files anywhere to upload/i);
+
+    fireEvent.drop(screen.getByText(/drop files anywhere to upload/i), {
+      dataTransfer: {
+        types: ["Files"],
+        files: [file],
+      },
+    });
+
+    expect(mockToastInfo).toHaveBeenCalledWith(
+      "Checking vault metadata",
+      expect.any(Object),
+    );
+    expect(
+      screen.queryByText(/existing vault index could not be opened/i),
+    ).not.toBeInTheDocument();
+    expect(mockUploadAndSyncFile).not.toHaveBeenCalled();
+  });
+
 });

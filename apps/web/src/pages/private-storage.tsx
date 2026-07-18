@@ -83,6 +83,8 @@ function PrivateStorageContent() {
   const [userHasFiles, setUserHasFiles] = useState<boolean>(false);
   const [isLoadingUserFiles, setIsLoadingUserFiles] = useState<boolean>(true);
   const [isRefreshingFiles, setIsRefreshingFiles] = useState<boolean>(false);
+  const [isVerifyingVaultMetadata, setIsVerifyingVaultMetadata] =
+    useState<boolean>(false);
   const [showCreateFolder, setShowCreateFolder] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [hasVaultKey, setHasVaultKey] = useState<boolean | null>(null);
@@ -91,7 +93,7 @@ function PrivateStorageContent() {
     navigate("/key-management?returnTo=%2Fstorage");
   }, [navigate]);
 
-  const openMetadataReplaceConfirm = (filesToUpload: File[] | null) => {
+  const openMetadataReplaceConfirm = (filesToUpload: File[]) => {
     setPendingUploadFiles(filesToUpload);
     setMetadataReplaceCode(createMetadataReplaceCode());
     setMetadataReplaceInput("");
@@ -107,7 +109,6 @@ function PrivateStorageContent() {
   useEffect(() => {
     const loadInitialData = async () => {
       setIsLoadingUserFiles(true);
-      setDecryptionError(false);
       try {
         // Get user info from JWT first
         const { getUserEmail } = await import("../utils/authService");
@@ -202,6 +203,7 @@ function PrivateStorageContent() {
         }
 
         // Load user files
+        setIsVerifyingVaultMetadata(true);
         try {
           await fetchAndStoreFileMetadata();
           setDecryptionError(false); // Clear error if successful
@@ -213,6 +215,8 @@ function PrivateStorageContent() {
           } else {
             throw metadataError; // Re-throw other errors
           }
+        } finally {
+          setIsVerifyingVaultMetadata(false);
         }
 
         const files = await getAllFilesForUser(email);
@@ -267,7 +271,7 @@ function PrivateStorageContent() {
       return;
     }
     setIsRefreshingFiles(true);
-    setDecryptionError(false);
+    setIsVerifyingVaultMetadata(true);
     const refreshToastId = toast.loading("Refreshing file list...");
     try {
       try {
@@ -302,11 +306,20 @@ function PrivateStorageContent() {
         id: refreshToastId,
       });
     } finally {
+      setIsVerifyingVaultMetadata(false);
       setIsRefreshingFiles(false);
     }
   };
 
   const handleUploadTriggerInternal = useCallback(async () => {
+    if (isVerifyingVaultMetadata || isRefreshingFiles || isLoadingUserFiles) {
+      toast.info("Checking vault metadata", {
+        description:
+          "Wait for ZeroDrive to finish checking your encrypted file list before uploading.",
+      });
+      return;
+    }
+
     const key = await getStoredKey();
     setHasVaultKey(!!key);
     if (!key) {
@@ -317,12 +330,13 @@ function PrivateStorageContent() {
       openRecoveryAccess();
       return;
     }
-    if (hasDecryptionError) {
-      openMetadataReplaceConfirm(null);
-      return;
-    }
     document.getElementById("file-upload")?.click();
-  }, [hasDecryptionError, openRecoveryAccess]);
+  }, [
+    isLoadingUserFiles,
+    isRefreshingFiles,
+    isVerifyingVaultMetadata,
+    openRecoveryAccess,
+  ]);
 
   // Listen for sidebar upload trigger. Keep the handler fresh so global upload
   // uses the same vault-access and metadata-replacement checks as this page.
@@ -341,6 +355,14 @@ function PrivateStorageContent() {
     options: { skipMetadataReplaceWarning?: boolean } = {},
   ) => {
     if (filesToUpload.length === 0 || !userEmail) return;
+
+    if (isVerifyingVaultMetadata || isRefreshingFiles || isLoadingUserFiles) {
+      toast.info("Checking vault metadata", {
+        description:
+          "Wait for ZeroDrive to finish checking your encrypted file list before uploading.",
+      });
+      return;
+    }
 
     // Encryption key is required to upload (files are encrypted client-side)
     const key = await getStoredKey();
@@ -387,12 +409,9 @@ function PrivateStorageContent() {
     setPendingUploadFiles(null);
     setMetadataReplaceInput("");
 
-    if (filesToUpload) {
-      await uploadFiles(filesToUpload, { skipMetadataReplaceWarning: true });
-      return;
-    }
+    if (!filesToUpload) return;
 
-    document.getElementById("file-upload")?.click();
+    await uploadFiles(filesToUpload, { skipMetadataReplaceWarning: true });
   };
 
   const handleFileChangeAndUpload = async (
@@ -680,9 +699,7 @@ function PrivateStorageContent() {
                 }
                 onClick={handleMetadataReplaceConfirm}
               >
-                {pendingUploadFiles
-                  ? "Start fresh and upload"
-                  : "Start fresh and choose file"}
+                Start fresh and upload
               </Button>
             </DialogFooter>
           </DialogContent>
