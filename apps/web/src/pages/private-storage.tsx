@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from "react";
+import React, { useCallback, useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { FileList } from "../components/storage/file-list";
 import { Button } from "../components/ui/button";
 import { toast } from "sonner";
@@ -15,6 +16,7 @@ import {
 } from "../utils/fileOperations";
 import { ConfirmationDialog } from "../components/storage/confirmation-dialog";
 import {
+  AlertTriangle,
   RefreshCw,
   FolderPlus,
   Upload,
@@ -32,22 +34,77 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "../components/ui/dropdown-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "../components/ui/dialog";
+import { Input } from "../components/ui/input";
+import { Label } from "../components/ui/label";
 
 // Imports for sharing key functionality (kept for potential future use)
 import { recoverRsaKeysIfNeeded } from "../utils/rsaKeyRecovery";
 
+const METADATA_REPLACE_CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+
+function createMetadataReplaceCode() {
+  const values = crypto.getRandomValues(new Uint32Array(6));
+  return Array.from(values, (value) =>
+    METADATA_REPLACE_CODE_CHARS.charAt(
+      value % METADATA_REPLACE_CODE_CHARS.length,
+    ),
+  ).join("");
+}
+
 function PrivateStorageContent() {
+  const navigate = useNavigate();
   const { currentFolderId } = useFolderContext();
-  const { userEmail, setUserInfo, refreshAll, setDecryptionError } = useApp();
+  const {
+    userEmail,
+    setUserInfo,
+    refreshAll,
+    hasDecryptionError,
+    setDecryptionError,
+  } = useApp();
   const [uploading, setUploading] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showMetadataReplaceConfirm, setShowMetadataReplaceConfirm] =
+    useState(false);
+  const [metadataReplaceCode, setMetadataReplaceCode] = useState("");
+  const [metadataReplaceInput, setMetadataReplaceInput] = useState("");
+  const [pendingUploadFiles, setPendingUploadFiles] = useState<File[] | null>(
+    null,
+  );
   const [refreshFileListKey, setRefreshFileListKey] = useState(0);
   const [userHasFiles, setUserHasFiles] = useState<boolean>(false);
   const [isLoadingUserFiles, setIsLoadingUserFiles] = useState<boolean>(true);
   const [isRefreshingFiles, setIsRefreshingFiles] = useState<boolean>(false);
+  const [isVerifyingVaultMetadata, setIsVerifyingVaultMetadata] =
+    useState<boolean>(false);
   const [showCreateFolder, setShowCreateFolder] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
+  const [hasVaultKey, setHasVaultKey] = useState<boolean | null>(null);
+
+  const openRecoveryAccess = useCallback(() => {
+    navigate("/key-management?returnTo=%2Fstorage");
+  }, [navigate]);
+
+  const openMetadataReplaceConfirm = (filesToUpload: File[]) => {
+    setPendingUploadFiles(filesToUpload);
+    setMetadataReplaceCode(createMetadataReplaceCode());
+    setMetadataReplaceInput("");
+    setShowMetadataReplaceConfirm(true);
+  };
+
+  const closeMetadataReplaceConfirm = () => {
+    setShowMetadataReplaceConfirm(false);
+    setPendingUploadFiles(null);
+    setMetadataReplaceInput("");
+  };
 
   useEffect(() => {
     const loadInitialData = async () => {
@@ -85,6 +142,9 @@ function PrivateStorageContent() {
         if (!sessionEmail) {
           setSessionUser(email);
         }
+
+        const key = await getStoredKey();
+        setHasVaultKey(!!key);
 
         // Initialize GAPI first so we can fetch profile info
         const { hasGoogleTokensInStorage, logout } =
@@ -143,6 +203,7 @@ function PrivateStorageContent() {
         }
 
         // Load user files
+        setIsVerifyingVaultMetadata(true);
         try {
           await fetchAndStoreFileMetadata();
           setDecryptionError(false); // Clear error if successful
@@ -154,6 +215,8 @@ function PrivateStorageContent() {
           } else {
             throw metadataError; // Re-throw other errors
           }
+        } finally {
+          setIsVerifyingVaultMetadata(false);
         }
 
         const files = await getAllFilesForUser(email);
@@ -190,17 +253,6 @@ function PrivateStorageContent() {
     }
   }, [userEmail, refreshFileListKey]);
 
-  // Listen for sidebar upload trigger
-  useEffect(() => {
-    const handleUploadTrigger = () => {
-      handleUploadTriggerInternal();
-    };
-
-    window.addEventListener("trigger-upload", handleUploadTrigger);
-    return () =>
-      window.removeEventListener("trigger-upload", handleUploadTrigger);
-  }, []);
-
   // Listen for sidebar delete all trigger
   useEffect(() => {
     const handleDeleteTrigger = () => {
@@ -219,6 +271,7 @@ function PrivateStorageContent() {
       return;
     }
     setIsRefreshingFiles(true);
+    setIsVerifyingVaultMetadata(true);
     const refreshToastId = toast.loading("Refreshing file list...");
     try {
       try {
@@ -253,30 +306,78 @@ function PrivateStorageContent() {
         id: refreshToastId,
       });
     } finally {
+      setIsVerifyingVaultMetadata(false);
       setIsRefreshingFiles(false);
     }
   };
 
-  const handleUploadTriggerInternal = async () => {
-    const key = await getStoredKey();
-    if (!key) {
-      toast.error("No encryption key found", {
-        description: "Please generate or upload an encryption key first",
+  const handleUploadTriggerInternal = useCallback(async () => {
+    if (isVerifyingVaultMetadata || isRefreshingFiles || isLoadingUserFiles) {
+      toast.info("Checking vault metadata", {
+        description:
+          "Wait for ZeroDrive to finish checking your encrypted file list before uploading.",
       });
       return;
     }
-    document.getElementById("file-upload")?.click();
-  };
 
-  const uploadFiles = async (filesToUpload: File[]) => {
+    const key = await getStoredKey();
+    setHasVaultKey(!!key);
+    if (!key) {
+      toast.info("Set up vault access first", {
+        description:
+          "Create a new recovery phrase or enter your existing one before uploading files.",
+      });
+      openRecoveryAccess();
+      return;
+    }
+    document.getElementById("file-upload")?.click();
+  }, [
+    isLoadingUserFiles,
+    isRefreshingFiles,
+    isVerifyingVaultMetadata,
+    openRecoveryAccess,
+  ]);
+
+  // Listen for sidebar upload trigger. Keep the handler fresh so global upload
+  // uses the same vault-access and metadata-replacement checks as this page.
+  useEffect(() => {
+    const handleUploadTrigger = () => {
+      void handleUploadTriggerInternal();
+    };
+
+    window.addEventListener("trigger-upload", handleUploadTrigger);
+    return () =>
+      window.removeEventListener("trigger-upload", handleUploadTrigger);
+  }, [handleUploadTriggerInternal]);
+
+  const uploadFiles = async (
+    filesToUpload: File[],
+    options: { skipMetadataReplaceWarning?: boolean } = {},
+  ) => {
     if (filesToUpload.length === 0 || !userEmail) return;
+
+    if (isVerifyingVaultMetadata || isRefreshingFiles || isLoadingUserFiles) {
+      toast.info("Checking vault metadata", {
+        description:
+          "Wait for ZeroDrive to finish checking your encrypted file list before uploading.",
+      });
+      return;
+    }
 
     // Encryption key is required to upload (files are encrypted client-side)
     const key = await getStoredKey();
+    setHasVaultKey(!!key);
     if (!key) {
-      toast.error("No encryption key found", {
-        description: "Please generate or upload an encryption key first",
+      toast.info("Set up vault access first", {
+        description:
+          "Create a new recovery phrase or enter your existing one before uploading files.",
       });
+      openRecoveryAccess();
+      return;
+    }
+
+    if (hasDecryptionError && !options.skipMetadataReplaceWarning) {
+      openMetadataReplaceConfirm(filesToUpload);
       return;
     }
 
@@ -293,8 +394,24 @@ function PrivateStorageContent() {
     if (successCount > 0) {
       setRefreshFileListKey((prev) => prev + 1);
       setUserHasFiles(true);
+      setDecryptionError(false);
       await refreshAll(); // Refresh storage after upload
     }
+  };
+
+  const handleMetadataReplaceConfirm = async () => {
+    if (metadataReplaceInput.trim().toUpperCase() !== metadataReplaceCode) {
+      return;
+    }
+
+    const filesToUpload = pendingUploadFiles;
+    setShowMetadataReplaceConfirm(false);
+    setPendingUploadFiles(null);
+    setMetadataReplaceInput("");
+
+    if (!filesToUpload) return;
+
+    await uploadFiles(filesToUpload, { skipMetadataReplaceWarning: true });
   };
 
   const handleFileChangeAndUpload = async (
@@ -335,12 +452,14 @@ function PrivateStorageContent() {
 
     // Check for encryption key before allowing deletion
     const key = await getStoredKey();
+    setHasVaultKey(!!key);
     if (!key) {
       toast.error("Encryption key required", {
         description:
-          "You need your encryption key to delete files. Please upload it first.",
+          "Recover access to this vault before deleting encrypted files.",
       });
       setShowDeleteConfirm(false);
+      openRecoveryAccess();
       return;
     }
 
@@ -385,28 +504,45 @@ function PrivateStorageContent() {
         )}
 
         {/* Page Header */}
-        <div className="flex items-center justify-between">
-          <div className="flex flex-col gap-2">
+        <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between lg:gap-8">
+          <div className="flex max-w-3xl flex-col gap-2">
             <h1 className="text-2xl tracking-tight">Storage</h1>
+            {hasVaultKey === false ? (
+              <p className="text-sm font-light leading-relaxed text-muted-foreground">
+                Set up vault access before using Storage. You can create a new
+                recovery phrase or enter an existing one for this browser.
+              </p>
+            ) : (
+              <p className="text-sm font-light leading-relaxed text-muted-foreground">
+                This is your encrypted vault. Files are encrypted in this
+                browser before the protected copy is saved to your Google Drive.
+              </p>
+            )}
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2 sm:justify-end lg:pt-2">
             <Button
               size="sm"
-              onClick={handleUploadTriggerInternal}
+              onClick={
+                hasVaultKey === false
+                  ? openRecoveryAccess
+                  : handleUploadTriggerInternal
+              }
               disabled={uploading || isLoadingUserFiles}
             >
               <Upload className="h-4 w-4 mr-2" />
-              Upload
+              {hasVaultKey === false ? "Set up access" : "Upload"}
             </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShowCreateFolder(true)}
-              disabled={isLoadingUserFiles}
-            >
-              <FolderPlus className="h-4 w-4 mr-2" />
-              New Folder
-            </Button>
+            {hasVaultKey !== false && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowCreateFolder(true)}
+                disabled={isLoadingUserFiles}
+              >
+                <FolderPlus className="h-4 w-4 mr-2" />
+                New Folder
+              </Button>
+            )}
             <Button
               variant="outline"
               size="sm"
@@ -420,28 +556,30 @@ function PrivateStorageContent() {
               />
               Refresh
             </Button>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="px-2"
-                  aria-label="More actions"
-                  disabled={isLoadingUserFiles}
-                >
-                  <MoreVertical className="h-4 w-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem
-                  onClick={() => setShowDeleteConfirm(true)}
-                  className="text-destructive focus:text-destructive"
-                >
-                  <Trash2 className="h-4 w-4 mr-2" />
-                  Delete All Files
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            {hasVaultKey !== false && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="px-2"
+                    aria-label="More actions"
+                    disabled={isLoadingUserFiles}
+                  >
+                    <MoreVertical className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem
+                    onClick={() => setShowDeleteConfirm(true)}
+                    className="text-destructive focus:text-destructive"
+                  >
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Delete All Files
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
           </div>
         </div>
 
@@ -450,13 +588,17 @@ function PrivateStorageContent() {
           view="full"
           refreshKey={refreshFileListKey}
           userEmail={userEmail}
+          onUploadClick={handleUploadTriggerInternal}
+          hasVaultKey={hasVaultKey}
+          onRecoverAccessClick={openRecoveryAccess}
         />
 
         {/* Persistent drop hint */}
         <div className="flex items-center justify-center gap-2 border border-dashed border-border py-4 text-center text-xs text-muted-foreground">
           <Upload className="h-4 w-4" />
-          Drop files anywhere to upload — encrypted on your device before they
-          leave.
+          {hasVaultKey === false
+            ? "Recover vault access first, then drop files here to upload."
+            : "Drop files anywhere to upload — encrypted on your device before they leave."}
         </div>
 
         {/* Create Folder Dialog */}
@@ -477,11 +619,91 @@ function PrivateStorageContent() {
         <ConfirmationDialog
           open={showDeleteConfirm}
           onOpenChange={setShowDeleteConfirm}
-          title="Delete All Files?"
-          description="Are you sure you want to delete ALL files? This action cannot be undone."
+          title="Permanently delete every encrypted file?"
+          description="This removes every encrypted file ZeroDrive knows about from your vault and syncs the deletion to Google Drive. Downloads or recovery are not possible from ZeroDrive after this completes."
           onConfirm={performDeleteAllFiles}
-          confirmText={isDeleting ? "Deleting..." : "Delete All"}
+          confirmText={isDeleting ? "Deleting..." : "Delete every file"}
         />
+
+        <Dialog
+          open={showMetadataReplaceConfirm}
+          onOpenChange={(open) => {
+            if (open) setShowMetadataReplaceConfirm(true);
+            else closeMetadataReplaceConfirm();
+          }}
+        >
+          <DialogContent className="max-w-2xl">
+            <DialogHeader className="space-y-4">
+              <div className="flex items-start gap-3">
+                <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center border border-destructive text-destructive">
+                  <AlertTriangle className="h-5 w-5" />
+                </div>
+                <div>
+                  <DialogTitle>
+                    Existing vault index could not be opened
+                  </DialogTitle>
+                  <DialogDescription className="mt-2 leading-relaxed">
+                    ZeroDrive found an encrypted file list in Google Drive{" "}
+                    (<code>db-list.json</code>), but this browser could not open
+                    it with the current recovery phrase.
+                  </DialogDescription>
+                </div>
+              </div>
+            </DialogHeader>
+
+            <div className="space-y-4 text-sm leading-relaxed">
+              <div className="border border-destructive/60 bg-destructive/5 p-4">
+                <p className="font-semibold text-destructive">
+                  Continuing will start a fresh vault index.
+                </p>
+                <p className="mt-2 text-muted-foreground">
+                  The new upload will replace that encrypted file list with a
+                  new one protected by the current key. Older encrypted files
+                  may still exist in your Google Drive, but they may no longer
+                  appear in ZeroDrive unless you recover the phrase that can
+                  open the old file list.
+                </p>
+              </div>
+
+              <div>
+                <Label htmlFor="metadata-replace-code">
+                  Type this code to continue:
+                </Label>
+                <div className="mt-2 inline-flex border px-3 py-2 font-mono text-lg tracking-[0.24em]">
+                  {metadataReplaceCode}
+                </div>
+                <Input
+                  id="metadata-replace-code"
+                  className="mt-3 font-mono uppercase tracking-[0.16em]"
+                  value={metadataReplaceInput}
+                  onChange={(event) =>
+                    setMetadataReplaceInput(event.target.value.toUpperCase())
+                  }
+                  placeholder="Enter confirmation code"
+                />
+              </div>
+            </div>
+
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={closeMetadataReplaceConfirm}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                disabled={
+                  metadataReplaceInput.trim().toUpperCase() !==
+                    metadataReplaceCode || uploading
+                }
+                onClick={handleMetadataReplaceConfirm}
+              >
+                Start fresh and upload
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </>
   );

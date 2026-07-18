@@ -46,6 +46,9 @@ interface FileListProps {
   view?: "compact" | "recent" | "full";
   refreshKey?: number;
   userEmail?: string;
+  onUploadClick?: () => void;
+  hasVaultKey?: boolean | null;
+  onRecoverAccessClick?: () => void;
 }
 
 // Helper hook to safely get folder context
@@ -68,6 +71,9 @@ export const FileList: React.FC<FileListProps> = ({
   view = "full",
   refreshKey,
   userEmail: userEmailProp,
+  onUploadClick,
+  hasVaultKey = null,
+  onRecoverAccessClick,
 }) => {
   const { currentFolderId, currentPath, navigateToFolder, setCurrentPath } =
     useSafeFolderContext();
@@ -557,106 +563,115 @@ export const FileList: React.FC<FileListProps> = ({
   };
 
   const isEmpty = visibleFolders.length === 0 && filteredFiles.length === 0;
+  const isQuietEmptyVault =
+    !isLoadingFiles &&
+    allUserFiles.length === 0 &&
+    folders.length === 0 &&
+    filter === "All Files" &&
+    searchQuery.length === 0;
+  const showToolbar = !isQuietEmptyVault;
 
   return (
     <div className="space-y-4">
       {/* Toolbar: search + type filter + sort + view toggle */}
-      <div className="flex flex-col gap-3 pb-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-2 border px-3 py-2 sm:w-80">
-          <Search className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
-          <input
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search files…"
-            className="w-full bg-transparent text-sm outline-none"
-          />
-        </div>
+      {showToolbar && (
+        <div className="flex flex-col gap-3 pb-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-2 border px-3 py-2 sm:w-80">
+            <Search className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
+            <input
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search files…"
+              className="w-full bg-transparent text-sm outline-none"
+            />
+          </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          {filterChips.map((chip) => (
-            <button
-              key={chip.value}
-              onClick={() => setFilter(chip.value)}
-              className={`px-3 py-1.5 text-xs transition-colors ${
-                filter === chip.value
-                  ? "border border-foreground bg-muted font-semibold"
-                  : "border border-border text-muted-foreground hover:bg-muted/60"
-              }`}
-            >
-              {chip.label}
-            </button>
-          ))}
-
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button className="flex items-center gap-2 border px-3 py-1.5 text-xs">
-                <ArrowDownUp className="h-3.5 w-3.5" />
-                {currentSortLabel}
-                <ChevronDown className="h-3.5 w-3.5" />
+          <div className="flex flex-wrap items-center gap-2">
+            {filterChips.map((chip) => (
+              <button
+                key={chip.value}
+                onClick={() => setFilter(chip.value)}
+                className={`px-3 py-1.5 text-xs transition-colors ${
+                  filter === chip.value
+                    ? "border border-foreground bg-muted font-semibold"
+                    : "border border-border text-muted-foreground hover:bg-muted/60"
+                }`}
+              >
+                {chip.label}
               </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem
-                onClick={() => {
-                  setSortKey("date");
-                  setSortDir("desc");
-                }}
-              >
-                Newest first
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() => {
-                  setSortKey("date");
-                  setSortDir("asc");
-                }}
-              >
-                Oldest first
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() => {
-                  setSortKey("name");
-                  setSortDir("asc");
-                }}
-              >
-                Name A–Z
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() => {
-                  setSortKey("name");
-                  setSortDir("desc");
-                }}
-              >
-                Name Z–A
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+            ))}
 
-          <div className="flex border">
-            <button
-              onClick={() => setViewMode("grid")}
-              aria-label="Grid view"
-              className={`p-2 ${
-                viewMode === "grid"
-                  ? "bg-muted text-foreground"
-                  : "text-muted-foreground hover:bg-muted/60"
-              }`}
-            >
-              <LayoutGrid className="h-4 w-4" />
-            </button>
-            <button
-              onClick={() => setViewMode("list")}
-              aria-label="List view"
-              className={`border-l p-2 ${
-                viewMode === "list"
-                  ? "bg-muted text-foreground"
-                  : "text-muted-foreground hover:bg-muted/60"
-              }`}
-            >
-              <ListIcon className="h-4 w-4" />
-            </button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button className="flex items-center gap-2 border px-3 py-1.5 text-xs">
+                  <ArrowDownUp className="h-3.5 w-3.5" />
+                  {currentSortLabel}
+                  <ChevronDown className="h-3.5 w-3.5" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem
+                  onClick={() => {
+                    setSortKey("date");
+                    setSortDir("desc");
+                  }}
+                >
+                  Newest first
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => {
+                    setSortKey("date");
+                    setSortDir("asc");
+                  }}
+                >
+                  Oldest first
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => {
+                    setSortKey("name");
+                    setSortDir("asc");
+                  }}
+                >
+                  Name A–Z
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => {
+                    setSortKey("name");
+                    setSortDir("desc");
+                  }}
+                >
+                  Name Z–A
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            <div className="flex border">
+              <button
+                onClick={() => setViewMode("grid")}
+                aria-label="Grid view"
+                className={`p-2 ${
+                  viewMode === "grid"
+                    ? "bg-muted text-foreground"
+                    : "text-muted-foreground hover:bg-muted/60"
+                }`}
+              >
+                <LayoutGrid className="h-4 w-4" />
+              </button>
+              <button
+                onClick={() => setViewMode("list")}
+                aria-label="List view"
+                className={`border-l p-2 ${
+                  viewMode === "list"
+                    ? "bg-muted text-foreground"
+                    : "text-muted-foreground hover:bg-muted/60"
+                }`}
+              >
+                <ListIcon className="h-4 w-4" />
+              </button>
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* Breadcrumb — only inside a folder; doubles as a move-to-parent drop target */}
       {userEmail && currentPath.length > 0 && (
@@ -669,11 +684,61 @@ export const FileList: React.FC<FileListProps> = ({
       {isLoadingFiles ? (
         <p className="text-center text-muted-foreground py-8">Loading...</p>
       ) : isEmpty ? (
-        <p className="text-center text-muted-foreground py-8">
-          {searchQuery
-            ? `No files match "${searchQuery}".`
-            : "No files or folders. Upload a file or create a folder to get started."}
-        </p>
+        searchQuery ? (
+          <p className="text-center text-muted-foreground py-8">
+            No encrypted files match &quot;{searchQuery}&quot;.
+          </p>
+        ) : (
+          <div className="border px-6 py-10 text-center">
+            {hasVaultKey === false ? (
+              <>
+                <p className="text-lg font-semibold">
+                  Set up vault access first.
+                </p>
+                <p className="mx-auto mt-3 max-w-xl text-sm font-light leading-relaxed text-muted-foreground">
+                  This browser does not have vault access yet. Create a new
+                  recovery phrase or enter an existing one before uploading
+                  encrypted files.
+                </p>
+                <p className="mx-auto mt-2 max-w-xl text-sm font-light leading-relaxed text-muted-foreground">
+                  After access is active, ZeroDrive can encrypt files here in
+                  the browser and save only the protected copy to Google Drive.
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="text-lg font-semibold">
+                  Your encrypted vault is empty.
+                </p>
+                <p className="mx-auto mt-3 max-w-xl text-sm font-light leading-relaxed text-muted-foreground">
+                  Choose a file and ZeroDrive will encrypt it inside this
+                  browser before saving the encrypted copy to your Google Drive.
+                </p>
+                <p className="mx-auto mt-2 max-w-xl text-sm font-light leading-relaxed text-muted-foreground">
+                  The original file never goes to the ZeroDrive server. Only the
+                  encrypted version is stored.
+                </p>
+              </>
+            )}
+            {hasVaultKey === false && onRecoverAccessClick ? (
+              <button
+                onClick={onRecoverAccessClick}
+                className="mt-6 border bg-foreground px-5 py-2 text-sm font-semibold text-background hover:bg-foreground/90"
+              >
+                Create or recover access
+              </button>
+            ) : (
+              onUploadClick && (
+              <button
+                onClick={onUploadClick}
+                className="mt-6 border bg-foreground px-5 py-2 text-sm font-semibold text-background hover:bg-foreground/90"
+              >
+                Upload first encrypted file
+              </button>
+              )
+            )}
+          </div>
+        )
       ) : viewMode === "grid" ? (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 2xl:grid-cols-10 gap-4">
           {visibleFolders.map((folder) => (
