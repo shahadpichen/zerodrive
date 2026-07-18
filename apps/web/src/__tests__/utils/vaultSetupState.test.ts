@@ -87,4 +87,17 @@ describe("vault setup state", () => {
       }).shouldShowGuidance,
     ).toBe(false);
   });
+
+  it("respects local-only dismissal for a key-ready empty vault", () => {
+    const state = getVaultSetupState({
+      ...baseSnapshot,
+      fileCount: 0,
+      folderCount: 0,
+      hasSharingKeys: false,
+      guidanceDismissed: true,
+    });
+
+    expect(state.status).toBe("key_ready_empty_vault");
+    expect(state.shouldShowGuidance).toBe(false);
+  });
 });

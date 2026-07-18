@@ -1,5 +1,5 @@
 import React from "react";
-import { render, screen, waitFor } from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import Home from "../../pages/home";
 import {
@@ -8,6 +8,7 @@ import {
   getFoldersForUser,
 } from "../../utils/dexieDB";
 import { recoverRsaKeysIfNeeded } from "../../utils/rsaKeyRecovery";
+import { initializeGapi } from "../../utils/gapiInit";
 import { gapi } from "gapi-script";
 import {
   getVaultSetupState,
@@ -93,6 +94,9 @@ const mockFetchAndStoreFileMetadata =
   >;
 const mockRecoverRsaKeysIfNeeded =
   recoverRsaKeysIfNeeded as jest.MockedFunction<typeof recoverRsaKeysIfNeeded>;
+const mockInitializeGapi = initializeGapi as jest.MockedFunction<
+  typeof initializeGapi
+>;
 const mockGapiRequest = gapi.client.request as jest.MockedFunction<
   typeof gapi.client.request
 >;
@@ -152,12 +156,17 @@ function renderHome() {
 }
 
 describe("Home guided vault setup", () => {
+  afterEach(() => {
+    cleanup();
+  });
+
   beforeEach(() => {
     jest.clearAllMocks();
     mockGetAllFilesForUser.mockReset();
     mockGetFoldersForUser.mockReset();
     mockFetchAndStoreFileMetadata.mockReset();
     mockRecoverRsaKeysIfNeeded.mockReset();
+    mockInitializeGapi.mockReset();
     mockGapiRequest.mockReset();
     mockReadBrowserVaultSetupSnapshot.mockReset();
     mockGetVaultSetupState.mockReset();
@@ -177,6 +186,7 @@ describe("Home guided vault setup", () => {
       recovered: false,
       keysExisted: false,
     });
+    mockInitializeGapi.mockResolvedValue(undefined);
     mockGapiRequest.mockResolvedValue({
       result: { storageQuota: { usage: "0", limit: "1000" } },
     } as any);
@@ -250,5 +260,16 @@ describe("Home guided vault setup", () => {
       screen.queryByText("Welcome back to your private vault"),
     ).not.toBeInTheDocument();
     expect(screen.queryByText("2 files · 1 folders")).not.toBeInTheDocument();
+  });
+
+  it("shows a real fallback when Google Drive initialization fails", async () => {
+    mockInitializeGapi.mockRejectedValue(new Error("Drive unavailable"));
+
+    renderHome();
+
+    expect(await screen.findByText("Could not check your vault")).toBeInTheDocument();
+    expect(
+      screen.queryByText("Setting up your private vault"),
+    ).not.toBeInTheDocument();
   });
 });

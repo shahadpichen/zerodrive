@@ -198,8 +198,7 @@ function HomeContent() {
           ...setupSnapshot,
           hasSharingKeys:
             setupSnapshot.hasSharingKeys || rsaRecovery.keysExisted,
-          guidanceDismissed:
-            setupSnapshot.guidanceDismissed && hasVaultContents,
+          guidanceDismissed: setupSnapshot.guidanceDismissed,
         });
         setVaultSetup(nextVaultSetup);
         writeCachedHomeDashboard({
@@ -242,15 +241,16 @@ function HomeContent() {
 
   const firstName = (userName || "").split(/\s+/)[0];
   const fallbackHeadline = `Welcome back${firstName ? `, ${firstName}` : ""}`;
-  const isWaitingForVaultState = isVaultStateLoading || !vaultSetup;
+  const isWaitingForVaultState = isVaultStateLoading;
   const heroHeadline = showLoginWelcome
     ? fallbackHeadline
     : isWaitingForVaultState
       ? "Setting up your private vault"
-      : vaultSetup.headline;
+      : vaultSetup?.headline || "Could not check your vault";
   const heroDescription = isWaitingForVaultState
     ? "Checking this browser for your encryption key, Drive access, and vault contents."
-    : vaultSetup.description || tip;
+    : vaultSetup?.description ||
+      "ZeroDrive could not finish checking Google Drive in this browser. Refresh the page or reconnect Google Drive, then try again.";
   const showVaultGuidance = !!vaultSetup?.shouldShowGuidance;
   const incompleteTasks =
     vaultSetup?.tasks.filter((task) => !task.complete) || [];
