@@ -90,4 +90,36 @@ describe("Storage FileList empty state", () => {
 
     expect(onUploadClick).toHaveBeenCalledTimes(1);
   });
+
+  it("guides locked empty vaults to recover access before uploading", async () => {
+    const onUploadClick = jest.fn();
+    const onRecoverAccessClick = jest.fn();
+
+    render(
+      <FileList
+        view="full"
+        userEmail="owner@example.com"
+        hasVaultKey={false}
+        onUploadClick={onUploadClick}
+        onRecoverAccessClick={onRecoverAccessClick}
+      />,
+    );
+
+    expect(
+      await screen.findByText("Set up vault access first."),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/does not have vault access yet/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /upload first encrypted file/i }),
+    ).not.toBeInTheDocument();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: /create or recover access/i }),
+    );
+
+    expect(onRecoverAccessClick).toHaveBeenCalledTimes(1);
+    expect(onUploadClick).not.toHaveBeenCalled();
+  });
 });

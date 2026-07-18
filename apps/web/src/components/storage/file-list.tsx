@@ -47,6 +47,8 @@ interface FileListProps {
   refreshKey?: number;
   userEmail?: string;
   onUploadClick?: () => void;
+  hasVaultKey?: boolean | null;
+  onRecoverAccessClick?: () => void;
 }
 
 // Helper hook to safely get folder context
@@ -70,6 +72,8 @@ export const FileList: React.FC<FileListProps> = ({
   refreshKey,
   userEmail: userEmailProp,
   onUploadClick,
+  hasVaultKey = null,
+  onRecoverAccessClick,
 }) => {
   const { currentFolderId, currentPath, navigateToFolder, setCurrentPath } =
     useSafeFolderContext();
@@ -686,24 +690,52 @@ export const FileList: React.FC<FileListProps> = ({
           </p>
         ) : (
           <div className="border px-6 py-10 text-center">
-            <p className="text-lg font-semibold">
-              Your encrypted vault is empty.
-            </p>
-            <p className="mx-auto mt-3 max-w-xl text-sm font-light leading-relaxed text-muted-foreground">
-              Choose a file and ZeroDrive will encrypt it inside this browser
-              before saving the encrypted copy to your Google Drive.
-            </p>
-            <p className="mx-auto mt-2 max-w-xl text-sm font-light leading-relaxed text-muted-foreground">
-              The original file never goes to the ZeroDrive server. Only the
-              encrypted version is stored.
-            </p>
-            {onUploadClick && (
+            {hasVaultKey === false ? (
+              <>
+                <p className="text-lg font-semibold">
+                  Set up vault access first.
+                </p>
+                <p className="mx-auto mt-3 max-w-xl text-sm font-light leading-relaxed text-muted-foreground">
+                  This browser does not have vault access yet. Create a new
+                  recovery phrase or enter an existing one before uploading
+                  encrypted files.
+                </p>
+                <p className="mx-auto mt-2 max-w-xl text-sm font-light leading-relaxed text-muted-foreground">
+                  After access is active, ZeroDrive can encrypt files here in
+                  the browser and save only the protected copy to Google Drive.
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="text-lg font-semibold">
+                  Your encrypted vault is empty.
+                </p>
+                <p className="mx-auto mt-3 max-w-xl text-sm font-light leading-relaxed text-muted-foreground">
+                  Choose a file and ZeroDrive will encrypt it inside this
+                  browser before saving the encrypted copy to your Google Drive.
+                </p>
+                <p className="mx-auto mt-2 max-w-xl text-sm font-light leading-relaxed text-muted-foreground">
+                  The original file never goes to the ZeroDrive server. Only the
+                  encrypted version is stored.
+                </p>
+              </>
+            )}
+            {hasVaultKey === false && onRecoverAccessClick ? (
+              <button
+                onClick={onRecoverAccessClick}
+                className="mt-6 border bg-foreground px-5 py-2 text-sm font-semibold text-background hover:bg-foreground/90"
+              >
+                Create or recover access
+              </button>
+            ) : (
+              onUploadClick && (
               <button
                 onClick={onUploadClick}
                 className="mt-6 border bg-foreground px-5 py-2 text-sm font-semibold text-background hover:bg-foreground/90"
               >
                 Upload first encrypted file
               </button>
+              )
             )}
           </div>
         )
