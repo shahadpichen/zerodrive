@@ -98,6 +98,8 @@ describeWithPostgres("database migrations against PostgreSQL", () => {
     const result = await testPool.query(
       `SELECT
          to_regclass('public.deployments') IS NOT NULL AS deployments,
+         to_regclass('public.idx_deployments_singleton') IS NOT NULL
+           AS deployments_singleton,
          to_regclass('public.oauth_exchanges') IS NOT NULL AS oauth_exchanges,
          to_regclass('public.idx_shared_files_management_capability_hash_unique')
            IS NOT NULL AS capability_index,
@@ -142,6 +144,7 @@ describeWithPostgres("database migrations against PostgreSQL", () => {
     );
     expect(result.rows[0]).toEqual({
       deployments: true,
+      deployments_singleton: true,
       oauth_exchanges: true,
       capability_index: true,
       encrypted_metadata: true,
@@ -157,6 +160,12 @@ describeWithPostgres("database migrations against PostgreSQL", () => {
       shared_files_deployment_index: true,
       active_shared_files_deployment_id: true,
     });
+  });
+
+  it("keeps deployment identity singleton for this rollout stage", async () => {
+    await expect(
+      testPool.query("INSERT INTO deployments DEFAULT VALUES"),
+    ).rejects.toThrow();
   });
 
   it("backfills the deployment foundation for legacy production rows", async () => {

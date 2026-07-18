@@ -68,6 +68,7 @@ function validateWrappedFileKey(value: string, helpers: Joi.CustomHelpers) {
 
 function toClientSharedFile(file: SharedFile) {
   const {
+    deployment_id: _privateDeploymentId,
     file_id: _privateObjectKey,
     recipient_user_id: _privateRecipientId,
     management_capability_hash: _privateCapabilityHash,

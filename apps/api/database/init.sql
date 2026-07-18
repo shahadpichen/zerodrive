@@ -38,6 +38,10 @@ INSERT INTO deployments (id)
 SELECT gen_random_uuid()
 WHERE NOT EXISTS (SELECT 1 FROM deployments);
 
+-- ZeroDrive currently supports one application installation per database.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_deployments_singleton
+    ON deployments ((true));
+
 -- Create public_keys table
 -- Stores RSA public keys for users to enable encrypted file sharing
 CREATE TABLE IF NOT EXISTS public_keys (

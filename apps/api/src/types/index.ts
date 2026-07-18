@@ -5,6 +5,7 @@
 // Database Models
 export interface PublicKey {
   id?: string;
+  deployment_id?: string;
   user_id: string;
   public_key: string;
   key_version: number;
@@ -16,6 +17,7 @@ export interface PublicKey {
 
 export interface SharedFile {
   id?: string;
+  deployment_id?: string;
   file_id: string;
   recipient_user_id: string;
   management_capability_hash?: string | null;

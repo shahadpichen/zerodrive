@@ -76,7 +76,7 @@ describe("privacy-preserving public key directory", () => {
         ],
       });
 
-    await request(app)
+    const response = await request(app)
       .post("/api/public-keys")
       .send({ public_key: validPublicKey })
       .expect(201);
@@ -90,6 +90,8 @@ describe("privacy-preserving public key directory", () => {
         expect.stringMatching(/^[0-9a-f]{64}$/),
       ],
     );
+    expect(response.body.data.user_id).toBeUndefined();
+    expect(response.body.data.deployment_id).toBeUndefined();
     expect(trackEvent).toHaveBeenCalledWith("key_setup_completed", "keys");
   });
 
