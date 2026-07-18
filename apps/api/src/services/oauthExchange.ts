@@ -70,8 +70,8 @@ export async function createOAuthExchange(
     "DELETE FROM oauth_exchanges WHERE expires_at <= CURRENT_TIMESTAMP",
   );
   await query(
-    `INSERT INTO oauth_exchanges (code_hash, expires_at)
-     VALUES ($1, to_timestamp($2 / 1000.0))`,
+    `INSERT INTO oauth_exchanges (deployment_id, code_hash, expires_at)
+     VALUES (zerodrive_default_deployment_id(), $1, to_timestamp($2 / 1000.0))`,
     [capabilityHash(code), payload.expiresAt],
   );
   return code;
@@ -83,9 +83,10 @@ export async function consumeOAuthExchange(
   if (typeof code !== "string" || code.length > 8192) return null;
   const consumed = await query(
     `DELETE FROM oauth_exchanges
-     WHERE code_hash = $1
+     WHERE deployment_id = zerodrive_default_deployment_id()
+       AND code_hash = $1
        AND expires_at > CURRENT_TIMESTAMP
-     RETURNING code_hash`,
+     RETURNING id`,
     [capabilityHash(code)],
   );
   if (consumed.rowCount !== 1) return null;

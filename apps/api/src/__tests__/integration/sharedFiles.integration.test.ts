@@ -107,6 +107,7 @@ describe("Shared Files Routes Integration", () => {
         rows: [
           {
             id: "share-uuid-123",
+            deployment_id: "deployment-uuid-123",
             ...validShareRequest,
             created_at: new Date(),
             updated_at: new Date(),
@@ -126,6 +127,7 @@ describe("Shared Files Routes Integration", () => {
       expect(response.status).toBe(201);
       expect(response.body.success).toBe(true);
       expect(response.body.data.file_id).toBeUndefined();
+      expect(response.body.data.deployment_id).toBeUndefined();
       expect(response.body.message).toBe("Pending share created");
 
       // Verify existing share check
@@ -720,6 +722,7 @@ describe("Shared Files Routes Integration", () => {
       const mockSharedFiles = [
         {
           id: "share-1",
+          deployment_id: "deployment-uuid-123",
           file_id: "file-1",
           recipient_user_id: testRecipientEmailHash,
           encrypted_file_key: "key-1",
@@ -731,6 +734,7 @@ describe("Shared Files Routes Integration", () => {
         },
         {
           id: "share-2",
+          deployment_id: "deployment-uuid-123",
           file_id: "file-2",
           recipient_user_id: testRecipientEmailHash,
           encrypted_file_key: "key-2",
@@ -763,6 +767,8 @@ describe("Shared Files Routes Integration", () => {
       expect(response.status).toBe(200);
       expect(response.body.success).toBe(true);
       expect(response.body.data.files).toHaveLength(2);
+      expect(response.body.data.files[0].deployment_id).toBeUndefined();
+      expect(response.body.data.files[1].deployment_id).toBeUndefined();
       expect(response.body.data.total).toBe(100);
       expect(response.body.data.hasMore).toBe(true); // 0 + 2 < 100, so hasMore = true
       expect(response.body.message).toBe("Shared files retrieved successfully");

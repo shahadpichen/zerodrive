@@ -78,7 +78,11 @@ function fingerprintPublicKey(key: PublicEncryptionJwk): string {
 }
 
 function toClientPublicKey(record: PublicKey) {
-  const { user_id: _privateLookupId, ...safeRecord } = record;
+  const {
+    deployment_id: _privateDeploymentId,
+    user_id: _privateLookupId,
+    ...safeRecord
+  } = record;
   return safeRecord;
 }
 

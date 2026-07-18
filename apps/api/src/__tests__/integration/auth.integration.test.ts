@@ -244,11 +244,14 @@ describe("Auth Routes Integration", () => {
       mockQuery.mockImplementation(async (sql: string) => {
         if (
           sql.includes("DELETE FROM oauth_exchanges") &&
-          sql.includes("RETURNING code_hash")
+          sql.includes("RETURNING id")
         ) {
           if (exchangeConsumed) return { rows: [], rowCount: 0 };
           exchangeConsumed = true;
-          return { rows: [{ code_hash: "stored-hash" }], rowCount: 1 };
+          return {
+            rows: [{ id: "00000000-0000-4000-8000-000000000001" }],
+            rowCount: 1,
+          };
         }
         return { rows: [], rowCount: 0 };
       });

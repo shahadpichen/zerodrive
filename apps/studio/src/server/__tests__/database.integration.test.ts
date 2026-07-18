@@ -16,18 +16,34 @@ describeWithDatabase("Studio PostgreSQL integration", () => {
   beforeAll(async () => {
     await database.pool.query(`
       DROP TABLE IF EXISTS public.studio_test_items;
+      DROP TABLE IF EXISTS public.studio_column_order;
       CREATE TABLE public.studio_test_items (
         id SERIAL PRIMARY KEY,
         label TEXT NOT NULL,
         encrypted_metadata TEXT
       );
+      CREATE TABLE public.studio_column_order (
+        date DATE NOT NULL,
+        created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        metric TEXT NOT NULL,
+        updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        count INTEGER NOT NULL
+      );
+      ALTER TABLE public.studio_column_order
+        ADD COLUMN id UUID PRIMARY KEY
+          DEFAULT '00000000-0000-4000-8000-000000000001'::uuid,
+        ADD COLUMN deployment_id UUID NOT NULL
+          DEFAULT '00000000-0000-4000-8000-000000000002'::uuid;
       INSERT INTO public.studio_test_items (label, encrypted_metadata)
       VALUES ('first', 'ciphertext');
     `);
   });
 
   afterAll(async () => {
-    await database.pool.query("DROP TABLE IF EXISTS public.studio_test_items");
+    await database.pool.query(`
+      DROP TABLE IF EXISTS public.studio_column_order;
+      DROP TABLE IF EXISTS public.studio_test_items;
+    `);
     await database.close();
   });
 
@@ -47,6 +63,23 @@ describeWithDatabase("Studio PostgreSQL integration", () => {
       details.columns.find((column) => column.name === "encrypted_metadata")
         ?.sensitive,
     ).toBe(true);
+  });
+
+  it("presents generated identity columns before later business columns", async () => {
+    const details = await database.getRelationDetails(
+      "public",
+      "studio_column_order",
+    );
+
+    expect(details.columns.map((column) => column.name)).toEqual([
+      "id",
+      "deployment_id",
+      "date",
+      "metric",
+      "count",
+      "created_at",
+      "updated_at",
+    ]);
   });
 
   it("paginates, filters, and safely mutates local rows", async () => {
