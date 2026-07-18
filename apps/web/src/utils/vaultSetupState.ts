@@ -134,9 +134,9 @@ export function getVaultSetupState(
     return {
       status: "needs_key",
       badge: "Vault setup",
-      headline: "Set up your private vault",
+      headline: "Create or recover vault access",
       description:
-        "Create or recover your encryption key. This key protects your vault, and ZeroDrive cannot read or reset it.",
+        "This browser needs your encryption key before it can open encrypted files. Create a new vault key or recover your existing one with your recovery phrase.",
       primaryActionLabel: "Create or recover access",
       primaryActionPath: "/key-management",
       secondaryActionLabel: "Go to Storage",

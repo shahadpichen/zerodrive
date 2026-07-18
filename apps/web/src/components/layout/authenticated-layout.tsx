@@ -13,7 +13,7 @@ function AuthenticatedLayoutContent({
 
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <div className="mx-auto max-w-6xl px-6 py-8">
+      <div className="mx-auto max-w-6xl px-6 pb-20 pt-8">
         {/* No chrome — just a way back to the hub */}
         <button
           onClick={() => navigate("/home")}

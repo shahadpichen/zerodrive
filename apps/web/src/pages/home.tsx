@@ -33,11 +33,26 @@ import {
 import { recoverRsaKeysIfNeeded } from "../utils/rsaKeyRecovery";
 import { toast } from "sonner";
 import {
+  getAuthenticatedUser,
+  getUserProfile,
+  hasGoogleTokensInStorage,
+  logout,
+} from "../utils/authService";
+import { initializeGapi } from "../utils/gapiInit";
+import {
   dismissOnboardingGuidance,
   getVaultSetupState,
   readBrowserVaultSetupSnapshot,
 } from "../utils/vaultSetupState";
 import type { VaultSetupState } from "../utils/vaultSetupState";
+import {
+  hasPendingHomeLoginWelcome,
+  markHomeLoginWelcomeShown,
+} from "../utils/homeWelcome";
+import {
+  readCachedHomeDashboardForUser,
+  writeCachedHomeDashboard,
+} from "../utils/homeDashboardCache";
 
 function formatBytes(bytes: number) {
   if (!bytes || bytes === 0) return "0 B";
@@ -79,22 +94,25 @@ function HomeContent() {
     setDecryptionError,
   } = useApp();
 
+  const [showLoginWelcome] = useState(() => hasPendingHomeLoginWelcome());
   const [counts, setCounts] = useState({ files: 0, folders: 0 });
   const [recent, setRecent] = useState<FileMeta[]>([]);
   const [canReadAnalytics, setCanReadAnalytics] = useState(false);
   const [vaultSetup, setVaultSetup] = useState<VaultSetupState | null>(null);
+  const [isVaultStateLoading, setIsVaultStateLoading] = useState(true);
   const [tip] = useState(() => TIPS[Math.floor(Math.random() * TIPS.length)]);
 
   useEffect(() => {
+    if (showLoginWelcome) {
+      markHomeLoginWelcomeShown();
+    }
+  }, [showLoginWelcome]);
+
+  useEffect(() => {
+    let isMounted = true;
+
     const bootstrap = async () => {
       try {
-        const {
-          hasGoogleTokensInStorage,
-          logout,
-          getUserProfile,
-          getAuthenticatedUser,
-        } = await import("../utils/authService");
-
         const authenticatedUser = await getAuthenticatedUser();
         const email = authenticatedUser?.email;
         if (!email) {
@@ -103,9 +121,9 @@ function HomeContent() {
           return;
         }
 
-        setCanReadAnalytics(
-          !!authenticatedUser?.capabilities.analyticsRead,
-        );
+        const nextCanReadAnalytics =
+          !!authenticatedUser?.capabilities.analyticsRead;
+        setCanReadAnalytics(nextCanReadAnalytics);
 
         if (!hasGoogleTokensInStorage()) {
           await logout();
@@ -113,7 +131,16 @@ function HomeContent() {
           return;
         }
 
-        const { initializeGapi } = await import("../utils/gapiInit");
+        if (!showLoginWelcome && isMounted) {
+          const cachedDashboard = readCachedHomeDashboardForUser(email);
+          if (cachedDashboard) {
+            setCounts(cachedDashboard.counts);
+            setRecent(cachedDashboard.recent);
+            setVaultSetup(cachedDashboard.vaultSetup);
+            setIsVaultStateLoading(false);
+          }
+        }
+
         try {
           await initializeGapi();
         } catch (e) {
@@ -148,16 +175,16 @@ function HomeContent() {
           getFoldersForUser(email),
         ]);
         const hasVaultContents = files.length > 0 || folders.length > 0;
-        setCounts({ files: files.length, folders: folders.length });
-        setRecent(
-          [...files]
-            .sort(
-              (a, b) =>
-                new Date(b.uploadedDate).getTime() -
-                new Date(a.uploadedDate).getTime(),
-            )
-            .slice(0, 5),
-        );
+        const nextCounts = { files: files.length, folders: folders.length };
+        const nextRecent = [...files]
+          .sort(
+            (a, b) =>
+              new Date(b.uploadedDate).getTime() -
+              new Date(a.uploadedDate).getTime(),
+          )
+          .slice(0, 5);
+        setCounts(nextCounts);
+        setRecent(nextRecent);
 
         const rsaRecovery = await recoverRsaKeysIfNeeded(email, false);
         const setupSnapshot = await readBrowserVaultSetupSnapshot(email, {
@@ -167,28 +194,41 @@ function HomeContent() {
           folderCount: folders.length,
           hasDecryptionError: hasMetadataDecryptionError,
         });
-        setVaultSetup(
-          getVaultSetupState({
-            ...setupSnapshot,
-            hasSharingKeys:
-              setupSnapshot.hasSharingKeys || rsaRecovery.keysExisted,
-            guidanceDismissed:
-              setupSnapshot.guidanceDismissed && hasVaultContents,
-          }),
-        );
+        const nextVaultSetup = getVaultSetupState({
+          ...setupSnapshot,
+          hasSharingKeys:
+            setupSnapshot.hasSharingKeys || rsaRecovery.keysExisted,
+          guidanceDismissed:
+            setupSnapshot.guidanceDismissed && hasVaultContents,
+        });
+        setVaultSetup(nextVaultSetup);
+        writeCachedHomeDashboard({
+          userEmail: email,
+          counts: nextCounts,
+          recent: nextRecent,
+          canReadAnalytics: nextCanReadAnalytics,
+          vaultSetup: nextVaultSetup,
+        });
       } catch (error) {
         console.error("[Home] Failed to load dashboard:", error);
         toast.error("Failed to load your dashboard");
+      } finally {
+        if (isMounted) {
+          setIsVaultStateLoading(false);
+        }
       }
     };
 
     bootstrap();
-  }, [setUserInfo, setDecryptionError]);
+
+    return () => {
+      isMounted = false;
+    };
+  }, [setUserInfo, setDecryptionError, showLoginWelcome]);
 
   const handleLogout = async () => {
     try {
       localStorage.removeItem("zerodrive-storage-cache");
-      const { logout } = await import("../utils/authService");
       await logout();
       navigate("/");
     } catch {
@@ -201,9 +241,16 @@ function HomeContent() {
     : 0;
 
   const firstName = (userName || "").split(/\s+/)[0];
-  const heroHeadline =
-    vaultSetup?.headline || `Welcome back${firstName ? `, ${firstName}` : ""}`;
-  const heroDescription = vaultSetup?.description || tip;
+  const fallbackHeadline = `Welcome back${firstName ? `, ${firstName}` : ""}`;
+  const isWaitingForVaultState = isVaultStateLoading || !vaultSetup;
+  const heroHeadline = showLoginWelcome
+    ? fallbackHeadline
+    : isWaitingForVaultState
+      ? "Setting up your private vault"
+      : vaultSetup.headline;
+  const heroDescription = isWaitingForVaultState
+    ? "Checking this browser for your encryption key, Drive access, and vault contents."
+    : vaultSetup.description || tip;
   const showVaultGuidance = !!vaultSetup?.shouldShowGuidance;
   const incompleteTasks =
     vaultSetup?.tasks.filter((task) => !task.complete) || [];
@@ -327,7 +374,7 @@ function HomeContent() {
         </div>
       </header>
 
-      <div className="mx-auto max-w-5xl px-6 sm:px-8 mt-20">
+      <div className="mx-auto mt-20 max-w-5xl px-6 pb-20 sm:px-8">
         {/* Welcome — centered, matching the landing hero type scale */}
         <div className="text-center">
           <h1 className="text-xl sm:text-2xl md:text-3xl md:w-[70%] mx-auto">

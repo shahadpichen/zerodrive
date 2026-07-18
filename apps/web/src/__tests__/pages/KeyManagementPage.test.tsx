@@ -152,11 +152,11 @@ describe("KeyManagementPage", () => {
       screen.getByRole("button", { name: /download phrase/i }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: /continue to storage/i }),
+      screen.getByRole("button", { name: /continue to home/i }),
     ).toBeInTheDocument();
   });
 
-  it("recovers a valid phrase and returns to storage", async () => {
+  it("recovers a valid phrase and returns to home", async () => {
     renderPage();
     fireEvent.change(screen.getByLabelText("Recovery phrase"), {
       target: { value: mnemonic },
@@ -165,7 +165,7 @@ describe("KeyManagementPage", () => {
       screen.getByRole("button", { name: /recover and continue/i }),
     );
 
-    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith("/storage"));
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith("/home"));
     expect(mockDeriveKey).toHaveBeenCalledWith(mnemonic);
     expect(mockStoreKey).toHaveBeenCalled();
   });

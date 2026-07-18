@@ -1,5 +1,5 @@
 import React from "react";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import Home from "../../pages/home";
 import {
@@ -13,6 +13,9 @@ import {
   getVaultSetupState,
   readBrowserVaultSetupSnapshot,
 } from "../../utils/vaultSetupState";
+import { queueHomeLoginWelcome } from "../../utils/homeWelcome";
+import { writeCachedHomeDashboard } from "../../utils/homeDashboardCache";
+import { getAuthenticatedUser } from "../../utils/authService";
 
 const mockNavigate = jest.fn();
 
@@ -100,11 +103,14 @@ const mockReadBrowserVaultSetupSnapshot =
 const mockGetVaultSetupState = getVaultSetupState as jest.MockedFunction<
   typeof getVaultSetupState
 >;
+const mockGetAuthenticatedUser = getAuthenticatedUser as jest.MockedFunction<
+  typeof getAuthenticatedUser
+>;
 
 const needsKeyState = {
   status: "needs_key",
   badge: "Vault setup",
-  headline: "Set up your private vault",
+  headline: "Create or recover vault access",
   description:
     "Create or recover your encryption key. This key protects your vault, and ZeroDrive cannot read or reset it.",
   primaryActionLabel: "Create or recover access",
@@ -121,6 +127,18 @@ const needsKeyState = {
     },
   ],
   shouldShowGuidance: true,
+} as const;
+
+const vaultReadyState = {
+  status: "vault_ready",
+  badge: "Vault active",
+  headline: "Welcome back to your private vault",
+  description:
+    "Your encrypted storage is ready. Recent files, sharing, recovery, and inbox access are all one step away.",
+  primaryActionLabel: "Open Storage",
+  primaryActionPath: "/storage",
+  tasks: [],
+  shouldShowGuidance: false,
 } as const;
 
 let currentVaultSetupState = needsKeyState;
@@ -143,8 +161,14 @@ describe("Home guided vault setup", () => {
     mockGapiRequest.mockReset();
     mockReadBrowserVaultSetupSnapshot.mockReset();
     mockGetVaultSetupState.mockReset();
+    mockGetAuthenticatedUser.mockResolvedValue({
+      email: "owner@example.com",
+      capabilities: { analyticsRead: false },
+    } as any);
     localStorage.clear();
+    sessionStorage.clear();
     sessionStorage.setItem("google-tokens", "{}");
+    currentVaultSetupState = needsKeyState;
     mockFetchAndStoreFileMetadata.mockResolvedValue(undefined);
     mockGetAllFilesForUser.mockResolvedValue([]);
     mockGetFoldersForUser.mockResolvedValue([]);
@@ -171,19 +195,60 @@ describe("Home guided vault setup", () => {
     );
   });
 
-  it("shows vault setup guidance when this browser has no encryption key", async () => {
+  it("shows a neutral setup headline while vault state resolves", async () => {
     currentVaultSetupState = needsKeyState;
 
     renderHome();
 
+    expect(screen.getByText("Setting up your private vault")).toBeInTheDocument();
+    expect(screen.queryByText(/Welcome back/i)).not.toBeInTheDocument();
+    await waitFor(() => expect(mockGetAuthenticatedUser).toHaveBeenCalled());
+  });
+
+  it("shows a stable loading headline while vault state is checked", () => {
+    renderHome();
+
+    expect(screen.getByText("Setting up your private vault")).toBeInTheDocument();
+    expect(screen.queryByText(/Welcome back/i)).not.toBeInTheDocument();
+  });
+
+  it("shows the login welcome only for the first Home visit after sign-in", async () => {
+    queueHomeLoginWelcome();
+
+    const { unmount } = renderHome();
+
+    expect(await screen.findByText("Welcome back")).toBeInTheDocument();
+
+    unmount();
+    renderHome();
+
+    expect(screen.getByText("Setting up your private vault")).toBeInTheDocument();
+    expect(screen.queryByText(/Welcome back/i)).not.toBeInTheDocument();
+  });
+
+  it("does not render cached dashboard state for a different backend-authenticated user", async () => {
+    sessionStorage.setItem(
+      "google-tokens",
+      JSON.stringify({ userEmail: "owner@example.com" }),
+    );
+    writeCachedHomeDashboard({
+      userEmail: "owner@example.com",
+      counts: { files: 2, folders: 1 },
+      recent: [],
+      canReadAnalytics: false,
+      vaultSetup: vaultReadyState as any,
+    });
+    mockGetAuthenticatedUser.mockResolvedValue({
+      email: "other@example.com",
+      capabilities: { analyticsRead: false },
+    } as any);
+
+    renderHome();
+
+    await waitFor(() => expect(mockGetAuthenticatedUser).toHaveBeenCalled());
     expect(
-      await screen.findByText("Set up your private vault"),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: /create or recover access/i }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText("Create or recover vault access"),
-    ).toBeInTheDocument();
+      screen.queryByText("Welcome back to your private vault"),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText("2 files · 1 folders")).not.toBeInTheDocument();
   });
 });
