@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
   HardDrive,
@@ -9,6 +9,8 @@ import {
   Trash2,
   Share2,
   LogOut,
+  ShieldCheck,
+  AlertCircle,
 } from "lucide-react";
 import { useSidebar } from "../../contexts/sidebar-context";
 import { useApp } from "../../contexts/app-context";
@@ -19,6 +21,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "../ui/avatar";
 import { ModeToggle } from "../mode-toggle";
 import { toast } from "sonner";
 import { Button } from "../ui/button";
+import { getStoredKey } from "../../utils/cryptoUtils";
 
 interface NavItem {
   id: string;
@@ -36,7 +39,12 @@ const navigationItems: NavItem[] = [
     icon: Inbox,
     path: "/shared-with-me",
   },
-  { id: "keys", label: "Key Management", icon: Key, path: "/key-management" },
+  {
+    id: "keys",
+    label: "Recovery & Access",
+    icon: Key,
+    path: "/key-management",
+  },
 ];
 
 function formatBytes(bytes: number) {
@@ -66,14 +74,48 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   const { isOpen, isMobile } = useSidebar();
   const { userEmail, userName, userImage, storageInfo, refreshAll } = useApp();
   const [isProcessingSharingKeys, setIsProcessingSharingKeys] = useState(false);
+  const [hasVaultKey, setHasVaultKey] = useState<boolean | null>(null);
 
   // Show labels on mobile (full drawer) or when the desktop rail is expanded
   const showLabels = isMobile || isOpen;
   const isActive = (path: string) => location.pathname === path;
 
-  const usagePercentage = storageInfo
-    ? (storageInfo.used / storageInfo.total) * 100
-    : 0;
+  const usagePercentage =
+    storageInfo && storageInfo.total > 0
+      ? (storageInfo.used / storageInfo.total) * 100
+      : 0;
+  const vaultAccessLabel =
+    hasVaultKey === null
+      ? "Checking vault access"
+      : hasVaultKey
+        ? "Vault key active"
+        : "Vault access needed";
+  const vaultAccessDescription =
+    hasVaultKey === null
+      ? "Checking this browser session."
+      : hasVaultKey
+        ? "This browser can encrypt and decrypt."
+        : "Recover access before opening files.";
+
+  useEffect(() => {
+    let active = true;
+
+    const checkVaultAccess = async () => {
+      try {
+        const key = await getStoredKey();
+        if (active) setHasVaultKey(Boolean(key));
+      } catch {
+        if (active) setHasVaultKey(false);
+      }
+    };
+
+    void checkVaultAccess();
+    window.addEventListener("focus", checkVaultAccess);
+    return () => {
+      active = false;
+      window.removeEventListener("focus", checkVaultAccess);
+    };
+  }, [location.pathname]);
 
   const handleDeleteAll = () => {
     window.dispatchEvent(new CustomEvent("trigger-delete-all"));
@@ -140,11 +182,11 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
         storedPublicKey.keyVersion,
       );
 
-      toast.success("File sharing enabled successfully!");
+      toast.success("Sharing identity created");
       await refreshAll();
     } catch (error) {
       console.error("Error enabling sharing:", error);
-      toast.error("Failed to enable file sharing");
+      toast.error("Failed to create sharing identity");
     } finally {
       setIsProcessingSharingKeys(false);
     }
@@ -196,15 +238,44 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
         <button
           onClick={handleEnableSharing}
           disabled={isProcessingSharingKeys}
-          title={!showLabels ? "Enable Sharing" : undefined}
+          title={!showLabels ? "Create Sharing Identity" : undefined}
           className={`flex w-full items-center gap-3 px-3 py-2.5 text-sm transition-colors hover:bg-muted/60 disabled:opacity-50 ${
             showLabels ? "" : "justify-center"
           }`}
         >
           <Share2 className="h-[18px] w-[18px] flex-shrink-0" />
-          {showLabels && <span>Enable Sharing</span>}
+          {showLabels && <span>Create Sharing Identity</span>}
         </button>
       </nav>
+
+      <div className="border-t p-2">
+        <div
+          className={`flex items-center gap-3 px-3 py-2.5 text-sm ${
+            showLabels ? "" : "justify-center"
+          }`}
+          title={
+            !showLabels
+              ? vaultAccessLabel
+              : undefined
+          }
+          role="status"
+          aria-label={vaultAccessLabel}
+        >
+          {hasVaultKey ? (
+            <ShieldCheck className="h-[18px] w-[18px] flex-shrink-0 text-green-600" />
+          ) : (
+            <AlertCircle className="h-[18px] w-[18px] flex-shrink-0 text-muted-foreground" />
+          )}
+          {showLabels && (
+            <div className="min-w-0">
+              <p className="text-xs font-medium">{vaultAccessLabel}</p>
+              <p className="mt-0.5 text-[10px] leading-relaxed text-muted-foreground">
+                {vaultAccessDescription}
+              </p>
+            </div>
+          )}
+        </div>
+      </div>
 
       {/* Destructive action */}
       <div className="p-2">
