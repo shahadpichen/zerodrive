@@ -174,7 +174,6 @@ function HomeContent() {
           getAllFilesForUser(email),
           getFoldersForUser(email),
         ]);
-        const hasVaultContents = files.length > 0 || folders.length > 0;
         const nextCounts = { files: files.length, folders: folders.length };
         const nextRecent = [...files]
           .sort(
