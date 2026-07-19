@@ -33,7 +33,7 @@ function LandingPage({ onAuthChange }: LandingPageProps) {
       <Header />
       <div className="lg:px-[12vw] px-5 mx-auto mt-20 max-w-screen-xl sm:px-6">
         <div className="text-center">
-          <h1 className="text-xl sm:text-2xl md:text-3xl md:w-[70%] mx-auto">
+          <h1 className="text-2xl md:text-3xl md:w-[70%] mx-auto">
             End-to-End Encrypted File Storage on{" "}
             <span className="text-black dark:text-white">Google Drive</span>
           </h1>

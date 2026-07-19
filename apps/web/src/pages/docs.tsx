@@ -19,36 +19,21 @@ function Docs() {
       <Header />
 
       <div className="mx-auto max-w-screen-xl px-5 py-12 sm:px-6 lg:px-[8vw]">
-        <section className="border bg-card p-6 shadow-sm md:p-10">
-          <div className="flex flex-col gap-8 lg:flex-row lg:items-end lg:justify-between">
-            <div className="max-w-3xl">
-              <Badge variant="outline" className="mb-5 bg-muted/30">
-                ZeroDrive documentation
-              </Badge>
-              <h1 className="text-2xl leading-tight sm:text-3xl md:text-4xl">
-                Choose what you want to understand about ZeroDrive.
-              </h1>
-              <p className="mt-5 max-w-2xl text-sm leading-7 text-muted-foreground sm:text-base">
-                Start with the product model, or jump straight into usage,
-                secure sharing, privacy, recovery, security limits, or
-                self-hosting. Each topic has its own page so the docs stay easy
-                to scan.
-              </p>
-            </div>
-
-            <div className="flex flex-col gap-3 sm:flex-row lg:flex-col">
-              <Button asChild>
-                <Link to="/docs/how-it-works">Start with overview</Link>
-              </Button>
-              <Button asChild variant="outline">
-                <Link to="/docs/self-hosting">Self-hosting notes</Link>
-              </Button>
-            </div>
+        <div className="flex flex-col p-6 md:p-10 gap-8 items-center">
+          <div className="max-w-3xl md:max-w-2xl text-center flex flex-col items-center">
+            <h1 className="text-2xl leading-tight md:text-3xl">
+              Choose what you want to understand about ZeroDrive.
+            </h1>
+            <p className="mt-5 max-w-2xl text-sm leading-7 text-muted-foreground sm:text-base">
+              Start with the product model, or jump straight into usage, secure
+              sharing, privacy, recovery, security limits, or self-hosting. Each
+              topic has its own page so the docs stay easy to scan.
+            </p>
           </div>
-        </section>
+        </div>
 
-        <section className="mt-20">
-          <div className="mb-4 flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
+        <section className="mt-10">
+          <div className="mb-4 flex flex-col justify-between gap-3 items-center text-center">
             <div>
               <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
                 All docs
@@ -57,10 +42,6 @@ function Docs() {
                 Pick a topic and go deeper
               </h2>
             </div>
-            <p className="max-w-xl text-sm leading-6 text-muted-foreground">
-              The docs are split by intent: learning the product, using the app,
-              reviewing security, or running it yourself.
-            </p>
           </div>
 
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
