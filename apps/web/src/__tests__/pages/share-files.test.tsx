@@ -2,6 +2,7 @@ import React from "react";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import ShareFilesPage from "../../pages/share-files";
+import { AppProvider } from "../../contexts/app-context";
 import {
   fetchRecipientPublicKey,
   prepareFileForSharing,
@@ -140,9 +141,11 @@ const mockDecryptFile = decryptFile as jest.MockedFunction<typeof decryptFile>;
 
 function renderPage() {
   return render(
-    <MemoryRouter>
-      <ShareFilesPage />
-    </MemoryRouter>,
+    <AppProvider>
+      <MemoryRouter>
+        <ShareFilesPage />
+      </MemoryRouter>
+    </AppProvider>,
   );
 }
 
