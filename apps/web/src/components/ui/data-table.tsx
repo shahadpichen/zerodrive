@@ -99,7 +99,7 @@ export function DataTable<TData, TValue>({
       // and at least one deletion might have succeeded (allSucceeded isn't guaranteed if loop was empty)
       if (filesToDelete.length > 0) {
         const updatedFiles = await getAllFilesForUser(userEmail);
-        await sendToGoogleDrive(updatedFiles);
+        await sendToGoogleDrive(updatedFiles, [], { userEmail });
       }
 
       if (allSucceeded && filesToDelete.length > 0) {

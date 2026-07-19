@@ -9,6 +9,7 @@ import {
   moveFile,
 } from '../../utils/folderOperations';
 import { toast } from 'sonner';
+import { rememberVaultMetadataStatus } from '../../utils/vaultMetadataWriteGuard';
 
 // Mock all dependencies
 jest.mock('../../utils/dexieDB');
@@ -56,7 +57,9 @@ describe('FolderOperations', () => {
   const mockFolderName = 'Test Folder';
 
   beforeEach(() => {
+    sessionStorage.clear();
     jest.clearAllMocks();
+    rememberVaultMetadataStatus(testUser, "ready");
     mockGetGoogleAccessToken.mockResolvedValue(mockToken);
     mockGetAllFilesForUser.mockResolvedValue([]);
     mockGetFoldersForUser.mockResolvedValue([]);
@@ -614,7 +617,7 @@ describe('FolderOperations', () => {
       expect(results.every((r) => r !== null)).toBe(true);
     });
 
-    it('should handle null user email gracefully', async () => {
+    it('should reject folder creation without a verified account', async () => {
       (global.fetch as jest.Mock).mockResolvedValueOnce({
         ok: true,
         json: async () => ({ id: mockFolderId, name: mockFolderName }),
@@ -622,7 +625,8 @@ describe('FolderOperations', () => {
 
       const result = await createFolder(mockFolderName, null, '');
 
-      expect(result?.userEmail).toBe('');
+      expect(result).toBeNull();
+      expect(global.fetch).not.toHaveBeenCalled();
     });
   });
 });

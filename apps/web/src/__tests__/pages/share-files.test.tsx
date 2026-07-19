@@ -2,6 +2,7 @@ import React from "react";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import ShareFilesPage from "../../pages/share-files";
+import { AppProvider } from "../../contexts/app-context";
 import {
   fetchRecipientPublicKey,
   prepareFileForSharing,
@@ -140,9 +141,11 @@ const mockDecryptFile = decryptFile as jest.MockedFunction<typeof decryptFile>;
 
 function renderPage() {
   return render(
-    <MemoryRouter>
-      <ShareFilesPage />
-    </MemoryRouter>,
+    <AppProvider>
+      <MemoryRouter>
+        <ShareFilesPage />
+      </MemoryRouter>
+    </AppProvider>,
   );
 }
 
@@ -220,6 +223,9 @@ describe("ShareFilesPage", () => {
     expect(
       screen.getByText("The original file never reaches our server."),
     ).toBeInTheDocument();
+    expect(
+      screen.getByText(/only the chosen recipient can unlock it/i),
+    ).toBeInTheDocument();
   });
 
   it("presents sharing setup as a blocking prerequisite", async () => {
@@ -231,15 +237,15 @@ describe("ShareFilesPage", () => {
     renderPage();
 
     expect(
-      await screen.findByText("Enable file sharing once"),
+      await screen.findByText("Create your sharing identity"),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: /enable sharing/i }),
+      screen.getByRole("button", { name: /create sharing identity/i }),
     ).toBeInTheDocument();
     expect(screen.queryByLabelText("File to share")).not.toBeInTheDocument();
   });
 
-  it("preserves /share as the return destination for Key Management", async () => {
+  it("preserves /share as the return destination for Recovery & Access", async () => {
     mockRecoverKeys.mockResolvedValue({
       success: true,
       recovered: false,
@@ -254,7 +260,7 @@ describe("ShareFilesPage", () => {
     );
 
     expect(mockNavigate).toHaveBeenCalledWith(
-      "/key-management?returnTo=%2Fshare",
+      "/recovery-access?returnTo=%2Fshare",
     );
   });
 
@@ -279,6 +285,9 @@ describe("ShareFilesPage", () => {
     expect(mockFetchPublicKey).toHaveBeenCalledWith("recipient@example.com");
     expect(screen.getByText("roadmap.pdf")).toBeInTheDocument();
     expect(screen.getByText("recipient@example.com")).toBeInTheDocument();
+    expect(
+      screen.getByText(/recipient-only encrypted copy/i),
+    ).toBeInTheDocument();
   });
 
   it("blocks a changed recipient key until the sender confirms it", async () => {
@@ -361,6 +370,9 @@ describe("ShareFilesPage", () => {
     fireEvent.click(screen.getByRole("button", { name: /encrypt and share/i }));
 
     expect(await screen.findByText("File shared")).toBeInTheDocument();
+    expect(
+      screen.getByText(/only this recipient can unlock the encrypted copy/i),
+    ).toBeInTheDocument();
     expect(mockPrepareFile).toHaveBeenCalled();
     expect(mockStoreFileShare).toHaveBeenCalled();
     expect(

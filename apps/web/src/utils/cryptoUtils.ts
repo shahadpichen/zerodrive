@@ -1,5 +1,12 @@
 import * as bip39 from "bip39";
 
+export const VAULT_KEY_STORAGE_EVENT = "zerodrive-vault-key-storage-changed";
+
+const notifyVaultKeyStorageChanged = () => {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new Event(VAULT_KEY_STORAGE_EVENT));
+};
+
 export const generateKey = async (): Promise<CryptoKey> => {
   return crypto.subtle.generateKey(
     {
@@ -21,6 +28,7 @@ export const storeKey = async (key: CryptoKey) => {
 
   // Store plain JWK in sessionStorage
   sessionStorage.setItem("aes-key", JSON.stringify(keyJWK));
+  notifyVaultKeyStorageChanged();
 };
 
 /**
@@ -48,6 +56,7 @@ export const getStoredKey = async (): Promise<CryptoKey | null> => {
 
 export const clearStoredKey = () => {
   sessionStorage.removeItem("aes-key");
+  notifyVaultKeyStorageChanged();
 };
 
 export const generateMnemonic = (): string => {

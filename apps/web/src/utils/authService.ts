@@ -6,6 +6,7 @@
 import apiClient from "./apiClient";
 import logger from "./logger";
 import type { AuthenticatedUser } from "@zerodrive/shared-types";
+import { AUTH_SESSION_CLEARED_EVENT } from "./authEvents";
 
 const API_URL = process.env.REACT_APP_API_URL || "http://localhost:3001/api";
 
@@ -75,6 +76,7 @@ export async function logout(): Promise<void> {
   // Clear local storage and session storage
   logger.log("[Logout] Clearing local storage and session storage...");
   await clearSensitiveBrowserSession();
+  window.dispatchEvent(new Event(AUTH_SESSION_CLEARED_EVENT));
   logger.log("[Logout] Logout process complete");
 }
 

@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { initializeGapi, refreshGapiToken } from "./gapiInit";
 import logger from "./logger";
 import { encryptMetadata, decryptMetadata } from "./metadataEncryption";
+import { assertCanWriteVaultMetadata } from "./vaultMetadataWriteGuard";
 
 export interface FileMeta {
   id: string;
@@ -134,6 +135,10 @@ const moveFileToFolder = async (
 const sendToGoogleDrive = async (
   filesToSync: FileMeta[],
   foldersToSync: FolderMeta[] = [],
+  options: {
+    userEmail?: string;
+    allowMetadataReplacement?: boolean;
+  } = {},
 ) => {
   let driveUpdateToastId: string | number | undefined;
   logger.log(
@@ -142,6 +147,19 @@ const sendToGoogleDrive = async (
     foldersToSync,
   );
   try {
+    const userEmail =
+      options.userEmail ||
+      filesToSync[0]?.userEmail ||
+      foldersToSync[0]?.userEmail;
+    if (!userEmail) {
+      throw new Error(
+        "Cannot safely sync vault metadata without an account identifier.",
+      );
+    }
+    assertCanWriteVaultMetadata(userEmail, {
+      allowMetadataReplacement: options.allowMetadataReplacement,
+    });
+
     driveUpdateToastId = toast.loading("Syncing metadata with Google Drive...");
 
     const { getGoogleAccessToken } = await import("./gapiInit");

@@ -21,6 +21,7 @@ import { setMnemonic } from "../utils/mnemonicManager";
 import { testEncryptionKey } from "../utils/keyTest";
 import { recoverRsaKeysIfNeeded } from "../utils/rsaKeyRecovery";
 import { getUserEmail, hasGoogleTokensInStorage } from "../utils/authService";
+import { clearCachedHomeDashboard } from "../utils/homeDashboardCache";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
@@ -38,19 +39,26 @@ import {
 import { toast } from "sonner";
 
 type KeyMode = "recover" | "generate";
+const allowedReturnTargets = new Set([
+  "/home",
+  "/storage",
+  "/share",
+  "/shared-with-me",
+]);
 
 export const KeyManagementPage: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const requestedReturnTo = searchParams.get("returnTo");
   const returnTo =
-    requestedReturnTo === "/share" || requestedReturnTo === "/shared-with-me"
+    requestedReturnTo && allowedReturnTargets.has(requestedReturnTo)
       ? requestedReturnTo
-      : "/storage";
+      : "/home";
   const returnLabel = {
+    "/home": "Continue to Home",
+    "/storage": "Continue to Storage",
     "/share": "Continue to Share Files",
     "/shared-with-me": "Continue to Shared Files",
-    "/storage": "Continue to Storage",
   }[returnTo];
 
   const [mode, setMode] = useState<KeyMode>("recover");
@@ -129,6 +137,7 @@ export const KeyManagementPage: React.FC = () => {
       const key = await deriveKeyFromMnemonic(mnemonic);
       setMnemonic(mnemonic);
       await storeKey(key);
+      clearCachedHomeDashboard();
       setGeneratedMnemonic(mnemonic);
       setKeyStatusVersion((version) => version + 1);
       await recoverSharingKeys();
@@ -151,6 +160,7 @@ export const KeyManagementPage: React.FC = () => {
       const key = await deriveKeyFromMnemonic(mnemonic);
       setMnemonic(mnemonic);
       await storeKey(key);
+      clearCachedHomeDashboard();
       setKeyStatusVersion((version) => version + 1);
       await recoverSharingKeys();
       toast.success("Encryption key recovered");
@@ -188,6 +198,7 @@ export const KeyManagementPage: React.FC = () => {
         ["encrypt", "decrypt"],
       );
       await storeKey(key);
+      clearCachedHomeDashboard();
       setKeyStatusVersion((version) => version + 1);
       toast.success("Legacy key imported", {
         description: "The key is active in this browser tab.",
@@ -368,11 +379,11 @@ export const KeyManagementPage: React.FC = () => {
             <Check className="h-5 w-5" />
           </div>
           <h2 className="mt-4 text-lg font-semibold">
-            Your encryption key is ready
+            Your vault is ready
           </h2>
           <p className="mt-1.5 text-sm text-muted-foreground">
-            Save this recovery phrase now. It is the only way to restore access
-            on another device.
+            Save this recovery phrase now. After that, you can upload your first
+            encrypted file or return to what you were doing.
           </p>
         </div>
 
@@ -431,7 +442,7 @@ export const KeyManagementPage: React.FC = () => {
             onClick={() => navigate(returnTo)}
             className="w-full sm:w-auto"
           >
-            {returnLabel}
+            {returnTo === "/storage" ? "Upload first encrypted file" : returnLabel}
           </Button>
         </div>
       </div>
@@ -565,9 +576,11 @@ export const KeyManagementPage: React.FC = () => {
 
       <div className="space-y-6">
         <div>
-          <h1 className="text-2xl tracking-tight">Key Management</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Recover access or create the key that protects your encrypted files.
+          <h1 className="text-2xl tracking-tight">Recovery & Access</h1>
+          <p className="mt-1 max-w-2xl text-sm leading-relaxed text-muted-foreground">
+            Manage the browser access that protects your encrypted vault.
+            Recovery happens locally; your phrase and file key are not sent to
+            the ZeroDrive server.
           </p>
         </div>
 

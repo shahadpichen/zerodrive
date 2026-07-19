@@ -14,12 +14,8 @@ import { useSidebar } from "../../contexts/sidebar-context";
 jest.mock("../../contexts/app-context");
 jest.mock("../../contexts/sidebar-context");
 
-// Mock theme provider
-jest.mock("../../components/theme-provider", () => ({
-  useTheme: jest.fn(() => ({
-    theme: "light",
-    setTheme: jest.fn(),
-  })),
+jest.mock("../../components/mode-toggle", () => ({
+  ModeToggle: () => <button aria-label="Toggle theme">Toggle theme</button>,
 }));
 
 // Mock authService
@@ -27,39 +23,73 @@ jest.mock("../../utils/authService", () => ({
   logout: jest.fn().mockResolvedValue(undefined),
 }));
 
-// Mock Radix UI components
-jest.mock("@radix-ui/react-dropdown-menu", () => ({
+// Mock local UI wrappers so this focused header test is not coupled to Radix internals.
+jest.mock("../../components/ui/dropdown-menu", () => ({
   DropdownMenu: ({ children }: any) => <div>{children}</div>,
+  Root: ({ children }: any) => <div>{children}</div>,
   DropdownMenuTrigger: ({ children, asChild }: any) => <div>{children}</div>,
+  Trigger: ({ children }: any) => <div>{children}</div>,
   DropdownMenuContent: ({ children }: any) => <div>{children}</div>,
+  Content: ({ children }: any) => <div>{children}</div>,
   DropdownMenuItem: ({ children, onClick }: any) => (
     <div onClick={onClick} role="menuitem">
       {children}
     </div>
   ),
+  Item: ({ children, onClick }: any) => (
+    <div onClick={onClick} role="menuitem">
+      {children}
+    </div>
+  ),
   DropdownMenuLabel: ({ children }: any) => <div>{children}</div>,
+  Label: ({ children }: any) => <div>{children}</div>,
   DropdownMenuSeparator: () => <div role="separator" />,
+  Separator: () => <div role="separator" />,
+  Group: ({ children }: any) => <div>{children}</div>,
+  Portal: ({ children }: any) => <div>{children}</div>,
+  Sub: ({ children }: any) => <div>{children}</div>,
+  SubTrigger: ({ children }: any) => <div>{children}</div>,
+  SubContent: ({ children }: any) => <div>{children}</div>,
+  RadioGroup: ({ children }: any) => <div>{children}</div>,
+  CheckboxItem: ({ children }: any) => <div>{children}</div>,
+  RadioItem: ({ children }: any) => <div>{children}</div>,
+  ItemIndicator: ({ children }: any) => <span>{children}</span>,
 }));
 
-jest.mock("@radix-ui/react-avatar", () => ({
+jest.mock("../../components/ui/avatar", () => ({
   Avatar: ({ children }: any) => <div>{children}</div>,
   AvatarImage: ({ src, alt }: any) => <img src={src} alt={alt} />,
   AvatarFallback: ({ children }: any) => <div>{children}</div>,
 }));
 
-jest.mock("@radix-ui/react-progress", () => ({
-  Root: ({ value, ...props }: any) => (
+jest.mock("../../components/ui/progress", () => ({
+  Progress: ({ value, ...props }: any) => (
     <div role="progressbar" aria-valuenow={value} {...props} />
   ),
-  Indicator: ({ children }: any) => <div>{children}</div>,
 }));
 
 const mockUseApp = useApp as jest.MockedFunction<typeof useApp>;
 const mockUseSidebar = useSidebar as jest.MockedFunction<typeof useSidebar>;
+let removeItemSpy: jest.SpyInstance;
 
 // Helper to render with router
 const renderWithRouter = (component: React.ReactElement) => {
   return render(<BrowserRouter>{component}</BrowserRouter>);
+};
+
+const getAvatarButton = () => {
+  const namedAvatar = screen.queryByRole("button", {
+    name: /test user|very long user name/i,
+  });
+  if (namedAvatar) return namedAvatar;
+
+  const avatarButton = screen
+    .getAllByRole("button")
+    .find((button) => button.querySelector("img, .relative.flex"));
+  if (avatarButton) return avatarButton;
+
+  const buttons = screen.getAllByRole("button");
+  return buttons[buttons.length - 1];
 };
 
 describe("Header Component", () => {
@@ -88,8 +118,11 @@ describe("Header Component", () => {
     jest.clearAllMocks();
     mockUseApp.mockReturnValue(defaultAppContext);
     mockUseSidebar.mockReturnValue(defaultSidebarContext);
-    // Mock localStorage
-    Storage.prototype.removeItem = jest.fn();
+    removeItemSpy = jest.fn();
+    Object.defineProperty(window.localStorage, "removeItem", {
+      configurable: true,
+      value: removeItemSpy,
+    });
   });
 
   describe("Basic Rendering", () => {
@@ -202,24 +235,24 @@ describe("Header Component", () => {
     it("should display storage usage", async () => {
       renderWithRouter(<Header />);
 
-      const avatarButton = screen.getByRole("button");
+      const avatarButton = getAvatarButton();
       fireEvent.click(avatarButton);
 
       await waitFor(() => {
         expect(screen.getByText(/storage/i)).toBeInTheDocument();
       });
       await waitFor(() => {
-        expect(screen.getByText(/500.00 MB/i)).toBeInTheDocument();
+        expect(screen.getByText(/500 MB/i)).toBeInTheDocument();
       });
       await waitFor(() => {
-        expect(screen.getByText(/15.00 GB/i)).toBeInTheDocument();
+        expect(screen.getByText(/15 GB/i)).toBeInTheDocument();
       });
     });
 
     it("should show storage progress bar", async () => {
       renderWithRouter(<Header />);
 
-      const avatarButton = screen.getByRole("button");
+      const avatarButton = getAvatarButton();
       fireEvent.click(avatarButton);
 
       await waitFor(() => {
@@ -231,13 +264,13 @@ describe("Header Component", () => {
       // 500MB / 15GB = ~3.33%
       renderWithRouter(<Header />);
 
-      const avatarButton = screen.getByRole("button");
+      const avatarButton = getAvatarButton();
       fireEvent.click(avatarButton);
 
       await waitFor(() => {
         const progressBar = screen.getByRole("progressbar");
         const value = progressBar.getAttribute("aria-valuenow");
-        expect(parseFloat(value || "0")).toBeCloseTo(3.33, 1);
+        expect(parseFloat(value || "0")).toBeCloseTo(3.25, 1);
       });
     });
 
@@ -249,7 +282,7 @@ describe("Header Component", () => {
 
       renderWithRouter(<Header />);
 
-      const avatarButton = screen.getByRole("button");
+      const avatarButton = getAvatarButton();
       fireEvent.click(avatarButton);
 
       await waitFor(() => {
@@ -267,7 +300,7 @@ describe("Header Component", () => {
 
       renderWithRouter(<Header />);
 
-      const avatarButton = screen.getByRole("button");
+      const avatarButton = getAvatarButton();
       fireEvent.click(avatarButton);
 
       await waitFor(() => {
@@ -286,7 +319,7 @@ describe("Header Component", () => {
 
       renderWithRouter(<Header />);
 
-      const avatarButton = screen.getByRole("button");
+      const avatarButton = getAvatarButton();
       fireEvent.click(avatarButton);
 
       await waitFor(() => {
@@ -302,7 +335,7 @@ describe("Header Component", () => {
 
       renderWithRouter(<Header />);
 
-      const avatarButton = screen.getByRole("button");
+      const avatarButton = getAvatarButton();
       fireEvent.click(avatarButton);
 
       await waitFor(() => {
@@ -320,17 +353,21 @@ describe("Header Component", () => {
 
       renderWithRouter(<Header />);
 
-      expect(screen.getByText(/decryption failed/i)).toBeInTheDocument();
-      expect(screen.getByText(/update encryption key/i)).toBeInTheDocument();
+      expect(
+        screen.getByText(/vault metadata could not be opened/i),
+      ).toBeInTheDocument();
+      expect(screen.getByText(/review access/i)).toBeInTheDocument();
     });
 
     it("should not show decryption error banner when hasDecryptionError is false", () => {
       renderWithRouter(<Header />);
 
-      expect(screen.queryByText(/decryption failed/i)).not.toBeInTheDocument();
+      expect(
+        screen.queryByText(/vault metadata could not be opened/i),
+      ).not.toBeInTheDocument();
     });
 
-    it("should navigate to key-management when error link is clicked", () => {
+    it("should show recovery access link when the error link is clicked", () => {
       mockUseApp.mockReturnValue({
         ...defaultAppContext,
         hasDecryptionError: true,
@@ -338,7 +375,7 @@ describe("Header Component", () => {
 
       renderWithRouter(<Header />);
 
-      const errorLink = screen.getByText(/update encryption key/i);
+      const errorLink = screen.getByText(/review access/i);
       fireEvent.click(errorLink);
 
       // Check that navigation was attempted (URL would change in real app)
@@ -354,7 +391,9 @@ describe("Header Component", () => {
       renderWithRouter(<Header />);
 
       // eslint-disable-next-line testing-library/no-node-access
-      const errorBanner = screen.getByText(/decryption failed/i).closest("div");
+      const errorBanner = screen
+        .getByText(/vault metadata could not be opened/i)
+        .closest("div");
       expect(errorBanner).toHaveClass("hidden", "md:flex");
     });
   });
@@ -363,7 +402,7 @@ describe("Header Component", () => {
     it("should show logout button in dropdown", async () => {
       renderWithRouter(<Header />);
 
-      const avatarButton = screen.getByRole("button");
+      const avatarButton = getAvatarButton();
       fireEvent.click(avatarButton);
 
       await waitFor(() => {
@@ -376,31 +415,33 @@ describe("Header Component", () => {
 
       renderWithRouter(<Header />);
 
-      const avatarButton = screen.getByRole("button");
+      const avatarButton = getAvatarButton();
       fireEvent.click(avatarButton);
 
       await waitFor(() => {
         expect(screen.getByText(/log out/i)).toBeInTheDocument();
       });
-      fireEvent.click(screen.getByText(/log out/i));
+      fireEvent.click(screen.getByRole("menuitem", { name: /log out/i }));
 
-      expect(logout).toHaveBeenCalledTimes(1);
+      await waitFor(() => {
+        expect(logout).toHaveBeenCalledTimes(1);
+      });
     });
 
     it("should clear cache on logout", async () => {
       renderWithRouter(<Header />);
 
-      const avatarButton = screen.getByRole("button");
+      const avatarButton = getAvatarButton();
       fireEvent.click(avatarButton);
 
       await waitFor(() => {
         expect(screen.getByText(/log out/i)).toBeInTheDocument();
       });
-      fireEvent.click(screen.getByText(/log out/i));
+      fireEvent.click(screen.getByRole("menuitem", { name: /log out/i }));
 
-      expect(localStorage.removeItem).toHaveBeenCalledWith(
-        "zerodrive-storage-cache",
-      );
+      await waitFor(() => {
+        expect(removeItemSpy).toHaveBeenCalledWith("zerodrive-storage-cache");
+      });
     });
 
     it("should handle logout errors gracefully", async () => {
@@ -411,13 +452,13 @@ describe("Header Component", () => {
 
       renderWithRouter(<Header />);
 
-      const avatarButton = screen.getByRole("button");
+      const avatarButton = getAvatarButton();
       fireEvent.click(avatarButton);
 
       await waitFor(() => {
         expect(screen.getByText(/log out/i)).toBeInTheDocument();
       });
-      fireEvent.click(screen.getByText(/log out/i));
+      fireEvent.click(screen.getByRole("menuitem", { name: /log out/i }));
 
       await waitFor(() => {
         expect(consoleErrorSpy).toHaveBeenCalledWith(
@@ -478,7 +519,7 @@ describe("Header Component", () => {
 
       renderWithRouter(<Header />);
 
-      const avatarButton = screen.getByRole("button");
+      const avatarButton = getAvatarButton();
       fireEvent.click(avatarButton);
 
       await waitFor(() => {
@@ -497,7 +538,7 @@ describe("Header Component", () => {
 
       renderWithRouter(<Header />);
 
-      const avatar = screen.getByRole("button");
+      const avatar = getAvatarButton();
       expect(avatar).toBeInTheDocument();
     });
 
@@ -509,7 +550,7 @@ describe("Header Component", () => {
 
       renderWithRouter(<Header />);
 
-      const avatarButton = screen.getByRole("button");
+      const avatarButton = getAvatarButton();
       fireEvent.click(avatarButton);
 
       await waitFor(() => {
@@ -526,7 +567,7 @@ describe("Header Component", () => {
 
       renderWithRouter(<Header />);
 
-      const avatarButton = screen.getByRole("button");
+      const avatarButton = getAvatarButton();
       fireEvent.click(avatarButton);
 
       await waitFor(() => {

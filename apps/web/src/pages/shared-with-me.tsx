@@ -26,12 +26,15 @@ import {
 import { getUserKeyPair, userHasStoredKeys } from "../utils/keyStorage";
 import apiClient from "../utils/apiClient";
 import { getStoredKey } from "../utils/cryptoUtils";
+import { fetchAndStoreFileMetadata } from "../utils/dexieDB";
 import { uploadAndSyncFile } from "../utils/fileOperations";
 import { getMnemonic, setMnemonic } from "../utils/mnemonicManager";
 import { downloadEncryptedRsaKeyFromDrive } from "../utils/gdriveKeyStorage";
 import { decryptRsaPrivateKeyWithAesKey } from "../utils/rsaKeyManager";
 import { readRecipientKeyVersion } from "@zerodrive/crypto";
 import { recoverRsaKeyVersion } from "../utils/rsaKeyRecovery";
+import { useOptionalVaultData } from "../contexts/vault-data-context";
+import { rememberVaultMetadataStatus } from "../utils/vaultMetadataWriteGuard";
 import { toast } from "sonner";
 
 type KeyState =
@@ -108,6 +111,7 @@ function mapSharedFile(row: any): SharedFile {
 
 const SharedWithMePage: React.FC = () => {
   const navigate = useNavigate();
+  const vaultData = useOptionalVaultData();
   const [userEmail, setUserEmail] = useState("");
   const [sharedFiles, setSharedFiles] = useState<SharedFile[]>([]);
   const [sharingPrivateKey, setSharingPrivateKey] = useState<JsonWebKey | null>(
@@ -296,13 +300,51 @@ const SharedWithMePage: React.FC = () => {
     if (userEmail) void loadSharedFiles(true);
   };
 
+  const ensureVaultMetadataReadyForSave = useCallback(async () => {
+    if (!userEmail) throw new Error("Sign in again before saving this file.");
+
+    const normalizedEmail = userEmail.trim().toLowerCase();
+    const vaultState = vaultData?.state;
+    const stateBelongsToCurrentUser =
+      vaultState?.userEmail === normalizedEmail;
+
+    if (stateBelongsToCurrentUser && vaultState?.metadataStatus === "ready") {
+      return;
+    }
+
+    vaultData?.setVaultMetadataStatus(userEmail, "verifying");
+    rememberVaultMetadataStatus(userEmail, "verifying");
+
+    try {
+      await fetchAndStoreFileMetadata();
+      if (vaultData) {
+        await vaultData.refreshVaultFromLocal(userEmail, {
+          metadataStatus: "ready",
+        });
+      } else {
+        rememberVaultMetadataStatus(userEmail, "ready");
+      }
+    } catch (error) {
+      const isDecryptionError =
+        error instanceof Error && error.name === "DecryptionError";
+      const status = isDecryptionError ? "decryption_error" : "error";
+      const message = isDecryptionError
+        ? "ZeroDrive found an existing encrypted file list that this recovery phrase cannot open. Open Storage and review vault access before saving this file."
+        : "ZeroDrive could not verify your Storage file list. Refresh Storage and try again before saving this file.";
+
+      vaultData?.setVaultMetadataStatus(userEmail, status, message);
+      rememberVaultMetadataStatus(userEmail, status);
+      throw new Error(message);
+    }
+  }, [userEmail, vaultData]);
+
   const requireReadyKeys = (): boolean => {
     if (keyState === "ready") return true;
 
     if (keyState === "sharing-missing") {
       navigate("/share");
     } else if (keyState === "primary-missing") {
-      navigate("/key-management?returnTo=%2Fshared-with-me");
+      navigate("/recovery-access?returnTo=%2Fshared-with-me");
     }
     return false;
   };
@@ -324,6 +366,12 @@ const SharedWithMePage: React.FC = () => {
 
     setProcessing({ fileId: file.id, action, stage: "downloading" });
     try {
+      if (action === "save") {
+        setProcessing({ fileId: file.id, action, stage: "saving" });
+        await ensureVaultMetadataReadyForSave();
+        setProcessing({ fileId: file.id, action, stage: "downloading" });
+      }
+
       const encryptedBlob = await downloadEncryptedFile(file.id);
       setProcessing({ fileId: file.id, action, stage: "decrypting" });
       const mnemonic = getMnemonic();
@@ -420,11 +468,12 @@ const SharedWithMePage: React.FC = () => {
               <KeyRound className="h-4 w-4" />
             </span>
             <div className="min-w-0 flex-1">
-              <h2 className="text-sm font-semibold">Unlock your sharing key</h2>
+              <h2 className="text-sm font-semibold">
+                Unlock files shared with you
+              </h2>
               <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                Your file encryption key is active. Enter the same recovery
-                phrase to unlock the private sharing key used for files sent to
-                you.
+                Your vault key is active, but this browser still needs your
+                recovery phrase to unlock files sent to this account.
               </p>
 
               <div className="mt-4 flex flex-col gap-2 sm:flex-row">
@@ -485,17 +534,18 @@ const SharedWithMePage: React.FC = () => {
 
     const content = {
       "primary-missing": {
-        title: "Recover your encryption key",
+        title: "Recover vault access first",
         description:
-          "Your primary recovery phrase is required before shared files can be decrypted.",
-        action: "Open Key Management",
-        onClick: () => navigate("/key-management?returnTo=%2Fshared-with-me"),
+          "Files in this inbox stay encrypted until this browser has your vault key. Enter your recovery phrase to continue.",
+        action: "Open Recovery & Access",
+        onClick: () =>
+          navigate("/recovery-access?returnTo=%2Fshared-with-me"),
       },
       "sharing-missing": {
-        title: "Enable encrypted sharing",
+        title: "Create your receiving identity",
         description:
-          "This account does not have a recipient sharing key yet. Complete the one-time setup first.",
-        action: "Enable sharing",
+          "ZeroDrive needs a recipient key for this account before other people can send files that only you can unlock.",
+        action: "Create sharing identity",
         onClick: () => navigate("/share"),
       },
     }[keyState];
@@ -535,7 +585,8 @@ const SharedWithMePage: React.FC = () => {
         <div>
           <h1 className="text-2xl tracking-tight">Shared with me</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Encrypted files sent to this ZeroDrive account.
+            Encrypted files sent to this ZeroDrive account. Your browser
+            unlocks them only after the sender finalizes the share.
           </p>
         </div>
         <Button
@@ -553,15 +604,22 @@ const SharedWithMePage: React.FC = () => {
 
       <div className="border">
         <div className="flex flex-col gap-3 border-b p-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-center gap-2">
-            <Inbox className="h-4 w-4" />
-            <span className="text-sm font-medium">Inbox</span>
-            {!isLoading && (
-              <span className="text-xs text-muted-foreground">
-                {sharedFiles.length}{" "}
-                {sharedFiles.length === 1 ? "file" : "files"}
-              </span>
-            )}
+          <div>
+            <div className="flex items-center gap-2">
+              <Inbox className="h-4 w-4" />
+              <span className="text-sm font-medium">Inbox</span>
+              {!isLoading && (
+                <span className="text-xs text-muted-foreground">
+                  {sharedFiles.length}{" "}
+                  {sharedFiles.length === 1 ? "file" : "files"}
+                </span>
+              )}
+            </div>
+            <p className="mt-1 max-w-2xl text-xs leading-relaxed text-muted-foreground">
+              Files are downloaded and decrypted in this browser. Saving creates
+              a separately encrypted copy in your personal Google Drive; the
+              original share remains available until it expires.
+            </p>
           </div>
           {sharedFiles.length > 0 && (
             <div className="relative w-full sm:w-64">
@@ -607,7 +665,7 @@ const SharedWithMePage: React.FC = () => {
             <p className="mt-1 max-w-sm text-xs text-muted-foreground">
               {searchQuery
                 ? "Try a different filename."
-                : "Files shared with this account will appear here."}
+                : "Files shared to this ZeroDrive account will appear here after they are finalized."}
             </p>
           </div>
         ) : (
@@ -641,38 +699,46 @@ const SharedWithMePage: React.FC = () => {
                     </div>
                   </div>
 
-                  <div className="flex flex-col gap-2 sm:flex-row">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleFileAction(file, "download")}
-                      disabled={Boolean(processing) || keyState !== "ready"}
-                    >
-                      {isProcessing && processing.action === "download" ? (
-                        <Loader2 className="animate-spin" />
-                      ) : (
-                        <Download />
-                      )}
-                      {actionLabel(file.id, "download")}
-                    </Button>
-                    <Button
-                      size="sm"
-                      onClick={() => handleFileAction(file, "save")}
-                      disabled={
-                        Boolean(processing) || keyState !== "ready" || isSaved
-                      }
-                    >
-                      {isSaved ? (
-                        <Check />
-                      ) : isProcessing && processing.action === "save" ? (
-                        <Loader2 className="animate-spin" />
-                      ) : (
-                        <HardDrive />
-                      )}
-                      {isSaved
-                        ? "Saved to Storage"
-                        : actionLabel(file.id, "save")}
-                    </Button>
+                  <div className="flex flex-col gap-2 sm:min-w-72">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleFileAction(file, "download")}
+                        disabled={Boolean(processing) || keyState !== "ready"}
+                      >
+                        {isProcessing && processing.action === "download" ? (
+                          <Loader2 className="animate-spin" />
+                        ) : (
+                          <Download />
+                        )}
+                        {actionLabel(file.id, "download")}
+                      </Button>
+                      <Button
+                        size="sm"
+                        onClick={() => handleFileAction(file, "save")}
+                        disabled={
+                          Boolean(processing) ||
+                          keyState !== "ready" ||
+                          isSaved
+                        }
+                      >
+                        {isSaved ? (
+                          <Check />
+                        ) : isProcessing && processing.action === "save" ? (
+                          <Loader2 className="animate-spin" />
+                        ) : (
+                          <HardDrive />
+                        )}
+                        {isSaved
+                          ? "Saved to Storage"
+                          : actionLabel(file.id, "save")}
+                      </Button>
+                    </div>
+                    <p className="text-xs leading-relaxed text-muted-foreground sm:text-right">
+                      Download saves plaintext to this device. Save to Storage
+                      makes a fresh encrypted copy in your vault.
+                    </p>
                   </div>
                 </article>
               );
@@ -683,9 +749,8 @@ const SharedWithMePage: React.FC = () => {
 
       <div className="flex items-start gap-2 text-xs leading-relaxed text-muted-foreground">
         <ShieldCheck className="mt-0.5 h-4 w-4 flex-shrink-0" />
-        Files are downloaded and decrypted in this browser. Saving creates a
-        separately encrypted copy in your personal Google Drive; the original
-        share remains available until it expires.
+        Recipient-only access depends on your recovery phrase and this browser’s
+        sharing key. ZeroDrive stores encrypted share data, not plaintext files.
       </div>
     </div>
   );

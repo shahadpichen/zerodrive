@@ -14,6 +14,7 @@ import { uploadAndSyncFile } from "../../utils/fileOperations";
 import { getMnemonic, setMnemonic } from "../../utils/mnemonicManager";
 import { downloadEncryptedRsaKeyFromDrive } from "../../utils/gdriveKeyStorage";
 import { decryptRsaPrivateKeyWithAesKey } from "../../utils/rsaKeyManager";
+import { fetchAndStoreFileMetadata } from "../../utils/dexieDB";
 
 const mockNavigate = jest.fn();
 
@@ -53,6 +54,10 @@ jest.mock("../../utils/keyStorage", () => ({
 
 jest.mock("../../utils/fileOperations", () => ({
   uploadAndSyncFile: jest.fn(),
+}));
+
+jest.mock("../../utils/dexieDB", () => ({
+  fetchAndStoreFileMetadata: jest.fn(),
 }));
 
 jest.mock("../../utils/mnemonicManager", () => ({
@@ -112,6 +117,10 @@ const mockDecryptSharedFile = decryptSharedFile as jest.MockedFunction<
 const mockUploadAndSyncFile = uploadAndSyncFile as jest.MockedFunction<
   typeof uploadAndSyncFile
 >;
+const mockFetchAndStoreFileMetadata =
+  fetchAndStoreFileMetadata as jest.MockedFunction<
+    typeof fetchAndStoreFileMetadata
+  >;
 
 const databaseFile = {
   id: "share-123",
@@ -182,6 +191,7 @@ describe("SharedWithMePage", () => {
       uploadedDate: new Date(),
       folderId: null,
     });
+    mockFetchAndStoreFileMetadata.mockResolvedValue(undefined);
     (apiClient.sharedFiles.recordAccess as jest.Mock).mockResolvedValue({
       recorded: true,
     });
@@ -194,7 +204,7 @@ describe("SharedWithMePage", () => {
     expect(await screen.findByText("Your inbox is empty")).toBeInTheDocument();
     expect(screen.getByText("Shared with me")).toBeInTheDocument();
     expect(
-      screen.getByText(/files shared with this account/i),
+      screen.getByText(/files shared to this zerodrive account/i),
     ).toBeInTheDocument();
   });
 
@@ -203,13 +213,13 @@ describe("SharedWithMePage", () => {
     renderPage();
 
     expect(
-      await screen.findByText("Recover your encryption key"),
+      await screen.findByText("Recover vault access first"),
     ).toBeInTheDocument();
     fireEvent.click(
-      screen.getByRole("button", { name: /open key management/i }),
+      screen.getByRole("button", { name: /open recovery & access/i }),
     );
     expect(mockNavigate).toHaveBeenCalledWith(
-      "/key-management?returnTo=%2Fshared-with-me",
+      "/recovery-access?returnTo=%2Fshared-with-me",
     );
   });
 
@@ -220,9 +230,11 @@ describe("SharedWithMePage", () => {
     renderPage();
 
     expect(
-      await screen.findByText("Enable encrypted sharing"),
+      await screen.findByText("Create your receiving identity"),
     ).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /enable sharing/i }));
+    fireEvent.click(
+      screen.getByRole("button", { name: /create sharing identity/i }),
+    );
     expect(mockNavigate).toHaveBeenCalledWith("/share");
   });
 
@@ -238,7 +250,7 @@ describe("SharedWithMePage", () => {
       expect.any(Object),
     );
     expect(
-      screen.queryByText("Unlock your sharing key"),
+      screen.queryByText("Unlock files shared with you"),
     ).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: /^download$/i })).toBeEnabled();
   });
@@ -250,10 +262,10 @@ describe("SharedWithMePage", () => {
     renderPage();
 
     expect(
-      await screen.findByText("Unlock your sharing key"),
+      await screen.findByText("Unlock files shared with you"),
     ).toBeInTheDocument();
     expect(
-      screen.getByText(/file encryption key is active/i),
+      screen.getByText(/vault key is active/i),
     ).toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText("Recovery phrase for sharing key"), {
@@ -267,7 +279,7 @@ describe("SharedWithMePage", () => {
       expect(mockSetMnemonic).toHaveBeenCalledWith("valid recovery phrase"),
     );
     expect(
-      screen.queryByText("Unlock your sharing key"),
+      screen.queryByText("Unlock files shared with you"),
     ).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: /^download$/i })).toBeEnabled();
   });
@@ -283,6 +295,9 @@ describe("SharedWithMePage", () => {
     ).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: /save to storage/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/download saves plaintext to this device/i),
     ).toBeInTheDocument();
   });
 
@@ -334,6 +349,7 @@ describe("SharedWithMePage", () => {
     expect(
       await screen.findByRole("button", { name: /saved to storage/i }),
     ).toBeDisabled();
+    expect(mockFetchAndStoreFileMetadata).toHaveBeenCalled();
     expect(mockUploadAndSyncFile).toHaveBeenCalledWith(
       expect.objectContaining({
         name: "project-brief.pdf",
@@ -344,6 +360,24 @@ describe("SharedWithMePage", () => {
     expect(apiClient.sharedFiles.recordAccess).toHaveBeenCalledWith(
       "share-123",
     );
+  });
+
+  it("verifies Storage metadata before saving a shared file", async () => {
+    mockFetchAndStoreFileMetadata.mockRejectedValueOnce(
+      new Error("Drive unavailable"),
+    );
+    showFiles();
+    renderPage();
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: /save to storage/i }),
+    );
+
+    await waitFor(() =>
+      expect(mockFetchAndStoreFileMetadata).toHaveBeenCalled(),
+    );
+    expect(mockDownloadEncryptedFile).not.toHaveBeenCalled();
+    expect(mockUploadAndSyncFile).not.toHaveBeenCalled();
   });
 
   it("shows a recoverable inline error when the inbox fails", async () => {
