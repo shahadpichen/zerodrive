@@ -96,14 +96,14 @@ function Header() {
             <div className="hidden md:flex items-center gap-2 bg-accent px-4 py-2 rounded-md border-2 border-accent-border">
               <AlertTriangle className="h-4 w-4 text-accent-foreground" />
               <span className="text-xs font-medium text-accent-foreground">
-                Decryption failed -
+                Vault metadata could not be opened —
                 <button
                   onClick={() =>
                     navigate("/recovery-access?returnTo=%2Fstorage")
                   }
                   className="ml-1 underline hover:no-underline"
                 >
-                  Open Recovery & Access
+                  Review access
                 </button>
               </span>
             </div>

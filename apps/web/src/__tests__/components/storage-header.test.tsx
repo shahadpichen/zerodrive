@@ -14,14 +14,6 @@ import { useSidebar } from "../../contexts/sidebar-context";
 jest.mock("../../contexts/app-context");
 jest.mock("../../contexts/sidebar-context");
 
-// Mock theme provider
-jest.mock("../../components/theme-provider", () => ({
-  useTheme: jest.fn(() => ({
-    theme: "light",
-    setTheme: jest.fn(),
-  })),
-}));
-
 jest.mock("../../components/mode-toggle", () => ({
   ModeToggle: () => <button aria-label="Toggle theme">Toggle theme</button>,
 }));
@@ -31,8 +23,8 @@ jest.mock("../../utils/authService", () => ({
   logout: jest.fn().mockResolvedValue(undefined),
 }));
 
-// Mock Radix UI components
-jest.mock("@radix-ui/react-dropdown-menu", () => ({
+// Mock local UI wrappers so this focused header test is not coupled to Radix internals.
+jest.mock("../../components/ui/dropdown-menu", () => ({
   DropdownMenu: ({ children }: any) => <div>{children}</div>,
   Root: ({ children }: any) => <div>{children}</div>,
   DropdownMenuTrigger: ({ children, asChild }: any) => <div>{children}</div>,
@@ -64,40 +56,16 @@ jest.mock("@radix-ui/react-dropdown-menu", () => ({
   ItemIndicator: ({ children }: any) => <span>{children}</span>,
 }));
 
-jest.mock("@radix-ui/react-avatar", () => {
-  const React = require("react");
+jest.mock("../../components/ui/avatar", () => ({
+  Avatar: ({ children }: any) => <div>{children}</div>,
+  AvatarImage: ({ src, alt }: any) => <img src={src} alt={alt} />,
+  AvatarFallback: ({ children }: any) => <div>{children}</div>,
+}));
 
-  return {
-    Root: Object.assign(
-      React.forwardRef(({ children, ...props }: any, ref: any) => (
-        <div ref={ref} {...props}>
-          {children}
-        </div>
-      )),
-      { displayName: "AvatarRoot" },
-    ),
-    Image: Object.assign(
-      React.forwardRef(({ src, alt, ...props }: any, ref: any) => (
-        <img ref={ref} src={src} alt={alt} {...props} />
-      )),
-      { displayName: "AvatarImage" },
-    ),
-    Fallback: Object.assign(
-      React.forwardRef(({ children, ...props }: any, ref: any) => (
-        <div ref={ref} {...props}>
-          {children}
-        </div>
-      )),
-      { displayName: "AvatarFallback" },
-    ),
-  };
-});
-
-jest.mock("@radix-ui/react-progress", () => ({
-  Root: ({ value, ...props }: any) => (
+jest.mock("../../components/ui/progress", () => ({
+  Progress: ({ value, ...props }: any) => (
     <div role="progressbar" aria-valuenow={value} {...props} />
   ),
-  Indicator: ({ children }: any) => <div>{children}</div>,
 }));
 
 const mockUseApp = useApp as jest.MockedFunction<typeof useApp>;
@@ -385,14 +353,18 @@ describe("Header Component", () => {
 
       renderWithRouter(<Header />);
 
-      expect(screen.getByText(/decryption failed/i)).toBeInTheDocument();
-      expect(screen.getByText(/open recovery & access/i)).toBeInTheDocument();
+      expect(
+        screen.getByText(/vault metadata could not be opened/i),
+      ).toBeInTheDocument();
+      expect(screen.getByText(/review access/i)).toBeInTheDocument();
     });
 
     it("should not show decryption error banner when hasDecryptionError is false", () => {
       renderWithRouter(<Header />);
 
-      expect(screen.queryByText(/decryption failed/i)).not.toBeInTheDocument();
+      expect(
+        screen.queryByText(/vault metadata could not be opened/i),
+      ).not.toBeInTheDocument();
     });
 
     it("should show recovery access link when the error link is clicked", () => {
@@ -403,7 +375,7 @@ describe("Header Component", () => {
 
       renderWithRouter(<Header />);
 
-      const errorLink = screen.getByText(/open recovery & access/i);
+      const errorLink = screen.getByText(/review access/i);
       fireEvent.click(errorLink);
 
       // Check that navigation was attempted (URL would change in real app)
@@ -419,7 +391,9 @@ describe("Header Component", () => {
       renderWithRouter(<Header />);
 
       // eslint-disable-next-line testing-library/no-node-access
-      const errorBanner = screen.getByText(/decryption failed/i).closest("div");
+      const errorBanner = screen
+        .getByText(/vault metadata could not be opened/i)
+        .closest("div");
       expect(errorBanner).toHaveClass("hidden", "md:flex");
     });
   });
@@ -447,7 +421,7 @@ describe("Header Component", () => {
       await waitFor(() => {
         expect(screen.getByText(/log out/i)).toBeInTheDocument();
       });
-      fireEvent.click(screen.getByText(/log out/i));
+      fireEvent.click(screen.getByRole("menuitem", { name: /log out/i }));
 
       await waitFor(() => {
         expect(logout).toHaveBeenCalledTimes(1);
@@ -463,7 +437,7 @@ describe("Header Component", () => {
       await waitFor(() => {
         expect(screen.getByText(/log out/i)).toBeInTheDocument();
       });
-      fireEvent.click(screen.getByText(/log out/i));
+      fireEvent.click(screen.getByRole("menuitem", { name: /log out/i }));
 
       await waitFor(() => {
         expect(removeItemSpy).toHaveBeenCalledWith("zerodrive-storage-cache");
@@ -484,7 +458,7 @@ describe("Header Component", () => {
       await waitFor(() => {
         expect(screen.getByText(/log out/i)).toBeInTheDocument();
       });
-      fireEvent.click(screen.getByText(/log out/i));
+      fireEvent.click(screen.getByRole("menuitem", { name: /log out/i }));
 
       await waitFor(() => {
         expect(consoleErrorSpy).toHaveBeenCalledWith(

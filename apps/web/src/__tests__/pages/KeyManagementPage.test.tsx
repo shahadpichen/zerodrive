@@ -172,11 +172,11 @@ describe("KeyManagementPage", () => {
       screen.getByRole("button", { name: /download phrase/i }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: /upload first encrypted file/i }),
+      screen.getByRole("button", { name: /continue to home/i }),
     ).toBeInTheDocument();
   });
 
-  it("recovers a valid phrase and returns to storage", async () => {
+  it("recovers a valid phrase and returns to home", async () => {
     await renderPage();
     fireEvent.change(screen.getByLabelText("Recovery phrase"), {
       target: { value: mnemonic },
@@ -185,9 +185,23 @@ describe("KeyManagementPage", () => {
       screen.getByRole("button", { name: /recover and continue/i }),
     );
 
-    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith("/storage"));
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith("/home"));
     expect(mockDeriveKey).toHaveBeenCalledWith(mnemonic);
     expect(mockStoreKey).toHaveBeenCalled();
+  });
+
+  it("returns to storage when Recovery & Access was opened from /storage", async () => {
+    await renderPage("/recovery-access?returnTo=%2Fstorage");
+    fireEvent.change(screen.getByLabelText("Recovery phrase"), {
+      target: { value: mnemonic },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: /recover and continue/i }),
+    );
+
+    await waitFor(() => {
+      expect(mockNavigate).toHaveBeenCalledWith("/storage");
+    });
   });
 
   it("returns to sharing when Recovery & Access was opened from /share", async () => {

@@ -21,6 +21,7 @@ import { setMnemonic } from "../utils/mnemonicManager";
 import { testEncryptionKey } from "../utils/keyTest";
 import { recoverRsaKeysIfNeeded } from "../utils/rsaKeyRecovery";
 import { getUserEmail, hasGoogleTokensInStorage } from "../utils/authService";
+import { clearCachedHomeDashboard } from "../utils/homeDashboardCache";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
@@ -52,12 +53,12 @@ export const KeyManagementPage: React.FC = () => {
   const returnTo =
     requestedReturnTo && allowedReturnTargets.has(requestedReturnTo)
       ? requestedReturnTo
-      : "/storage";
+      : "/home";
   const returnLabel = {
     "/home": "Continue to Home",
+    "/storage": "Continue to Storage",
     "/share": "Continue to Share Files",
     "/shared-with-me": "Continue to Shared Files",
-    "/storage": "Continue to Storage",
   }[returnTo];
 
   const [mode, setMode] = useState<KeyMode>("recover");
@@ -136,6 +137,7 @@ export const KeyManagementPage: React.FC = () => {
       const key = await deriveKeyFromMnemonic(mnemonic);
       setMnemonic(mnemonic);
       await storeKey(key);
+      clearCachedHomeDashboard();
       setGeneratedMnemonic(mnemonic);
       setKeyStatusVersion((version) => version + 1);
       await recoverSharingKeys();
@@ -158,6 +160,7 @@ export const KeyManagementPage: React.FC = () => {
       const key = await deriveKeyFromMnemonic(mnemonic);
       setMnemonic(mnemonic);
       await storeKey(key);
+      clearCachedHomeDashboard();
       setKeyStatusVersion((version) => version + 1);
       await recoverSharingKeys();
       toast.success("Encryption key recovered");
@@ -195,6 +198,7 @@ export const KeyManagementPage: React.FC = () => {
         ["encrypt", "decrypt"],
       );
       await storeKey(key);
+      clearCachedHomeDashboard();
       setKeyStatusVersion((version) => version + 1);
       toast.success("Legacy key imported", {
         description: "The key is active in this browser tab.",
