@@ -220,6 +220,9 @@ describe("ShareFilesPage", () => {
     expect(
       screen.getByText("The original file never reaches our server."),
     ).toBeInTheDocument();
+    expect(
+      screen.getByText(/only the chosen recipient can unlock it/i),
+    ).toBeInTheDocument();
   });
 
   it("presents sharing setup as a blocking prerequisite", async () => {
@@ -231,10 +234,10 @@ describe("ShareFilesPage", () => {
     renderPage();
 
     expect(
-      await screen.findByText("Enable file sharing once"),
+      await screen.findByText("Create your sharing identity"),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: /enable sharing/i }),
+      screen.getByRole("button", { name: /create sharing identity/i }),
     ).toBeInTheDocument();
     expect(screen.queryByLabelText("File to share")).not.toBeInTheDocument();
   });
@@ -279,6 +282,9 @@ describe("ShareFilesPage", () => {
     expect(mockFetchPublicKey).toHaveBeenCalledWith("recipient@example.com");
     expect(screen.getByText("roadmap.pdf")).toBeInTheDocument();
     expect(screen.getByText("recipient@example.com")).toBeInTheDocument();
+    expect(
+      screen.getByText(/recipient-only encrypted copy/i),
+    ).toBeInTheDocument();
   });
 
   it("blocks a changed recipient key until the sender confirms it", async () => {
@@ -361,6 +367,9 @@ describe("ShareFilesPage", () => {
     fireEvent.click(screen.getByRole("button", { name: /encrypt and share/i }));
 
     expect(await screen.findByText("File shared")).toBeInTheDocument();
+    expect(
+      screen.getByText(/only this recipient can unlock the encrypted copy/i),
+    ).toBeInTheDocument();
     expect(mockPrepareFile).toHaveBeenCalled();
     expect(mockStoreFileShare).toHaveBeenCalled();
     expect(

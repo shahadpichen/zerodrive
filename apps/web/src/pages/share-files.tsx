@@ -668,12 +668,13 @@ const ShareFilesPage: React.FC = () => {
               <KeyRound className="h-5 w-5" />
             </div>
             <h2 className="mt-5 text-lg font-semibold">
-              Enable file sharing once
+              Create your sharing identity
             </h2>
             <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted-foreground">
-              ZeroDrive will create a private sharing identity for this account.
-              Its encrypted backup is stored in your Google Drive so you can
-              recover it on another device.
+              This creates the public receiving key other people use to send
+              files to you, plus the private key your browser uses when you send
+              or receive shared files. The private key is encrypted before it is
+              backed up to your Google Drive.
             </p>
           </div>
           <div className="space-y-4 p-6 sm:p-8">
@@ -700,12 +701,12 @@ const ShareFilesPage: React.FC = () => {
                 {isGeneratingKeys ? (
                   <>
                     <Loader2 className="animate-spin" />
-                    Enabling sharing
+                    Creating identity
                   </>
                 ) : (
                   <>
                     <KeyRound />
-                    Enable sharing
+                    Create sharing identity
                   </>
                 )}
               </Button>
@@ -1007,8 +1008,8 @@ const ShareFilesPage: React.FC = () => {
         <div className="border-b px-5 py-4">
           <h2 className="text-sm font-semibold">Choose the recipient</h2>
           <p className="mt-1 text-xs text-muted-foreground">
-            We check that this account can receive encrypted files before
-            uploading anything.
+            Your browser checks the recipient’s public key first. Then it locks
+            the file so only that recipient can unlock it.
           </p>
         </div>
         <div className="space-y-4 p-5">
@@ -1061,8 +1062,8 @@ const ShareFilesPage: React.FC = () => {
             ) : (
               <p id="recipient-help" className="text-xs text-muted-foreground">
                 {recipientVerified
-                  ? "Ready to receive encrypted files."
-                  : "The recipient needs a ZeroDrive sharing key."}
+                  ? "Recipient key found. This file will be locked for this account only."
+                  : "The recipient needs a ZeroDrive sharing identity before they can receive files."}
               </p>
             )}
           </div>
@@ -1139,7 +1140,8 @@ const ShareFilesPage: React.FC = () => {
         <div className="border-b px-5 py-4">
           <h2 className="text-sm font-semibold">Review before sharing</h2>
           <p className="mt-1 text-xs text-muted-foreground">
-            The encrypted copy will expire automatically after seven days.
+            Your browser will create a separate encrypted copy, lock it to this
+            recipient’s key, and expire it automatically after seven days.
           </p>
         </div>
         <dl className="divide-y">
@@ -1184,9 +1186,16 @@ const ShareFilesPage: React.FC = () => {
           )}
           <div className="grid gap-1 px-5 py-4 sm:grid-cols-[140px_1fr]">
             <dt className="text-xs text-muted-foreground">Protection</dt>
-            <dd className="flex items-center gap-2 text-sm">
-              <ShieldCheck className="h-4 w-4" />
-              End-to-end encrypted · expires in 7 days
+            <dd className="space-y-1 text-sm">
+              <span className="flex items-center gap-2">
+                <ShieldCheck className="h-4 w-4" />
+                Recipient-only encrypted copy · expires in 7 days
+              </span>
+              <span className="block text-xs leading-relaxed text-muted-foreground">
+                ZeroDrive stores ciphertext and encrypted metadata. The
+                recipient’s browser needs their private sharing key to unlock
+                the file.
+              </span>
             </dd>
           </div>
         </dl>
@@ -1347,13 +1356,15 @@ const ShareFilesPage: React.FC = () => {
             {receipt?.recipientEmail}
           </span>
           .
+          {" "}Only this recipient can unlock the encrypted copy, and the share
+          expires automatically.
         </p>
       </div>
       <div className="space-y-5 p-6 sm:p-8">
         <div className="grid gap-3 border p-4 text-sm sm:grid-cols-2">
           <div>
             <p className="text-xs text-muted-foreground">Protection</p>
-            <p className="mt-1">End-to-end encrypted</p>
+            <p className="mt-1">Locked to the recipient’s key</p>
           </div>
           <div>
             <p className="text-xs text-muted-foreground">Available until</p>
@@ -1394,7 +1405,8 @@ const ShareFilesPage: React.FC = () => {
         <div>
           <h1 className="text-2xl tracking-tight">Share a file</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Only the intended recipient can decrypt it.
+            Your browser locks the file so only the chosen recipient can unlock
+            it.
           </p>
         </div>
       </div>
