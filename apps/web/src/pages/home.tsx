@@ -80,15 +80,70 @@ function HomeContent() {
     setUserInfo,
     setDecryptionError,
   } = useApp();
-  const { replaceVaultData, setVaultMetadataStatus, clearVaultData } =
-    useVaultData();
+  const {
+    replaceVaultData,
+    setVaultMetadataStatus,
+    clearVaultData,
+    state: sharedVaultState,
+  } = useVaultData();
 
   const [showLoginWelcome] = useState(() => hasPendingHomeLoginWelcome());
-  const [counts, setCounts] = useState({ files: 0, folders: 0 });
-  const [recent, setRecent] = useState<FileMeta[]>([]);
-  const [canReadAnalytics, setCanReadAnalytics] = useState(false);
-  const [vaultSetup, setVaultSetup] = useState<VaultSetupState | null>(null);
-  const [isVaultStateLoading, setIsVaultStateLoading] = useState(true);
+  const hasWarmVaultState =
+    !!userEmail &&
+    sharedVaultState.userEmail === userEmail.trim().toLowerCase() &&
+    sharedVaultState.hasVaultKey !== null &&
+    sharedVaultState.lastSyncedAt !== null;
+  const initialCachedDashboard =
+    hasWarmVaultState && !showLoginWelcome
+      ? readCachedHomeDashboardForUser(userEmail)
+      : null;
+  const warmVaultSetup = hasWarmVaultState
+    ? initialCachedDashboard?.vaultSetup ?? {
+        ...getVaultSetupState({
+          isAuthenticated: true,
+          hasGoogleTokens: hasGoogleTokensInStorage(),
+          hasPrimaryKey: !!sharedVaultState.hasVaultKey,
+          hasRecoveryPhrase: false,
+          fileCount: sharedVaultState.files.length,
+          folderCount: sharedVaultState.folders.length,
+          hasSharingKeys: false,
+          hasDecryptionError:
+            sharedVaultState.metadataStatus === "decryption_error",
+          guidanceDismissed: true,
+        }),
+        tasks: [],
+        shouldShowGuidance: false,
+      }
+    : null;
+  const [counts, setCounts] = useState(() =>
+    initialCachedDashboard?.counts ??
+    (hasWarmVaultState
+      ? {
+          files: sharedVaultState.files.length,
+          folders: sharedVaultState.folders.length,
+        }
+      : { files: 0, folders: 0 }),
+  );
+  const [recent, setRecent] = useState<FileMeta[]>(() =>
+    initialCachedDashboard?.recent ??
+    (hasWarmVaultState
+      ? [...sharedVaultState.files]
+          .sort(
+            (a, b) =>
+              new Date(b.uploadedDate).getTime() -
+              new Date(a.uploadedDate).getTime(),
+          )
+          .slice(0, 5)
+      : []),
+  );
+  const [canReadAnalytics, setCanReadAnalytics] = useState(
+    initialCachedDashboard?.canReadAnalytics ?? false,
+  );
+  const [vaultSetup, setVaultSetup] = useState<VaultSetupState | null>(
+    warmVaultSetup,
+  );
+  const [isVaultStateLoading, setIsVaultStateLoading] =
+    useState(!warmVaultSetup);
 
   useEffect(() => {
     if (showLoginWelcome) {
@@ -123,6 +178,15 @@ function HomeContent() {
           return;
         }
 
+        try {
+          const profile = await getUserProfile();
+          if (profile) {
+            setUserInfo(profile.email, profile.name, profile.picture);
+          }
+        } catch {
+          // Keep the existing/cached fallback profile if Google userinfo fails.
+        }
+
         if (!showLoginWelcome && isMounted) {
           const cachedDashboard = readCachedHomeDashboardForUser(email);
           if (cachedDashboard) {
@@ -138,17 +202,6 @@ function HomeContent() {
         } catch (e) {
           console.error("Failed to initialize Google API:", e);
           return;
-        }
-
-        try {
-          const profile = await getUserProfile();
-          if (profile) {
-            setUserInfo(profile.email, profile.name, profile.picture);
-          } else {
-            setUserInfo(email, email.split("@")[0]);
-          }
-        } catch {
-          setUserInfo(email, email.split("@")[0]);
         }
 
         let hasMetadataDecryptionError = false;
@@ -329,7 +382,11 @@ function HomeContent() {
               <DropdownMenuTrigger asChild>
                 <button aria-label="Account menu" className="rounded-full">
                   <Avatar className="h-9 w-9">
-                    <AvatarImage src={userImage} alt={userName} />
+                    <AvatarImage
+                      src={userImage}
+                      alt={userName}
+                      referrerPolicy="no-referrer"
+                    />
                     <AvatarFallback>
                       {initials(userName, userEmail)}
                     </AvatarFallback>

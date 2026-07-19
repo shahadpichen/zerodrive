@@ -35,7 +35,7 @@ const mockGetStoredKey = getStoredKey as jest.MockedFunction<
 >;
 
 function VaultHarness() {
-  const { setUserInfo } = useApp();
+  const { setUserInfo, userName, userImage } = useApp();
   const { state } = useVaultData();
 
   return (
@@ -43,10 +43,26 @@ function VaultHarness() {
       <button onClick={() => setUserInfo("first@example.com", "First")}>
         first
       </button>
+      <button
+        onClick={() =>
+          setUserInfo(
+            "first@example.com",
+            "First Person",
+            "https://example.com/avatar.png",
+          )
+        }
+      >
+        full profile
+      </button>
+      <button onClick={() => setUserInfo("first@example.com", "first")}>
+        fallback profile
+      </button>
       <button onClick={() => setUserInfo("second@example.com", "Second")}>
         second
       </button>
       <div data-testid="account">{state.userEmail}</div>
+      <div data-testid="user-name">{userName}</div>
+      <div data-testid="user-image">{userImage}</div>
       <div data-testid="status">
         {state.isHydrating ? "hydrating" : "ready"}
       </div>
@@ -70,6 +86,8 @@ function renderVaultHarness() {
 describe("VaultDataProvider", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    localStorage.clear();
+    sessionStorage.clear();
     mockGetFoldersForUser.mockResolvedValue([]);
     mockGetStoredKey.mockResolvedValue({} as CryptoKey);
     mockGetAllFilesForUser.mockImplementation(async (email) => [
@@ -93,6 +111,48 @@ describe("VaultDataProvider", () => {
       await screen.findByText("first@example.com-notes.pdf"),
     ).toBeInTheDocument();
     expect(screen.getByTestId("status")).toHaveTextContent("ready");
+  });
+
+  it("keeps a known profile stable when fallback auth data arrives for the same account", async () => {
+    renderVaultHarness();
+
+    await userEvent.click(screen.getByRole("button", { name: "full profile" }));
+
+    expect(screen.getByTestId("user-name")).toHaveTextContent("First Person");
+    expect(screen.getByTestId("user-image")).toHaveTextContent(
+      "https://example.com/avatar.png",
+    );
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "fallback profile" }),
+    );
+
+    expect(screen.getByTestId("user-name")).toHaveTextContent("First Person");
+    expect(screen.getByTestId("user-image")).toHaveTextContent(
+      "https://example.com/avatar.png",
+    );
+  });
+
+  it("does not hydrate cached profile data for a different token session", () => {
+    localStorage.setItem(
+      "zerodrive-user-info-cache",
+      JSON.stringify({
+        version: 1,
+        timestamp: Date.now(),
+        email: "first@example.com",
+        name: "First Person",
+        image: "https://example.com/avatar.png",
+      }),
+    );
+    sessionStorage.setItem(
+      "google-tokens",
+      JSON.stringify({ userEmail: "second@example.com" }),
+    );
+
+    renderVaultHarness();
+
+    expect(screen.getByTestId("user-name")).toBeEmptyDOMElement();
+    expect(screen.getByTestId("user-image")).toBeEmptyDOMElement();
   });
 
   it("does not expose the previous account while an account switch hydrates", async () => {

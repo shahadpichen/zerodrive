@@ -199,6 +199,19 @@ function PrivateStorageContent() {
           return;
         }
 
+        // Fetch the account profile before Drive initialization so the header
+        // can keep the user's name/avatar stable even if GAPI is slow.
+        try {
+          const { getUserProfile } = await import("../utils/authService");
+          const profile = await getUserProfile();
+          if (profile) {
+            setUserInfo(profile.email, profile.name, profile.picture);
+          }
+        } catch (error) {
+          console.error("Failed to fetch user profile:", error);
+          // Keep the existing/cached fallback profile if Google userinfo fails.
+        }
+
         // Initialize Google API with backend tokens
         const { initializeGapi } = await import("../utils/gapiInit");
 
@@ -222,22 +235,6 @@ function PrivateStorageContent() {
           // Don't redirect - let user stay on page with error state
           setIsLoadingUserFiles(false);
           return;
-        }
-
-        // Fetch user profile info (including picture)
-        try {
-          const { getUserProfile } = await import("../utils/authService");
-          const profile = await getUserProfile();
-          if (profile) {
-            setUserInfo(profile.email, profile.name, profile.picture);
-          } else {
-            // Fallback if profile fetch fails
-            setUserInfo(email, email.split("@")[0]);
-          }
-        } catch (error) {
-          console.error("Failed to fetch user profile:", error);
-          // Fallback if profile fetch fails
-          setUserInfo(email, email.split("@")[0]);
         }
 
         // A verified snapshot survives route navigation in VaultDataProvider.

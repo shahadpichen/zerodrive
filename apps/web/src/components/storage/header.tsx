@@ -119,7 +119,11 @@ function Header() {
                   className="relative h-10 w-10 rounded-0"
                 >
                   <Avatar className="h-10 w-10">
-                    <AvatarImage src={userImage} alt={userName} />
+                    <AvatarImage
+                      src={userImage}
+                      alt={userName}
+                      referrerPolicy="no-referrer"
+                    />
                     <AvatarFallback>
                       {getUserInitials(userName, userEmail)}
                     </AvatarFallback>

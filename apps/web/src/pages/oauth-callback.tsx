@@ -9,17 +9,19 @@ import React, { useEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
-import { storeGoogleTokens } from "../utils/authService";
+import { getUserProfile, storeGoogleTokens } from "../utils/authService";
 import { getUserEmail } from "../utils/authService";
 import apiClient from "../utils/apiClient";
 import logger from "../utils/logger";
 import { queueHomeLoginWelcome } from "../utils/homeWelcome";
+import { useApp } from "../contexts/app-context";
 
 const OAuthCallback: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [error, setError] = useState<string | null>(null);
   const callbackStarted = useRef(false);
+  const { setUserInfo } = useApp();
 
   useEffect(() => {
     // React Strict Mode intentionally re-runs effects in development. OAuth
@@ -114,6 +116,18 @@ const OAuthCallback: React.FC = () => {
             "[OAuth] Verification - tokens exist in sessionStorage:",
             !!storedData,
           );
+
+          try {
+            const profile = await getUserProfile();
+            if (profile) {
+              setUserInfo(profile.email, profile.name, profile.picture);
+            } else {
+              setUserInfo(userEmail, userEmail.split("@")[0]);
+            }
+          } catch {
+            setUserInfo(userEmail, userEmail.split("@")[0]);
+          }
+
           queueHomeLoginWelcome();
 
           const isNewUser = tokenData.isNewUser;
@@ -154,7 +168,7 @@ const OAuthCallback: React.FC = () => {
     };
 
     handleCallback();
-  }, [searchParams, navigate]);
+  }, [searchParams, navigate, setUserInfo]);
 
   return (
     <div className="flex items-center justify-center min-h-screen bg-background">
