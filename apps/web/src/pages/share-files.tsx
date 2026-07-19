@@ -24,6 +24,7 @@ import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
 import { Progress } from "../components/ui/progress";
 import { Textarea } from "../components/ui/textarea";
+import { useApp } from "../contexts/app-context";
 import { getFileIconPath } from "../lib/mime-types";
 import {
   fetchAndStoreFileMetadata,
@@ -65,6 +66,11 @@ type PageState =
 type ShareStage = "preparing" | "encrypting" | "uploading" | "finishing";
 type FileSource = "device" | "storage";
 
+type CachedShareSetupState = "compose" | "unlock";
+
+const SHARE_SETUP_CACHE_KEY = "zerodrive-share-setup-cache";
+const SHARE_SETUP_CACHE_TTL = 5 * 60 * 1000;
+
 interface ShareReceipt {
   fileName: string;
   recipientEmail: string;
@@ -72,6 +78,64 @@ interface ShareReceipt {
 }
 
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function normalizeEmail(email: string): string {
+  return email.trim().toLowerCase();
+}
+
+function readCachedShareSetupState(email: string): CachedShareSetupState | null {
+  const normalizedEmail = normalizeEmail(email);
+  if (!normalizedEmail) return null;
+
+  try {
+    const cached = localStorage.getItem(SHARE_SETUP_CACHE_KEY);
+    if (!cached) return null;
+
+    const parsed = JSON.parse(cached) as {
+      email?: string;
+      state?: CachedShareSetupState;
+      timestamp?: number;
+    };
+
+    if (
+      normalizeEmail(parsed.email || "") !== normalizedEmail ||
+      !parsed.timestamp ||
+      Date.now() - parsed.timestamp > SHARE_SETUP_CACHE_TTL
+    ) {
+      localStorage.removeItem(SHARE_SETUP_CACHE_KEY);
+      return null;
+    }
+
+    return parsed.state === "compose" || parsed.state === "unlock"
+      ? parsed.state
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeCachedShareSetupState(
+  email: string,
+  state: CachedShareSetupState | null,
+): void {
+  try {
+    if (!email || !state) {
+      localStorage.removeItem(SHARE_SETUP_CACHE_KEY);
+      return;
+    }
+
+    localStorage.setItem(
+      SHARE_SETUP_CACHE_KEY,
+      JSON.stringify({
+        email: normalizeEmail(email),
+        state,
+        timestamp: Date.now(),
+      }),
+    );
+  } catch {
+    // Best-effort UI cache only.
+  }
+}
 
 function formatBytes(bytes: number): string {
   if (bytes === 0) return "0 B";
@@ -143,11 +207,14 @@ function StepIndicator({
 
 const ShareFilesPage: React.FC = () => {
   const navigate = useNavigate();
+  const { userEmail } = useApp();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const openKeyManagement = () =>
     navigate("/recovery-access?returnTo=%2Fshare");
 
-  const [pageState, setPageState] = useState<PageState>("checking");
+  const [pageState, setPageState] = useState<PageState>(
+    () => readCachedShareSetupState(userEmail) || "checking",
+  );
   const [senderEmail, setSenderEmail] = useState("");
   const [senderLookupId, setSenderLookupId] = useState("");
   const [file, setFile] = useState<File | null>(null);
@@ -216,8 +283,13 @@ const ShareFilesPage: React.FC = () => {
           if (mnemonic) {
             await syncPublicKeyIfNeeded(email, mnemonic);
           }
-          if (active) setPageState(mnemonic ? "compose" : "unlock");
+          if (active) {
+            const nextState = mnemonic ? "compose" : "unlock";
+            writeCachedShareSetupState(email, nextState);
+            setPageState(nextState);
+          }
         } else {
+          writeCachedShareSetupState(email, null);
           setPageState("setup");
         }
       } catch (error) {
@@ -287,6 +359,7 @@ const ShareFilesPage: React.FC = () => {
       }
 
       toast.success("File sharing is ready");
+      writeCachedShareSetupState(senderEmail, "compose");
       setPageState("compose");
     } catch (error) {
       console.error("[Share] Failed to enable sharing:", error);
@@ -309,6 +382,7 @@ const ShareFilesPage: React.FC = () => {
       const keyPair = await getUserKeyPair(senderEmail, mnemonicInput.trim());
       if (!keyPair) throw new Error("Sharing keys were not found");
       await syncPublicKeyIfNeeded(senderEmail, mnemonicInput.trim());
+      writeCachedShareSetupState(senderEmail, "compose");
       setPageState("compose");
       toast.success("Sharing keys unlocked");
     } catch (error) {
