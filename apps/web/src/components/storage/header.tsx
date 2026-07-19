@@ -98,7 +98,9 @@ function Header() {
               <span className="text-xs font-medium text-accent-foreground">
                 Decryption failed -
                 <button
-                  onClick={() => navigate("/recovery-access")}
+                  onClick={() =>
+                    navigate("/recovery-access?returnTo=%2Fstorage")
+                  }
                   className="ml-1 underline hover:no-underline"
                 >
                   Open Recovery & Access

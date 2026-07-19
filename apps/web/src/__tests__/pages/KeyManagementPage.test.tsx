@@ -9,6 +9,7 @@ import {
   storeKey,
 } from "../../utils/cryptoUtils";
 import { getMnemonic } from "../../utils/mnemonicManager";
+import { initializeGapi } from "../../utils/gapiInit";
 
 const mockNavigate = jest.fn();
 
@@ -72,16 +73,24 @@ const mockGetStoredKey = getStoredKey as jest.MockedFunction<
   typeof getStoredKey
 >;
 const mockGetMnemonic = getMnemonic as jest.MockedFunction<typeof getMnemonic>;
+const mockInitializeGapi = initializeGapi as jest.MockedFunction<
+  typeof initializeGapi
+>;
 
 const mnemonic =
   "abandon ability able about above absent absorb abstract absurd abuse access accident";
 
-function renderPage(initialEntry = "/recovery-access") {
-  return render(
-    <MemoryRouter initialEntries={[initialEntry]}>
+async function renderPage(initialEntry = "/recovery-access") {
+  const view = render(
+    <MemoryRouter
+      initialEntries={[initialEntry]}
+      future={{ v7_relativeSplatPath: true, v7_startTransition: true }}
+    >
       <KeyManagementPage />
     </MemoryRouter>,
   );
+  await waitFor(() => expect(mockInitializeGapi).toHaveBeenCalled());
+  return view;
 }
 
 async function generateNewKey() {
@@ -108,8 +117,8 @@ describe("KeyManagementPage", () => {
     mockStoreKey.mockResolvedValue(undefined);
   });
 
-  it("opens in a focused recovery mode", () => {
-    renderPage();
+  it("opens in a focused recovery mode", async () => {
+    await renderPage();
 
     expect(screen.getByText("Recovery & Access")).toBeInTheDocument();
     expect(screen.getByText("Recover your key")).toBeInTheDocument();
@@ -118,8 +127,8 @@ describe("KeyManagementPage", () => {
     expect(screen.getByText("Current browser key status")).toBeInTheDocument();
   });
 
-  it("switches cleanly between recovery and key creation", () => {
-    renderPage();
+  it("switches cleanly between recovery and key creation", async () => {
+    await renderPage();
 
     fireEvent.click(screen.getByRole("tab", { name: /create new key/i }));
     expect(screen.getByText("Create a new encryption key")).toBeInTheDocument();
@@ -128,8 +137,8 @@ describe("KeyManagementPage", () => {
     expect(screen.getByText("Recover your key")).toBeInTheDocument();
   });
 
-  it("requires both safety acknowledgements before generation", () => {
-    renderPage();
+  it("requires both safety acknowledgements before generation", async () => {
+    await renderPage();
     fireEvent.click(screen.getByRole("tab", { name: /create new key/i }));
     fireEvent.click(screen.getByRole("button", { name: /create new key/i }));
 
@@ -150,7 +159,7 @@ describe("KeyManagementPage", () => {
   });
 
   it("presents a scannable recovery phrase and next actions", async () => {
-    renderPage();
+    await renderPage();
     await generateNewKey();
 
     mnemonic.split(" ").forEach((word) => {
@@ -168,7 +177,7 @@ describe("KeyManagementPage", () => {
   });
 
   it("recovers a valid phrase and returns to storage", async () => {
-    renderPage();
+    await renderPage();
     fireEvent.change(screen.getByLabelText("Recovery phrase"), {
       target: { value: mnemonic },
     });
@@ -182,7 +191,7 @@ describe("KeyManagementPage", () => {
   });
 
   it("returns to sharing when Recovery & Access was opened from /share", async () => {
-    renderPage("/recovery-access?returnTo=%2Fshare");
+    await renderPage("/recovery-access?returnTo=%2Fshare");
     fireEvent.change(screen.getByLabelText("Recovery phrase"), {
       target: { value: mnemonic },
     });
@@ -195,24 +204,44 @@ describe("KeyManagementPage", () => {
     });
   });
 
-  it("shows an inline error for an invalid recovery phrase", async () => {
-    mockDeriveKey.mockRejectedValue(new Error("Invalid mnemonic phrase"));
-    renderPage();
+  it("returns to home when Recovery & Access was opened from /home", async () => {
+    await renderPage("/recovery-access?returnTo=%2Fhome");
     fireEvent.change(screen.getByLabelText("Recovery phrase"), {
-      target: { value: "invalid phrase" },
+      target: { value: mnemonic },
     });
     fireEvent.click(
       screen.getByRole("button", { name: /recover and continue/i }),
     );
 
-    expect(
-      await screen.findByText(/recovery phrase is not valid/i),
-    ).toBeInTheDocument();
-    expect(mockNavigate).not.toHaveBeenCalled();
+    await waitFor(() => {
+      expect(mockNavigate).toHaveBeenCalledWith("/home");
+    });
   });
 
-  it("keeps legacy JSON import available without dominating the page", () => {
-    renderPage();
+  it("shows an inline error for an invalid recovery phrase", async () => {
+    const consoleError = jest.spyOn(console, "error").mockImplementation();
+    mockDeriveKey.mockRejectedValue(new Error("Invalid mnemonic phrase"));
+
+    try {
+      await renderPage();
+      fireEvent.change(screen.getByLabelText("Recovery phrase"), {
+        target: { value: "invalid phrase" },
+      });
+      fireEvent.click(
+        screen.getByRole("button", { name: /recover and continue/i }),
+      );
+
+      expect(
+        await screen.findByText(/recovery phrase is not valid/i),
+      ).toBeInTheDocument();
+      expect(mockNavigate).not.toHaveBeenCalled();
+    } finally {
+      consoleError.mockRestore();
+    }
+  });
+
+  it("keeps legacy JSON import available without dominating the page", async () => {
+    await renderPage();
     fireEvent.click(
       screen.getByRole("button", { name: /import a legacy json key/i }),
     );

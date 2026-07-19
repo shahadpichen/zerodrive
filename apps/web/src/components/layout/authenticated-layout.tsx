@@ -1,5 +1,5 @@
 import React from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { ArrowLeft, AlertTriangle } from "lucide-react";
 import { AppProvider, useApp } from "../../contexts/app-context";
 
@@ -9,7 +9,11 @@ function AuthenticatedLayoutContent({
   children: React.ReactNode;
 }) {
   const navigate = useNavigate();
+  const location = useLocation();
   const { hasDecryptionError } = useApp();
+  const recoveryPath = `/recovery-access?returnTo=${encodeURIComponent(
+    location.pathname,
+  )}`;
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -29,7 +33,7 @@ function AuthenticatedLayoutContent({
             <span className="text-xs font-medium text-accent-foreground">
               Decryption failed —
               <button
-                onClick={() => navigate("/recovery-access")}
+                onClick={() => navigate(recoveryPath)}
                 className="ml-1 underline hover:no-underline"
               >
                 open Recovery & Access

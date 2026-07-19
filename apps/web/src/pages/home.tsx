@@ -197,7 +197,7 @@ function HomeContent() {
       title: "Recovery & Access",
       subtitle: "Recovery phrase & sharing keys",
       icon: Key,
-      path: "/recovery-access",
+      path: "/recovery-access?returnTo=%2Fhome",
     },
     ...(canReadAnalytics
       ? [
@@ -370,7 +370,7 @@ function HomeContent() {
               </div>
             </div>
             <button
-              onClick={() => navigate("/recovery-access")}
+              onClick={() => navigate("/recovery-access?returnTo=%2Fhome")}
               className="flex w-full items-start gap-2.5 px-5 py-3.5 text-left text-sm hover:bg-muted/50"
             >
               <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0 text-destructive" />

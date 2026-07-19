@@ -15,10 +15,9 @@ import {
 import {
   deriveKeyFromMnemonic,
   generateMnemonic,
-  getStoredKey,
   storeKey,
 } from "../utils/cryptoUtils";
-import { getMnemonic, setMnemonic } from "../utils/mnemonicManager";
+import { setMnemonic } from "../utils/mnemonicManager";
 import { testEncryptionKey } from "../utils/keyTest";
 import { recoverRsaKeysIfNeeded } from "../utils/rsaKeyRecovery";
 import { getUserEmail, hasGoogleTokensInStorage } from "../utils/authService";
@@ -39,17 +38,23 @@ import {
 import { toast } from "sonner";
 
 type KeyMode = "recover" | "generate";
-type AccessState = "checking" | "active" | "recoverable" | "missing";
+const allowedReturnTargets = new Set([
+  "/home",
+  "/storage",
+  "/share",
+  "/shared-with-me",
+]);
 
 export const KeyManagementPage: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const requestedReturnTo = searchParams.get("returnTo");
   const returnTo =
-    requestedReturnTo === "/share" || requestedReturnTo === "/shared-with-me"
+    requestedReturnTo && allowedReturnTargets.has(requestedReturnTo)
       ? requestedReturnTo
       : "/storage";
   const returnLabel = {
+    "/home": "Continue to Home",
     "/share": "Continue to Share Files",
     "/shared-with-me": "Continue to Shared Files",
     "/storage": "Continue to Storage",
@@ -71,7 +76,6 @@ export const KeyManagementPage: React.FC = () => {
   const [isTesting, setIsTesting] = useState(false);
   const [error, setError] = useState("");
   const [keyStatusVersion, setKeyStatusVersion] = useState(0);
-  const [accessState, setAccessState] = useState<AccessState>("checking");
 
   useEffect(() => {
     const initializeDrive = async () => {
@@ -93,33 +97,6 @@ export const KeyManagementPage: React.FC = () => {
 
     initializeDrive();
   }, []);
-
-  useEffect(() => {
-    let active = true;
-
-    const checkAccessState = async () => {
-      setAccessState("checking");
-      try {
-        const key = await getStoredKey();
-        if (!active) return;
-
-        if (key) {
-          setAccessState("active");
-        } else if (getMnemonic()) {
-          setAccessState("recoverable");
-        } else {
-          setAccessState("missing");
-        }
-      } catch {
-        if (active) setAccessState("missing");
-      }
-    };
-
-    checkAccessState();
-    return () => {
-      active = false;
-    };
-  }, [keyStatusVersion]);
 
   const recoverSharingKeys = async () => {
     if (!isGapiReady || !hasGoogleTokensInStorage()) return;
@@ -521,32 +498,6 @@ export const KeyManagementPage: React.FC = () => {
       </div>
     );
 
-  const accessStatusCopy = {
-    checking: {
-      label: "Checking access",
-      title: "Checking this browser",
-      description: "ZeroDrive is checking whether this tab already has access.",
-    },
-    active: {
-      label: "Key active",
-      title: "This browser can open your vault",
-      description:
-        "Your encryption key is active here. You can upload, download, decrypt, and receive files until this browser session is cleared.",
-    },
-    recoverable: {
-      label: "Recoverable",
-      title: "Your recovery phrase is available in this session",
-      description:
-        "Use it to restore vault access in this browser without sending the phrase to ZeroDrive.",
-    },
-    missing: {
-      label: "Access needed",
-      title: "Create or recover access to your vault",
-      description:
-        "This browser needs your recovery phrase or a new key before it can protect files. ZeroDrive cannot read or reset this access for you.",
-    },
-  }[accessState];
-
   return (
     <>
       <Dialog open={showGenerateWarning} onOpenChange={setShowGenerateWarning}>
@@ -628,51 +579,6 @@ export const KeyManagementPage: React.FC = () => {
             the ZeroDrive server.
           </p>
         </div>
-
-        <section className="border">
-          <div className="flex flex-col gap-4 border-b p-5 sm:flex-row sm:items-start sm:justify-between sm:p-6">
-            <div>
-              <div className="inline-flex border px-2.5 py-1 text-xs font-semibold">
-                {accessStatusCopy.label}
-              </div>
-              <h2 className="mt-4 text-xl tracking-tight">
-                {generatedMnemonic
-                  ? "Your vault is ready"
-                  : accessStatusCopy.title}
-              </h2>
-              <p className="mt-2 max-w-3xl text-sm font-light leading-relaxed text-muted-foreground">
-                {generatedMnemonic
-                  ? "Save your recovery phrase, then upload your first encrypted file or return to the flow you came from."
-                  : accessStatusCopy.description}
-              </p>
-            </div>
-            {accessState === "active" && !generatedMnemonic && (
-              <Button onClick={() => navigate(returnTo)}>
-                {returnLabel}
-              </Button>
-            )}
-          </div>
-          <div className="grid divide-y text-sm sm:grid-cols-3 sm:divide-x sm:divide-y-0">
-            <div className="p-5">
-              <p className="font-semibold">Your browser holds access</p>
-              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                The key is used only in this tab to encrypt and decrypt files.
-              </p>
-            </div>
-            <div className="p-5">
-              <p className="font-semibold">Recovery is your responsibility</p>
-              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                If the phrase is lost, ZeroDrive cannot rebuild your vault key.
-              </p>
-            </div>
-            <div className="p-5">
-              <p className="font-semibold">Sharing keys are secondary</p>
-              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                Sharing can be restored after primary vault access is active.
-              </p>
-            </div>
-          </div>
-        </section>
 
         {!generatedMnemonic && (
           <div
