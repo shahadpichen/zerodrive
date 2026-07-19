@@ -7,7 +7,6 @@ import {
   Key,
   ChevronRight,
   Check,
-  AlertTriangle,
   LogOut,
   BarChart3,
 } from "lucide-react";
@@ -312,6 +311,8 @@ function HomeContent() {
   const incompleteTasks =
     vaultSetup?.tasks.filter((task) => !task.complete) || [];
   const nextTask = incompleteTasks.find((task) => !task.optional);
+  const sharingTask = vaultSetup?.tasks.find((task) => task.id === "sharing");
+  const isSharingIdentityActive = !!sharingTask?.complete;
 
   const handleDismissGuidance = () => {
     dismissOnboardingGuidance();
@@ -602,16 +603,35 @@ function HomeContent() {
                 </div>
               </div>
             </div>
+            <div className="flex items-start gap-2.5 border-b px-5 py-3.5 text-sm">
+              <Key className="mt-0.5 h-4 w-4 flex-shrink-0 text-muted-foreground" />
+              <div>
+                Recovery phrase reminder
+                <div className="mt-0.5 text-[11.5px] font-light text-muted-foreground">
+                  Keep it saved offline. ZeroDrive cannot reset it.
+                </div>
+              </div>
+            </div>
             <button
-              onClick={() => navigate("/recovery-access?returnTo=%2Fhome")}
+              onClick={() => navigate("/share")}
               className="flex w-full items-start gap-2.5 px-5 py-3.5 text-left text-sm hover:bg-muted/50"
             >
-              <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0 text-destructive" />
+              {isSharingIdentityActive ? (
+                <Check className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-600" />
+              ) : (
+                <Send className="mt-0.5 h-4 w-4 flex-shrink-0 text-muted-foreground" />
+              )}
               <div>
-                Back up your recovery phrase
+                {isSharingIdentityActive
+                  ? "Sharing identity active"
+                  : "Create sharing identity"}
                 <div className="mt-0.5 text-[11.5px] font-light text-muted-foreground">
-                  Lose it and no one can recover your files.{" "}
-                  <span className="text-[#3182ce]">Review →</span>
+                  {isSharingIdentityActive
+                    ? "Ready to send and receive private shares."
+                    : "Needed for private shared files."}{" "}
+                  <span className="text-[#3182ce]">
+                    {isSharingIdentityActive ? "Share →" : "Set up →"}
+                  </span>
                 </div>
               </div>
             </button>
