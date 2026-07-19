@@ -3,15 +3,18 @@ import { Home, ChevronRight } from "lucide-react";
 import { Button } from "../ui/button";
 import { useFolderContext } from "./folder-context";
 import { moveFile } from "../../utils/folderOperations";
+import { showVaultMetadataWriteBlockedToast } from "../../utils/vaultMetadataWriteGuard";
 
 interface FolderBreadcrumbProps {
   userEmail: string;
   onFileMoved: () => void;
+  canWriteVaultMetadata?: boolean;
 }
 
 export function FolderBreadcrumb({
   userEmail,
   onFileMoved,
+  canWriteVaultMetadata = true,
 }: FolderBreadcrumbProps) {
   const { currentPath, setCurrentPath, navigateToFolder, goToRoot } =
     useFolderContext();
@@ -23,6 +26,10 @@ export function FolderBreadcrumb({
     const fileId = e.dataTransfer.getData("text/x-file-id");
     const fileName = e.dataTransfer.getData("text/x-file-name");
     if (!fileId || !fileName) return;
+    if (!canWriteVaultMetadata) {
+      showVaultMetadataWriteBlockedToast();
+      return;
+    }
     const success = await moveFile(fileId, fileName, folderId, userEmail);
     if (success) onFileMoved();
   };
@@ -37,6 +44,7 @@ export function FolderBreadcrumb({
         onClick={goToRoot}
         className={`flex items-center gap-1 ${dragOverId === "root" ? "ring-2 ring-primary bg-primary/10" : ""}`}
         onDragOver={(e) => {
+          if (!canWriteVaultMetadata) return;
           e.preventDefault();
           setDragOverId("root");
         }}
@@ -60,6 +68,7 @@ export function FolderBreadcrumb({
             {...(!isLastItem(index)
               ? {
                   onDragOver: (e: React.DragEvent) => {
+                    if (!canWriteVaultMetadata) return;
                     e.preventDefault();
                     setDragOverId(folder.id);
                   },

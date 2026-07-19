@@ -239,7 +239,7 @@ describe("ShareFilesPage", () => {
     expect(screen.queryByLabelText("File to share")).not.toBeInTheDocument();
   });
 
-  it("preserves /share as the return destination for Key Management", async () => {
+  it("preserves /share as the return destination for Recovery & Access", async () => {
     mockRecoverKeys.mockResolvedValue({
       success: true,
       recovered: false,
@@ -254,7 +254,7 @@ describe("ShareFilesPage", () => {
     );
 
     expect(mockNavigate).toHaveBeenCalledWith(
-      "/key-management?returnTo=%2Fshare",
+      "/recovery-access?returnTo=%2Fshare",
     );
   });
 

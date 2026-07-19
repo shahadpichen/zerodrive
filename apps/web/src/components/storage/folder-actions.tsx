@@ -18,6 +18,7 @@ import {
 import { ConfirmationDialog } from "./confirmation-dialog";
 import type { FolderMeta } from "../../utils/dexieDB";
 import { deleteFolder, renameFolder } from "../../utils/folderOperations";
+import { showVaultMetadataWriteBlockedToast } from "../../utils/vaultMetadataWriteGuard";
 
 interface FolderActionsProps {
   folder: FolderMeta;
@@ -25,6 +26,7 @@ interface FolderActionsProps {
   onChanged: () => void;
   // "menu" = kebab dropdown (grid card); "inline" = rename/delete icon buttons (list row)
   variant?: "menu" | "inline";
+  canWriteVaultMetadata?: boolean;
 }
 
 export function FolderActions({
@@ -32,6 +34,7 @@ export function FolderActions({
   userEmail,
   onChanged,
   variant = "menu",
+  canWriteVaultMetadata = true,
 }: FolderActionsProps) {
   const [showRename, setShowRename] = useState(false);
   const [newName, setNewName] = useState(folder.name);
@@ -41,12 +44,20 @@ export function FolderActions({
 
   const openRename = (e: React.MouseEvent) => {
     e.stopPropagation();
+    if (!canWriteVaultMetadata) {
+      showVaultMetadataWriteBlockedToast();
+      return;
+    }
     setNewName(folder.name);
     setShowRename(true);
   };
 
   const openDelete = (e: React.MouseEvent) => {
     e.stopPropagation();
+    if (!canWriteVaultMetadata) {
+      showVaultMetadataWriteBlockedToast();
+      return;
+    }
     setShowDeleteConfirm(true);
   };
 
@@ -83,6 +94,7 @@ export function FolderActions({
               size="icon"
               className="h-7 w-7"
               onClick={(e) => e.stopPropagation()}
+              disabled={!canWriteVaultMetadata}
             >
               <MoreVertical className="h-4 w-4" />
             </Button>
@@ -108,6 +120,7 @@ export function FolderActions({
             className="text-muted-foreground hover:text-foreground"
             aria-label="Rename folder"
             title="Rename folder"
+            disabled={!canWriteVaultMetadata}
           >
             <Pencil className="h-4 w-4" />
           </button>
@@ -116,6 +129,7 @@ export function FolderActions({
             className="text-muted-foreground hover:text-destructive"
             aria-label="Delete folder"
             title="Delete folder"
+            disabled={!canWriteVaultMetadata}
           >
             <Trash2 className="h-4 w-4" />
           </button>

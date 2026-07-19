@@ -144,7 +144,8 @@ function StepIndicator({
 const ShareFilesPage: React.FC = () => {
   const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const openKeyManagement = () => navigate("/key-management?returnTo=%2Fshare");
+  const openKeyManagement = () =>
+    navigate("/recovery-access?returnTo=%2Fshare");
 
   const [pageState, setPageState] = useState<PageState>("checking");
   const [senderEmail, setSenderEmail] = useState("");
@@ -790,7 +791,7 @@ const ShareFilesPage: React.FC = () => {
               onClick={openKeyManagement}
               disabled={isVerifyingMnemonic}
             >
-              Open Key Management
+              Open Recovery & Access
             </Button>
           </div>
         </div>

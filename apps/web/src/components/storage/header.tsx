@@ -60,9 +60,10 @@ function Header() {
     return "hsl(0 84.2% 60.2%)"; // red-500
   };
 
-  const usagePercentage = storageInfo
-    ? (storageInfo.used / storageInfo.total) * 100
-    : 0;
+  const usagePercentage =
+    storageInfo && storageInfo.total > 0
+      ? (storageInfo.used / storageInfo.total) * 100
+      : 0;
 
   return (
     <header className="w-full border-b h-[8vh] flex">
@@ -95,12 +96,14 @@ function Header() {
             <div className="hidden md:flex items-center gap-2 bg-accent px-4 py-2 rounded-md border-2 border-accent-border">
               <AlertTriangle className="h-4 w-4 text-accent-foreground" />
               <span className="text-xs font-medium text-accent-foreground">
-                Decryption failed -
+                Vault metadata could not be opened —
                 <button
-                  onClick={() => navigate("/key-management")}
+                  onClick={() =>
+                    navigate("/recovery-access?returnTo=%2Fstorage")
+                  }
                   className="ml-1 underline hover:no-underline"
                 >
-                  Update encryption key
+                  Review access
                 </button>
               </span>
             </div>

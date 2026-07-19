@@ -5,7 +5,6 @@ import {
   getAllFilesForUser,
   deleteFileFromDB,
   sendToGoogleDrive,
-  getFilesInFolder,
   getFoldersForUser,
 } from "../../utils/dexieDB";
 
@@ -41,11 +40,21 @@ import { FolderItem } from "./folder-item";
 import { FolderActions } from "./folder-actions";
 import { FolderBreadcrumb } from "./folder-breadcrumb";
 import { moveFile } from "../../utils/folderOperations";
+import { useOptionalVaultData } from "../../contexts/vault-data-context";
+import {
+  assertCanWriteVaultMetadata,
+  showVaultMetadataWriteBlockedToast,
+} from "../../utils/vaultMetadataWriteGuard";
 
 interface FileListProps {
   view?: "compact" | "recent" | "full";
   refreshKey?: number;
   userEmail?: string;
+  onUploadClick?: () => void;
+  hasVaultKey?: boolean | null;
+  onRecoverAccessClick?: () => void;
+  isVaultMetadataLoading?: boolean;
+  canWriteVaultMetadata?: boolean;
 }
 
 // Helper hook to safely get folder context
@@ -64,18 +73,48 @@ function useSafeFolderContext() {
   }
 }
 
+const filesForFolder = (files: FileMeta[], folderId: string | null) =>
+  files.filter((file) => {
+    const fileFolderId = file.folderId === undefined ? null : file.folderId;
+    const targetFolderId = folderId === undefined ? null : folderId;
+    return fileFolderId === targetFolderId;
+  });
+
+const foldersForFolder = (folderList: FolderMeta[], folderId: string | null) =>
+  folderList.filter((folder) => (folder.parentId || null) === folderId);
+
 export const FileList: React.FC<FileListProps> = ({
   view = "full",
   refreshKey,
   userEmail: userEmailProp,
+  onUploadClick,
+  hasVaultKey = null,
+  onRecoverAccessClick,
+  isVaultMetadataLoading = false,
+  canWriteVaultMetadata = true,
 }) => {
   const { currentFolderId, currentPath, navigateToFolder, setCurrentPath } =
     useSafeFolderContext();
-  const [allUserFiles, setAllUserFiles] = useState<FileMeta[]>([]);
-  const [filteredFiles, setFilteredFiles] = useState<FileMeta[]>([]);
-  const [folders, setFolders] = useState<FolderMeta[]>([]);
   const userEmail = userEmailProp || null;
-  const [isLoadingFiles, setIsLoadingFiles] = useState<boolean>(true);
+  const vaultData = useOptionalVaultData();
+  const replaceVaultData = vaultData?.replaceVaultData;
+  const hasSharedVaultSnapshot =
+    view === "full" &&
+    !!userEmail &&
+    vaultData?.state.userEmail === userEmail.trim().toLowerCase() &&
+    !vaultData.state.isHydrating;
+  const initialFiles = hasSharedVaultSnapshot
+    ? filesForFolder(vaultData.state.files, currentFolderId)
+    : [];
+  const initialFolders = hasSharedVaultSnapshot
+    ? foldersForFolder(vaultData.state.folders, currentFolderId)
+    : [];
+  const [allUserFiles, setAllUserFiles] = useState<FileMeta[]>(initialFiles);
+  const [filteredFiles, setFilteredFiles] = useState<FileMeta[]>(initialFiles);
+  const [folders, setFolders] = useState<FolderMeta[]>(initialFolders);
+  const [isLoadingFiles, setIsLoadingFiles] = useState<boolean>(
+    !hasSharedVaultSnapshot,
+  );
   const [filter, setFilter] = useState<MimeTypeCategory | "All Files">(
     "All Files",
   );
@@ -99,6 +138,7 @@ export const FileList: React.FC<FileListProps> = ({
   } | null>(null);
   const [draggingFileId, setDraggingFileId] = useState<string | null>(null);
   const [dragOverFolderId, setDragOverFolderId] = useState<string | null>(null);
+  const [showVaultLoadingMessage, setShowVaultLoadingMessage] = useState(false);
 
   useEffect(() => {
     const fetchFiles = async () => {
@@ -116,24 +156,28 @@ export const FileList: React.FC<FileListProps> = ({
       console.log(
         `[FileList - ${view}] Fetching files for ${userEmail}, Key: ${refreshKey}, FolderId: ${currentFolderId}`,
       );
-      setIsLoadingFiles(true);
+      setIsLoadingFiles(!hasSharedVaultSnapshot);
       try {
         let userFiles: FileMeta[];
 
         // Get files based on view and folder
         if (view === "full") {
-          // In full view, filter by current folder
-          userFiles = await getFilesInFolder(userEmail, currentFolderId);
+          const allFilesResult = await getAllFilesForUser(userEmail);
+          const allFiles = Array.isArray(allFilesResult) ? allFilesResult : [];
+          const allFoldersResult = await getFoldersForUser(userEmail);
+          const allFolders = Array.isArray(allFoldersResult)
+            ? allFoldersResult
+            : [];
 
-          // Also get folders in current directory
-          const allFolders = await getFoldersForUser(userEmail);
-          const currentFolders = allFolders.filter(
-            (f) => (f.parentId || null) === currentFolderId,
-          );
+          userFiles = filesForFolder(allFiles, currentFolderId);
+
+          const currentFolders = foldersForFolder(allFolders, currentFolderId);
           setFolders(currentFolders);
+          replaceVaultData?.(userEmail, allFiles, allFolders);
         } else {
           // For compact/recent views, get all files (no folder filtering)
-          userFiles = await getAllFilesForUser(userEmail);
+          const allFilesResult = await getAllFilesForUser(userEmail);
+          userFiles = Array.isArray(allFilesResult) ? allFilesResult : [];
         }
 
         console.log(
@@ -165,7 +209,33 @@ export const FileList: React.FC<FileListProps> = ({
     };
 
     fetchFiles();
-  }, [userEmail, view, refreshKey, currentFolderId, refreshFileListKey]);
+  }, [
+    userEmail,
+    view,
+    refreshKey,
+    currentFolderId,
+    refreshFileListKey,
+    replaceVaultData,
+    hasSharedVaultSnapshot,
+  ]);
+
+  // Provider updates are synchronous across routes and mutations. Mirror the
+  // shared snapshot without waiting for a new IndexedDB transaction.
+  useEffect(() => {
+    if (view !== "full" || !userEmail || !vaultData) return;
+    if (vaultData.state.userEmail !== userEmail.trim().toLowerCase()) return;
+    if (vaultData.state.isHydrating) return;
+
+    const sharedFiles = filesForFolder(vaultData.state.files, currentFolderId);
+    const sharedFolders = foldersForFolder(
+      vaultData.state.folders,
+      currentFolderId,
+    );
+    setAllUserFiles(sharedFiles);
+    setFilteredFiles(sharedFiles);
+    setFolders(sharedFolders);
+    setIsLoadingFiles(false);
+  }, [currentFolderId, userEmail, vaultData, view]);
 
   useEffect(() => {
     console.log(
@@ -208,6 +278,23 @@ export const FileList: React.FC<FileListProps> = ({
       `[FileList - ${view}] Filtering applied, ${results.length} files shown.`,
     );
   }, [filter, searchQuery, sortKey, sortDir, allUserFiles, view]);
+
+  const isVaultLoading = isLoadingFiles || isVaultMetadataLoading;
+  const hasLocalVaultItems = allUserFiles.length > 0 || folders.length > 0;
+  const shouldShowVaultLoadingState = isVaultLoading && !hasLocalVaultItems;
+
+  useEffect(() => {
+    if (!shouldShowVaultLoadingState) {
+      setShowVaultLoadingMessage(false);
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setShowVaultLoadingMessage(true);
+    }, 450);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [shouldShowVaultLoadingState]);
 
   const downloadAndDecryptFile = async (fileId: string, fileName: string) => {
     setDownloadingFileId(fileId);
@@ -330,6 +417,8 @@ export const FileList: React.FC<FileListProps> = ({
     let deleteSuccess = false;
 
     try {
+      assertCanWriteVaultMetadata(userEmail);
+
       deleteToastId = toast.loading(`Deleting ${fileName}...`);
 
       const { getGoogleAccessToken } = await import("../../utils/gapiInit");
@@ -355,9 +444,10 @@ export const FileList: React.FC<FileListProps> = ({
       const updatedFolders = await getFoldersForUser(userEmail);
       setAllUserFiles(updatedFiles);
       setFilteredFiles(updatedFiles);
+      replaceVaultData?.(userEmail, updatedFiles, updatedFolders);
 
       console.log("[FileList] Deletion complete, syncing metadata...");
-      await sendToGoogleDrive(updatedFiles, updatedFolders);
+      await sendToGoogleDrive(updatedFiles, updatedFolders, { userEmail });
 
       toast.success(`Deleted ${fileName} and synced metadata.`, {
         id: deleteToastId,
@@ -386,6 +476,10 @@ export const FileList: React.FC<FileListProps> = ({
     e: React.MouseEvent,
   ) => {
     e.stopPropagation();
+    if (!canWriteVaultMetadata) {
+      showVaultMetadataWriteBlockedToast();
+      return;
+    }
     setFileToDelete({ id: fileId, name: fileName });
     setShowDeleteConfirm(true);
   };
@@ -403,10 +497,17 @@ export const FileList: React.FC<FileListProps> = ({
   if (view === "compact" || view === "recent") {
     return (
       <div className="p-1">
-        {isLoadingFiles ? (
-          <p className="text-center text-xs text-muted-foreground py-4">
-            Loading...
-          </p>
+        {shouldShowVaultLoadingState ? (
+          showVaultLoadingMessage ? (
+            <p
+              className="text-center text-xs text-muted-foreground py-4"
+              aria-live="polite"
+            >
+              Checking encrypted vault...
+            </p>
+          ) : (
+            <div className="py-4" aria-hidden="true" />
+          )
         ) : filteredFiles.length > 0 ? (
           <div className="space-y-3">
             {/* Files */}
@@ -557,123 +658,192 @@ export const FileList: React.FC<FileListProps> = ({
   };
 
   const isEmpty = visibleFolders.length === 0 && filteredFiles.length === 0;
+  const isQuietEmptyVault =
+    !isVaultLoading &&
+    !hasLocalVaultItems &&
+    filter === "All Files" &&
+    searchQuery.length === 0;
+  const showToolbar =
+    !isQuietEmptyVault && (!isVaultLoading || hasLocalVaultItems);
 
   return (
     <div className="space-y-4">
       {/* Toolbar: search + type filter + sort + view toggle */}
-      <div className="flex flex-col gap-3 pb-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-2 border px-3 py-2 sm:w-80">
-          <Search className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
-          <input
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search files…"
-            className="w-full bg-transparent text-sm outline-none"
-          />
-        </div>
+      {showToolbar && (
+        <div className="flex flex-col gap-3 pb-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-2 border px-3 py-2 sm:w-80">
+            <Search className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
+            <input
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search files…"
+              className="w-full bg-transparent text-sm outline-none"
+            />
+          </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          {filterChips.map((chip) => (
-            <button
-              key={chip.value}
-              onClick={() => setFilter(chip.value)}
-              className={`px-3 py-1.5 text-xs transition-colors ${
-                filter === chip.value
-                  ? "border border-foreground bg-muted font-semibold"
-                  : "border border-border text-muted-foreground hover:bg-muted/60"
-              }`}
-            >
-              {chip.label}
-            </button>
-          ))}
-
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button className="flex items-center gap-2 border px-3 py-1.5 text-xs">
-                <ArrowDownUp className="h-3.5 w-3.5" />
-                {currentSortLabel}
-                <ChevronDown className="h-3.5 w-3.5" />
+          <div className="flex flex-wrap items-center gap-2">
+            {filterChips.map((chip) => (
+              <button
+                key={chip.value}
+                onClick={() => setFilter(chip.value)}
+                className={`px-3 py-1.5 text-xs transition-colors ${
+                  filter === chip.value
+                    ? "border border-foreground bg-muted font-semibold"
+                    : "border border-border text-muted-foreground hover:bg-muted/60"
+                }`}
+              >
+                {chip.label}
               </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem
-                onClick={() => {
-                  setSortKey("date");
-                  setSortDir("desc");
-                }}
-              >
-                Newest first
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() => {
-                  setSortKey("date");
-                  setSortDir("asc");
-                }}
-              >
-                Oldest first
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() => {
-                  setSortKey("name");
-                  setSortDir("asc");
-                }}
-              >
-                Name A–Z
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() => {
-                  setSortKey("name");
-                  setSortDir("desc");
-                }}
-              >
-                Name Z–A
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+            ))}
 
-          <div className="flex border">
-            <button
-              onClick={() => setViewMode("grid")}
-              aria-label="Grid view"
-              className={`p-2 ${
-                viewMode === "grid"
-                  ? "bg-muted text-foreground"
-                  : "text-muted-foreground hover:bg-muted/60"
-              }`}
-            >
-              <LayoutGrid className="h-4 w-4" />
-            </button>
-            <button
-              onClick={() => setViewMode("list")}
-              aria-label="List view"
-              className={`border-l p-2 ${
-                viewMode === "list"
-                  ? "bg-muted text-foreground"
-                  : "text-muted-foreground hover:bg-muted/60"
-              }`}
-            >
-              <ListIcon className="h-4 w-4" />
-            </button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button className="flex items-center gap-2 border px-3 py-1.5 text-xs">
+                  <ArrowDownUp className="h-3.5 w-3.5" />
+                  {currentSortLabel}
+                  <ChevronDown className="h-3.5 w-3.5" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem
+                  onClick={() => {
+                    setSortKey("date");
+                    setSortDir("desc");
+                  }}
+                >
+                  Newest first
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => {
+                    setSortKey("date");
+                    setSortDir("asc");
+                  }}
+                >
+                  Oldest first
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => {
+                    setSortKey("name");
+                    setSortDir("asc");
+                  }}
+                >
+                  Name A–Z
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => {
+                    setSortKey("name");
+                    setSortDir("desc");
+                  }}
+                >
+                  Name Z–A
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            <div className="flex border">
+              <button
+                onClick={() => setViewMode("grid")}
+                aria-label="Grid view"
+                className={`p-2 ${
+                  viewMode === "grid"
+                    ? "bg-muted text-foreground"
+                    : "text-muted-foreground hover:bg-muted/60"
+                }`}
+              >
+                <LayoutGrid className="h-4 w-4" />
+              </button>
+              <button
+                onClick={() => setViewMode("list")}
+                aria-label="List view"
+                className={`border-l p-2 ${
+                  viewMode === "list"
+                    ? "bg-muted text-foreground"
+                    : "text-muted-foreground hover:bg-muted/60"
+                }`}
+              >
+                <ListIcon className="h-4 w-4" />
+              </button>
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* Breadcrumb — only inside a folder; doubles as a move-to-parent drop target */}
       {userEmail && currentPath.length > 0 && (
         <FolderBreadcrumb
           userEmail={userEmail}
           onFileMoved={() => setRefreshFileListKey((prev) => prev + 1)}
+          canWriteVaultMetadata={canWriteVaultMetadata}
         />
       )}
 
-      {isLoadingFiles ? (
-        <p className="text-center text-muted-foreground py-8">Loading...</p>
+      {shouldShowVaultLoadingState ? (
+        showVaultLoadingMessage ? (
+          <p
+            className="text-center text-muted-foreground py-8"
+            aria-live="polite"
+          >
+            Checking encrypted vault...
+          </p>
+        ) : (
+          <div className="py-8" aria-hidden="true" />
+        )
       ) : isEmpty ? (
-        <p className="text-center text-muted-foreground py-8">
-          {searchQuery
-            ? `No files match "${searchQuery}".`
-            : "No files or folders. Upload a file or create a folder to get started."}
-        </p>
+        searchQuery ? (
+          <p className="text-center text-muted-foreground py-8">
+            No encrypted files match &quot;{searchQuery}&quot;.
+          </p>
+        ) : (
+          <div className="border px-6 py-10 text-center">
+            {hasVaultKey === false ? (
+              <>
+                <p className="text-lg font-semibold">
+                  Set up vault access first.
+                </p>
+                <p className="mx-auto mt-3 max-w-xl text-sm font-light leading-relaxed text-muted-foreground">
+                  This browser does not have vault access yet. Create a new
+                  recovery phrase or enter an existing one before uploading
+                  encrypted files.
+                </p>
+                <p className="mx-auto mt-2 max-w-xl text-sm font-light leading-relaxed text-muted-foreground">
+                  After access is active, ZeroDrive can encrypt files here in
+                  the browser and save only the protected copy to Google Drive.
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="text-lg font-semibold">
+                  Your encrypted vault is empty.
+                </p>
+                <p className="mx-auto mt-3 max-w-xl text-sm font-light leading-relaxed text-muted-foreground">
+                  Choose a file and ZeroDrive will encrypt it inside this
+                  browser before saving the encrypted copy to your Google Drive.
+                </p>
+                <p className="mx-auto mt-2 max-w-xl text-sm font-light leading-relaxed text-muted-foreground">
+                  The original file never goes to the ZeroDrive server. Only the
+                  encrypted version is stored.
+                </p>
+              </>
+            )}
+            {hasVaultKey === false && onRecoverAccessClick ? (
+              <button
+                onClick={onRecoverAccessClick}
+                className="mt-6 border bg-foreground px-5 py-2 text-sm font-semibold text-background hover:bg-foreground/90"
+              >
+                Create or recover access
+              </button>
+            ) : (
+              onUploadClick && (
+                <button
+                  onClick={onUploadClick}
+                  className="mt-6 border bg-foreground px-5 py-2 text-sm font-semibold text-background hover:bg-foreground/90"
+                >
+                  Upload first encrypted file
+                </button>
+              )
+            )}
+          </div>
+        )
       ) : viewMode === "grid" ? (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 2xl:grid-cols-10 gap-4">
           {visibleFolders.map((folder) => (
@@ -683,6 +853,7 @@ export const FileList: React.FC<FileListProps> = ({
               userEmail={userEmail!}
               onDeleted={() => setRefreshFileListKey((prev) => prev + 1)}
               onFileMoved={() => setRefreshFileListKey((prev) => prev + 1)}
+              canWriteVaultMetadata={canWriteVaultMetadata}
             />
           ))}
 
@@ -692,8 +863,13 @@ export const FileList: React.FC<FileListProps> = ({
               className={`relative flex flex-col items-center gap-2 p-4 cursor-pointer group ${
                 draggingFileId === file.id ? "opacity-50" : ""
               }`}
-              draggable
+              draggable={canWriteVaultMetadata}
               onDragStart={(e) => {
+                if (!canWriteVaultMetadata) {
+                  e.preventDefault();
+                  showVaultMetadataWriteBlockedToast();
+                  return;
+                }
                 e.dataTransfer.setData("text/x-file-id", file.id);
                 e.dataTransfer.setData("text/x-file-name", file.name);
                 e.dataTransfer.effectAllowed = "move";
@@ -708,6 +884,7 @@ export const FileList: React.FC<FileListProps> = ({
                 className="absolute top-2 right-2 p-1 rounded-md opacity-0 group-hover:opacity-100 transition-opacity text-destructive hover:bg-destructive/10"
                 aria-label="Delete file"
                 title="Delete file"
+                disabled={!canWriteVaultMetadata}
               >
                 <Trash2 className="h-4 w-4" />
               </button>
@@ -753,6 +930,7 @@ export const FileList: React.FC<FileListProps> = ({
                     navigateToFolder(folder.id);
                   }}
                   onDragOver={(e) => {
+                    if (!canWriteVaultMetadata) return;
                     e.preventDefault();
                     setDragOverFolderId(folder.id);
                   }}
@@ -763,6 +941,10 @@ export const FileList: React.FC<FileListProps> = ({
                     const fileId = e.dataTransfer.getData("text/x-file-id");
                     const fileName = e.dataTransfer.getData("text/x-file-name");
                     if (!fileId || !fileName || !userEmail) return;
+                    if (!canWriteVaultMetadata) {
+                      showVaultMetadataWriteBlockedToast();
+                      return;
+                    }
                     const ok = await moveFile(
                       fileId,
                       fileName,
@@ -792,6 +974,7 @@ export const FileList: React.FC<FileListProps> = ({
                         setRefreshFileListKey((prev) => prev + 1)
                       }
                       variant="inline"
+                      canWriteVaultMetadata={canWriteVaultMetadata}
                     />
                   </td>
                 </tr>
@@ -859,6 +1042,7 @@ export const FileList: React.FC<FileListProps> = ({
                           }
                           className="text-muted-foreground hover:text-destructive"
                           aria-label="Delete file"
+                          disabled={!canWriteVaultMetadata}
                         >
                           <Trash2 className="h-4 w-4" />
                         </button>

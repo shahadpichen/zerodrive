@@ -13,6 +13,7 @@ import {
   fetchAndStoreFileMetadata,
   FileMeta,
 } from '../../utils/dexieDB';
+import { rememberVaultMetadataStatus } from '../../utils/vaultMetadataWriteGuard';
 
 jest.mock('dexie', () => {
   const mockTable = {
@@ -33,7 +34,9 @@ jest.mock('dexie', () => {
     files = mockTable;
     version() {
       return {
-        stores: jest.fn().mockReturnThis(),
+        stores: jest.fn().mockReturnValue({
+          upgrade: jest.fn().mockReturnThis(),
+        }),
       };
     }
     table(tableName: string) {
@@ -102,6 +105,8 @@ describe('DexieDB - Google Drive Sync', () => {
   };
 
   beforeEach(() => {
+    sessionStorage.clear();
+    rememberVaultMetadataStatus(testUser, "ready");
     jest.clearAllMocks();
   });
 
@@ -130,7 +135,11 @@ describe('DexieDB - Google Drive Sync', () => {
 
       await sendToGoogleDrive(files);
 
-      expect(mockEncryptMetadata).toHaveBeenCalledWith({ files });
+      expect(mockEncryptMetadata).toHaveBeenCalledWith({
+        version: 2,
+        files,
+        folders: [],
+      });
       expect(global.fetch).toHaveBeenCalledTimes(2);
 
       // Verify POST request for creating new file
@@ -169,6 +178,16 @@ describe('DexieDB - Google Drive Sync', () => {
       await expect(sendToGoogleDrive([testFile])).rejects.toThrow(
         'User not authenticated for Google Drive update.'
       );
+    });
+
+    it('should fail closed before syncing when metadata is not verified', async () => {
+      sessionStorage.clear();
+
+      await expect(sendToGoogleDrive([testFile])).rejects.toThrow(
+        /Refresh Storage before changing files or folders/,
+      );
+      expect(mockGetGoogleAccessToken).not.toHaveBeenCalled();
+      expect(global.fetch).not.toHaveBeenCalled();
     });
 
     it('should throw error when search request fails', async () => {
@@ -268,7 +287,7 @@ describe('DexieDB - Google Drive Sync', () => {
       expect(global.fetch).not.toHaveBeenCalled();
     });
 
-    it('should show error toast when decryption fails', async () => {
+    it('should throw a decryption error when metadata cannot be opened', async () => {
       const { gapi } = require('gapi-script');
 
       gapi.client.request = jest.fn().mockResolvedValue({
@@ -284,11 +303,10 @@ describe('DexieDB - Google Drive Sync', () => {
 
       mockDecryptMetadata.mockRejectedValue(new Error('Decryption failed'));
 
-      await fetchAndStoreFileMetadata();
-
-      expect(toast.error).toHaveBeenCalledWith(
-        expect.stringContaining('Failed to decrypt metadata')
-      );
+      await expect(fetchAndStoreFileMetadata()).rejects.toMatchObject({
+        name: 'DecryptionError',
+        message: 'DECRYPTION_FAILED',
+      });
     });
   });
 });

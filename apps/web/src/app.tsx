@@ -4,6 +4,7 @@ import {
   Routes,
   Route,
   Navigate,
+  useLocation,
 } from "react-router-dom";
 import { Buffer } from "buffer/";
 import PrivateStorage from "./pages/private-storage";
@@ -23,6 +24,8 @@ import { isAuthenticated as checkAuth } from "./utils/authService";
 import { useRsaKeyRecovery } from "./hooks/useRsaKeyRecovery";
 import { AuthenticatedLayout } from "./components/layout/authenticated-layout";
 import AnalyticsDashboard from "./pages/analytics-dashboard";
+import { AppProvider } from "./contexts/app-context";
+import { VaultDataProvider } from "./contexts/vault-data-context";
 
 // Polyfill global Buffer for libraries that expect it (e.g., bip39)
 window.Buffer = Buffer as any;
@@ -60,6 +63,11 @@ const RootRoute: React.FC = () => {
   return isAuthenticated ? <Navigate to="/home" replace /> : <LandingPage />;
 };
 
+const KeyManagementRedirect: React.FC = () => {
+  const location = useLocation();
+  return <Navigate to={`/recovery-access${location.search}`} replace />;
+};
+
 function App() {
   useEffect(() => {
     checkEnvironmentVariables();
@@ -69,85 +77,100 @@ function App() {
   useRsaKeyRecovery();
 
   return (
-    <Router>
-      <Routes>
-        <Route path="/" element={<RootRoute />} />
-        <Route path="/oauth/callback" element={<OAuthCallback />} />
-        <Route
-          path="/home"
-          element={
-            <ProtectedRoute>
-              <Home />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/storage"
-          element={
-            <ProtectedRoute>
-              <AuthenticatedLayout>
-                <PrivateStorage />
-              </AuthenticatedLayout>
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/key-management"
-          element={
-            <ProtectedRoute>
-              <AuthenticatedLayout>
-                <KeyManagementPage />
-              </AuthenticatedLayout>
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/share"
-          element={
-            <ProtectedRoute>
-              <AuthenticatedLayout>
-                <ShareFilesPage />
-              </AuthenticatedLayout>
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/shared-with-me"
-          element={
-            <ProtectedRoute>
-              <AuthenticatedLayout>
-                <SharedWithMePage />
-              </AuthenticatedLayout>
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/key-test"
-          element={
-            <ProtectedRoute>
-              <AuthenticatedLayout>
-                <KeyTestPage />
-              </AuthenticatedLayout>
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/admin/analytics"
-          element={
-            <ProtectedRoute>
-              <AuthenticatedLayout>
-                <AnalyticsDashboard />
-              </AuthenticatedLayout>
-            </ProtectedRoute>
-          }
-        />
-        <Route path="/privacy" element={<Privacy />} />
-        <Route path="/terms" element={<Terms />} />
-        <Route path="/docs" element={<Docs />} />
-        <Route path="/docs/:slug" element={<DocsDetail />} />
-        <Route path="/how-it-works" element={<Navigate to="/docs" replace />} />
-      </Routes>
-    </Router>
+    <AppProvider>
+      <VaultDataProvider>
+        <Router>
+          <Routes>
+            <Route path="/" element={<RootRoute />} />
+            <Route path="/oauth/callback" element={<OAuthCallback />} />
+            <Route
+              path="/home"
+              element={
+                <ProtectedRoute>
+                  <Home />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/storage"
+              element={
+                <ProtectedRoute>
+                  <AuthenticatedLayout>
+                    <PrivateStorage />
+                  </AuthenticatedLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/recovery-access"
+              element={
+                <ProtectedRoute>
+                  <AuthenticatedLayout>
+                    <KeyManagementPage />
+                  </AuthenticatedLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/key-management"
+              element={
+                <ProtectedRoute>
+                  <KeyManagementRedirect />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/share"
+              element={
+                <ProtectedRoute>
+                  <AuthenticatedLayout>
+                    <ShareFilesPage />
+                  </AuthenticatedLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/shared-with-me"
+              element={
+                <ProtectedRoute>
+                  <AuthenticatedLayout>
+                    <SharedWithMePage />
+                  </AuthenticatedLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/key-test"
+              element={
+                <ProtectedRoute>
+                  <AuthenticatedLayout>
+                    <KeyTestPage />
+                  </AuthenticatedLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/analytics"
+              element={
+                <ProtectedRoute>
+                  <AuthenticatedLayout>
+                    <AnalyticsDashboard />
+                  </AuthenticatedLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route path="/privacy" element={<Privacy />} />
+            <Route path="/terms" element={<Terms />} />
+            <Route path="/docs" element={<Docs />} />
+            <Route path="/docs/:slug" element={<DocsDetail />} />
+            <Route
+              path="/how-it-works"
+              element={<Navigate to="/docs" replace />}
+            />
+          </Routes>
+        </Router>
+      </VaultDataProvider>
+    </AppProvider>
   );
 }
 

@@ -6,6 +6,7 @@ import React, {
   useCallback,
 } from "react";
 import { gapi } from "gapi-script";
+import { AUTH_SESSION_CLEARED_EVENT } from "../utils/authEvents";
 
 // Cache configuration
 const CACHE_KEYS = {
@@ -141,6 +142,21 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       refreshAll();
     }
   }, [userEmail, refreshAll]);
+
+  useEffect(() => {
+    const clearUserState = () => {
+      setUserEmail("");
+      setUserName("");
+      setUserImage("");
+      setStorageInfo(null);
+      setIsLoadingStorage(false);
+      setHasDecryptionError(false);
+    };
+
+    window.addEventListener(AUTH_SESSION_CLEARED_EVENT, clearUserState);
+    return () =>
+      window.removeEventListener(AUTH_SESSION_CLEARED_EVENT, clearUserState);
+  }, []);
 
   return (
     <AppContext.Provider

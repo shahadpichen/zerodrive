@@ -48,7 +48,7 @@ export function requireMnemonicWithPrompt(featureName?: string): boolean {
 
   const feature = featureName || 'this feature';
   toast.error('Mnemonic Required', {
-    description: `Please enter your mnemonic in Key Management to use ${feature}.`,
+    description: `Please enter your recovery phrase in Recovery & Access to use ${feature}.`,
     duration: 5000,
   });
 
