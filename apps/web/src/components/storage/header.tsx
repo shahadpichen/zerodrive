@@ -60,9 +60,10 @@ function Header() {
     return "hsl(0 84.2% 60.2%)"; // red-500
   };
 
-  const usagePercentage = storageInfo && storageInfo.total > 0
-    ? (storageInfo.used / storageInfo.total) * 100
-    : 0;
+  const usagePercentage =
+    storageInfo && storageInfo.total > 0
+      ? (storageInfo.used / storageInfo.total) * 100
+      : 0;
 
   return (
     <header className="w-full border-b h-[8vh] flex">
@@ -97,7 +98,9 @@ function Header() {
               <span className="text-xs font-medium text-accent-foreground">
                 Vault metadata could not be opened —
                 <button
-                  onClick={() => navigate("/key-management")}
+                  onClick={() =>
+                    navigate("/recovery-access?returnTo=%2Fstorage")
+                  }
                   className="ml-1 underline hover:no-underline"
                 >
                   Review access

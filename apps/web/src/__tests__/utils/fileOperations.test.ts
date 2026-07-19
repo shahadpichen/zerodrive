@@ -10,6 +10,7 @@ import {
 } from '../../utils/fileOperations';
 import { FileMeta } from '../../utils/dexieDB';
 import { toast } from 'sonner';
+import { rememberVaultMetadataStatus } from '../../utils/vaultMetadataWriteGuard';
 
 // Mock all dependencies
 jest.mock('../../utils/dexieDB');
@@ -73,7 +74,9 @@ describe('FileOperations', () => {
   const mockKey = { k: 'mock-key', kty: 'oct' };
 
   beforeEach(() => {
+    sessionStorage.clear();
     jest.clearAllMocks();
+    rememberVaultMetadataStatus(testUser, "ready");
     mockGetStoredKey.mockResolvedValue(mockKey);
     mockGetGoogleAccessToken.mockResolvedValue(mockToken);
     mockEncryptFile.mockResolvedValue(mockEncryptedBlob);
@@ -321,7 +324,9 @@ describe('FileOperations', () => {
       expect(result).toBe(true);
       expect(global.fetch).toHaveBeenCalledTimes(2); // 2 files deleted
       expect(mockClearUserFilesFromDB).toHaveBeenCalledWith(testUser);
-      expect(mockSendToGoogleDrive).toHaveBeenCalledWith([], []); // Empty files and folders
+      expect(mockSendToGoogleDrive).toHaveBeenCalledWith([], [], {
+        userEmail: testUser,
+      }); // Empty files and folders
       expect(toast.success).toHaveBeenCalled();
     });
 

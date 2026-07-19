@@ -14,6 +14,10 @@ import {
   getFoldersForUser,
 } from "../utils/dexieDB";
 import { getStoredKey, VAULT_KEY_STORAGE_EVENT } from "../utils/cryptoUtils";
+import {
+  clearRememberedVaultMetadataStatuses,
+  rememberVaultMetadataStatus,
+} from "../utils/vaultMetadataWriteGuard";
 
 export type VaultMetadataStatus =
   "unverified" | "verifying" | "ready" | "decryption_error" | "error";
@@ -116,7 +120,14 @@ function vaultDataReducer(
       return { ...state, hasVaultKey: action.hasVaultKey };
     case "refresh_error":
       if (!isSameAccount(state, action.userEmail)) return state;
-      return { ...state, isRefreshing: false, error: action.error };
+      return {
+        ...state,
+        isHydrating: false,
+        isRefreshing: false,
+        metadataStatus:
+          state.metadataStatus === "verifying" ? "error" : state.metadataStatus,
+        error: action.error,
+      };
     default:
       return state;
   }
@@ -160,6 +171,9 @@ export function VaultDataProvider({ children }: { children: React.ReactNode }) {
       folders: FolderMeta[],
       options: ReplaceVaultDataOptions = {},
     ) => {
+      if (options.metadataStatus) {
+        rememberVaultMetadataStatus(email, options.metadataStatus);
+      }
       dispatch({
         type: "replace",
         userEmail: email,
@@ -191,6 +205,7 @@ export function VaultDataProvider({ children }: { children: React.ReactNode }) {
           error:
             error instanceof Error ? error.message : "Could not load vault",
         });
+        rememberVaultMetadataStatus(email, "error");
         throw error;
       }
     },
@@ -203,6 +218,7 @@ export function VaultDataProvider({ children }: { children: React.ReactNode }) {
       status: VaultMetadataStatus,
       error: string | null = null,
     ) => {
+      rememberVaultMetadataStatus(email, status);
       dispatch({
         type: "metadata_status",
         userEmail: email,
@@ -225,6 +241,7 @@ export function VaultDataProvider({ children }: { children: React.ReactNode }) {
   );
 
   const clearVaultData = useCallback(() => {
+    clearRememberedVaultMetadataStatuses();
     dispatch({ type: "reset" });
   }, []);
 
@@ -250,6 +267,7 @@ export function VaultDataProvider({ children }: { children: React.ReactNode }) {
       })
       .catch((error) => {
         if (!isMounted) return;
+        rememberVaultMetadataStatus(email, "error");
         dispatch({
           type: "refresh_error",
           userEmail: email,

@@ -139,6 +139,18 @@ describe("VaultDataProvider", () => {
     );
   });
 
+  it("clears hydrating state when local vault hydration fails", async () => {
+    mockGetAllFilesForUser.mockRejectedValue(new Error("IndexedDB failed"));
+
+    renderVaultHarness();
+    await userEvent.click(screen.getByRole("button", { name: "first" }));
+
+    await waitFor(() =>
+      expect(screen.getByTestId("status")).toHaveTextContent("ready"),
+    );
+    expect(screen.getByTestId("files")).toBeEmptyDOMElement();
+  });
+
   it("clears the account-scoped snapshot when authentication is cleared", async () => {
     renderVaultHarness();
     await userEvent.click(screen.getByRole("button", { name: "first" }));

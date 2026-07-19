@@ -12,6 +12,9 @@ function AuthenticatedLayoutContent({
   const navigate = useNavigate();
   const location = useLocation();
   const { hasDecryptionError } = useApp();
+  const recoveryPath = `/recovery-access?returnTo=${encodeURIComponent(
+    location.pathname,
+  )}`;
   const [hasBrowserVaultKey, setHasBrowserVaultKey] = useState<boolean | null>(
     null,
   );
@@ -49,7 +52,7 @@ function AuthenticatedLayoutContent({
   }, [hasDecryptionError, location.pathname]);
 
   const shouldShowDecryptionNotice =
-    hasDecryptionError && location.pathname !== "/key-management";
+    hasDecryptionError && location.pathname !== "/recovery-access";
 
   const decryptionNotice =
     hasBrowserVaultKey === false
@@ -82,7 +85,7 @@ function AuthenticatedLayoutContent({
             <span className="text-xs font-medium leading-relaxed text-accent-foreground">
               {decryptionNotice.message}
               <button
-                onClick={() => navigate("/key-management")}
+                onClick={() => navigate(recoveryPath)}
                 className="ml-1 underline hover:no-underline"
               >
                 {decryptionNotice.action}

@@ -4,6 +4,7 @@ import {
   Routes,
   Route,
   Navigate,
+  useLocation,
 } from "react-router-dom";
 import { Buffer } from "buffer/";
 import PrivateStorage from "./pages/private-storage";
@@ -62,6 +63,11 @@ const RootRoute: React.FC = () => {
   return isAuthenticated ? <Navigate to="/home" replace /> : <LandingPage />;
 };
 
+const KeyManagementRedirect: React.FC = () => {
+  const location = useLocation();
+  return <Navigate to={`/recovery-access${location.search}`} replace />;
+};
+
 function App() {
   useEffect(() => {
     checkEnvironmentVariables();
@@ -96,12 +102,20 @@ function App() {
               }
             />
             <Route
-              path="/key-management"
+              path="/recovery-access"
               element={
                 <ProtectedRoute>
                   <AuthenticatedLayout>
                     <KeyManagementPage />
                   </AuthenticatedLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/key-management"
+              element={
+                <ProtectedRoute>
+                  <KeyManagementRedirect />
                 </ProtectedRoute>
               }
             />

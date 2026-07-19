@@ -26,12 +26,15 @@ import {
 import { getUserKeyPair, userHasStoredKeys } from "../utils/keyStorage";
 import apiClient from "../utils/apiClient";
 import { getStoredKey } from "../utils/cryptoUtils";
+import { fetchAndStoreFileMetadata } from "../utils/dexieDB";
 import { uploadAndSyncFile } from "../utils/fileOperations";
 import { getMnemonic, setMnemonic } from "../utils/mnemonicManager";
 import { downloadEncryptedRsaKeyFromDrive } from "../utils/gdriveKeyStorage";
 import { decryptRsaPrivateKeyWithAesKey } from "../utils/rsaKeyManager";
 import { readRecipientKeyVersion } from "@zerodrive/crypto";
 import { recoverRsaKeyVersion } from "../utils/rsaKeyRecovery";
+import { useOptionalVaultData } from "../contexts/vault-data-context";
+import { rememberVaultMetadataStatus } from "../utils/vaultMetadataWriteGuard";
 import { toast } from "sonner";
 
 type KeyState =
@@ -108,6 +111,7 @@ function mapSharedFile(row: any): SharedFile {
 
 const SharedWithMePage: React.FC = () => {
   const navigate = useNavigate();
+  const vaultData = useOptionalVaultData();
   const [userEmail, setUserEmail] = useState("");
   const [sharedFiles, setSharedFiles] = useState<SharedFile[]>([]);
   const [sharingPrivateKey, setSharingPrivateKey] = useState<JsonWebKey | null>(
@@ -296,13 +300,51 @@ const SharedWithMePage: React.FC = () => {
     if (userEmail) void loadSharedFiles(true);
   };
 
+  const ensureVaultMetadataReadyForSave = useCallback(async () => {
+    if (!userEmail) throw new Error("Sign in again before saving this file.");
+
+    const normalizedEmail = userEmail.trim().toLowerCase();
+    const vaultState = vaultData?.state;
+    const stateBelongsToCurrentUser =
+      vaultState?.userEmail === normalizedEmail;
+
+    if (stateBelongsToCurrentUser && vaultState?.metadataStatus === "ready") {
+      return;
+    }
+
+    vaultData?.setVaultMetadataStatus(userEmail, "verifying");
+    rememberVaultMetadataStatus(userEmail, "verifying");
+
+    try {
+      await fetchAndStoreFileMetadata();
+      if (vaultData) {
+        await vaultData.refreshVaultFromLocal(userEmail, {
+          metadataStatus: "ready",
+        });
+      } else {
+        rememberVaultMetadataStatus(userEmail, "ready");
+      }
+    } catch (error) {
+      const isDecryptionError =
+        error instanceof Error && error.name === "DecryptionError";
+      const status = isDecryptionError ? "decryption_error" : "error";
+      const message = isDecryptionError
+        ? "ZeroDrive found an existing encrypted file list that this recovery phrase cannot open. Open Storage and review vault access before saving this file."
+        : "ZeroDrive could not verify your Storage file list. Refresh Storage and try again before saving this file.";
+
+      vaultData?.setVaultMetadataStatus(userEmail, status, message);
+      rememberVaultMetadataStatus(userEmail, status);
+      throw new Error(message);
+    }
+  }, [userEmail, vaultData]);
+
   const requireReadyKeys = (): boolean => {
     if (keyState === "ready") return true;
 
     if (keyState === "sharing-missing") {
       navigate("/share");
     } else if (keyState === "primary-missing") {
-      navigate("/key-management?returnTo=%2Fshared-with-me");
+      navigate("/recovery-access?returnTo=%2Fshared-with-me");
     }
     return false;
   };
@@ -324,6 +366,12 @@ const SharedWithMePage: React.FC = () => {
 
     setProcessing({ fileId: file.id, action, stage: "downloading" });
     try {
+      if (action === "save") {
+        setProcessing({ fileId: file.id, action, stage: "saving" });
+        await ensureVaultMetadataReadyForSave();
+        setProcessing({ fileId: file.id, action, stage: "downloading" });
+      }
+
       const encryptedBlob = await downloadEncryptedFile(file.id);
       setProcessing({ fileId: file.id, action, stage: "decrypting" });
       const mnemonic = getMnemonic();
@@ -488,8 +536,9 @@ const SharedWithMePage: React.FC = () => {
         title: "Recover your encryption key",
         description:
           "Your primary recovery phrase is required before shared files can be decrypted.",
-        action: "Open Key Management",
-        onClick: () => navigate("/key-management?returnTo=%2Fshared-with-me"),
+        action: "Open Recovery & Access",
+        onClick: () =>
+          navigate("/recovery-access?returnTo=%2Fshared-with-me"),
       },
       "sharing-missing": {
         title: "Enable encrypted sharing",

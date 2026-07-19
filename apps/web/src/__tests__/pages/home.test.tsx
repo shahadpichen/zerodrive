@@ -120,7 +120,7 @@ const needsKeyState = {
   description:
     "Create or recover your encryption key. This key protects your vault, and ZeroDrive cannot read or reset it.",
   primaryActionLabel: "Create or recover access",
-  primaryActionPath: "/key-management",
+  primaryActionPath: "/recovery-access?returnTo=%2Fhome",
   tasks: [
     {
       id: "key",
@@ -129,7 +129,7 @@ const needsKeyState = {
         "This browser needs your encryption key before it can protect files.",
       complete: false,
       actionLabel: "Set up access",
-      actionPath: "/key-management",
+      actionPath: "/recovery-access?returnTo=%2Fhome",
     },
   ],
   shouldShowGuidance: true,

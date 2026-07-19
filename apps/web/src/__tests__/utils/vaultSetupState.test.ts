@@ -32,7 +32,9 @@ describe("vault setup state", () => {
     });
 
     expect(state.status).toBe("needs_key");
-    expect(state.primaryActionPath).toBe("/key-management");
+    expect(state.primaryActionPath).toBe(
+      "/recovery-access?returnTo=%2Fhome",
+    );
     expect(state.shouldShowGuidance).toBe(true);
     expect(state.tasks.find((task) => task.id === "key")?.complete).toBe(
       false,

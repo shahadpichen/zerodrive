@@ -100,6 +100,7 @@ const mockUploadAndSyncFile = uploadAndSyncFile as jest.MockedFunction<
   typeof uploadAndSyncFile
 >;
 const mockToastInfo = toast.info as jest.MockedFunction<typeof toast.info>;
+const mockToastError = toast.error as jest.MockedFunction<typeof toast.error>;
 let mockSetDecryptionError: jest.Mock;
 let mockRefreshVaultFromLocal: jest.Mock;
 let mockSetVaultMetadataStatus: jest.Mock;
@@ -240,6 +241,7 @@ describe("PrivateStorage metadata replacement warning", () => {
         file,
         "owner@example.com",
         null,
+        { allowMetadataReplacement: true },
       );
     });
   });
@@ -308,6 +310,78 @@ describe("PrivateStorage metadata replacement warning", () => {
     expect(mockUploadAndSyncFile).not.toHaveBeenCalled();
   });
 
+  it("blocks uploads when vault metadata verification reaches a terminal error", async () => {
+    mockFetchAndStoreFileMetadata.mockRejectedValue(
+      new Error("Drive unavailable"),
+    );
+    mockSetDecryptionError = jest.fn();
+    mockUseApp.mockReturnValue({
+      userEmail: "owner@example.com",
+      userName: "Owner",
+      userImage: "",
+      storageInfo: null,
+      isLoadingStorage: false,
+      hasDecryptionError: false,
+      setDecryptionError: mockSetDecryptionError,
+      refreshStorage: jest.fn().mockResolvedValue(undefined),
+      refreshAll: jest.fn().mockResolvedValue(undefined),
+      setUserInfo: jest.fn(),
+    });
+    mockUseVaultData.mockReturnValue({
+      state: {
+        userEmail: "owner@example.com",
+        files: [],
+        folders: [],
+        isHydrating: false,
+        isRefreshing: false,
+        metadataStatus: "error",
+        hasVaultKey: true,
+        lastSyncedAt: null,
+        error: "Drive unavailable",
+      },
+      replaceVaultData: jest.fn(),
+      refreshVaultFromLocal: mockRefreshVaultFromLocal,
+      setVaultMetadataStatus: mockSetVaultMetadataStatus,
+      setVaultKeyStatus: jest.fn(),
+      clearVaultData: jest.fn(),
+    });
+
+    const file = new File(["hello"], "notes.pdf", {
+      type: "application/pdf",
+    });
+
+    render(
+      <MemoryRouter>
+        <PrivateStorage />
+      </MemoryRouter>,
+    );
+
+    const dropHint = await screen.findByText(/drop files anywhere to upload/i);
+
+    fireEvent.drop(dropHint, {
+      dataTransfer: {
+        types: ["Files"],
+        files: [file],
+      },
+    });
+
+    await waitFor(() => {
+      expect(mockToastError).toHaveBeenCalledWith(
+        "Vault metadata could not be verified",
+        expect.objectContaining({
+          description: expect.stringContaining(
+            "Refresh Storage before uploading",
+          ),
+        }),
+      );
+    });
+    expect(mockUploadAndSyncFile).not.toHaveBeenCalled();
+    expect(mockToastInfo).not.toHaveBeenCalledWith(
+      "Checking vault metadata",
+      expect.any(Object),
+    );
+  });
+
   it("uses Home's verified shared vault state instead of checking Drive again", async () => {
     mockUseVaultData.mockReturnValue({
       state: {
@@ -354,5 +428,57 @@ describe("PrivateStorage metadata replacement warning", () => {
     expect(
       screen.queryByText("Checking encrypted vault..."),
     ).not.toBeInTheDocument();
+  });
+
+  it("marks vault metadata as error when refresh verification fails", async () => {
+    mockUseVaultData.mockReturnValue({
+      state: {
+        userEmail: "owner@example.com",
+        files: [],
+        folders: [],
+        isHydrating: false,
+        isRefreshing: false,
+        metadataStatus: "ready",
+        hasVaultKey: true,
+        lastSyncedAt: Date.now(),
+        error: null,
+      },
+      replaceVaultData: jest.fn(),
+      refreshVaultFromLocal: mockRefreshVaultFromLocal,
+      setVaultMetadataStatus: mockSetVaultMetadataStatus,
+      setVaultKeyStatus: jest.fn(),
+      clearVaultData: jest.fn(),
+    });
+    mockUseApp.mockReturnValue({
+      userEmail: "owner@example.com",
+      userName: "Owner",
+      userImage: "",
+      storageInfo: null,
+      isLoadingStorage: false,
+      hasDecryptionError: false,
+      setDecryptionError: mockSetDecryptionError,
+      refreshStorage: jest.fn().mockResolvedValue(undefined),
+      refreshAll: jest.fn().mockResolvedValue(undefined),
+      setUserInfo: jest.fn(),
+    });
+    mockFetchAndStoreFileMetadata.mockRejectedValue(
+      new Error("Drive unavailable"),
+    );
+
+    render(
+      <MemoryRouter>
+        <PrivateStorage />
+      </MemoryRouter>,
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: /refresh/i }));
+
+    await waitFor(() => {
+      expect(mockSetVaultMetadataStatus).toHaveBeenCalledWith(
+        "owner@example.com",
+        "error",
+        "Drive unavailable",
+      );
+    });
   });
 });

@@ -98,7 +98,7 @@ export function getVaultSetupState(
         "This browser needs your encryption key before it can protect files.",
       complete: snapshot.hasPrimaryKey,
       actionLabel: "Set up access",
-      actionPath: "/key-management",
+      actionPath: "/recovery-access?returnTo=%2Fhome",
     },
     {
       id: "recovery",
@@ -107,7 +107,7 @@ export function getVaultSetupState(
         "ZeroDrive cannot reset this phrase, so store it somewhere you trust.",
       complete: snapshot.hasRecoveryPhrase,
       actionLabel: "Review recovery",
-      actionPath: "/key-management",
+      actionPath: "/recovery-access?returnTo=%2Fhome",
     },
     {
       id: "first_file",
@@ -138,7 +138,7 @@ export function getVaultSetupState(
       description:
         "This browser needs your encryption key before it can open encrypted files. Create a new vault key or recover your existing one with your recovery phrase.",
       primaryActionLabel: "Create or recover access",
-      primaryActionPath: "/key-management",
+      primaryActionPath: "/recovery-access?returnTo=%2Fhome",
       secondaryActionLabel: "Go to Storage",
       secondaryActionPath: "/storage",
       tasks,

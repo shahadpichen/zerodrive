@@ -83,10 +83,10 @@ describe("AuthenticatedLayout vault access notice", () => {
     ).toBeInTheDocument();
   });
 
-  it("does not repeat the global vault warning on key management", async () => {
+  it("does not repeat the global vault warning on Recovery & Access", async () => {
     mockGetStoredKey.mockResolvedValue(null);
 
-    renderLayout("/key-management");
+    renderLayout("/recovery-access");
 
     expect(await screen.findByText("Protected content")).toBeInTheDocument();
     expect(screen.queryByText(/vault locked/i)).not.toBeInTheDocument();

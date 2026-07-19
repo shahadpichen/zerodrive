@@ -158,7 +158,7 @@ export async function recoverRsaKeysIfNeeded(
       if (toastId && !silent) {
         toast.error("Cannot decrypt RSA key backup", {
           description:
-            "Primary encryption key not found. Please enter your mnemonic in Key Management.",
+            "Primary encryption key not found. Please enter your recovery phrase in Recovery & Access.",
           id: toastId,
           duration: 7000,
         });

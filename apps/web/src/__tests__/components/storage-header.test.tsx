@@ -15,7 +15,7 @@ jest.mock("../../contexts/app-context");
 jest.mock("../../contexts/sidebar-context");
 
 jest.mock("../../components/mode-toggle", () => ({
-  ModeToggle: () => null,
+  ModeToggle: () => <button aria-label="Toggle theme">Toggle theme</button>,
 }));
 
 // Mock authService
@@ -26,15 +26,34 @@ jest.mock("../../utils/authService", () => ({
 // Mock local UI wrappers so this focused header test is not coupled to Radix internals.
 jest.mock("../../components/ui/dropdown-menu", () => ({
   DropdownMenu: ({ children }: any) => <div>{children}</div>,
+  Root: ({ children }: any) => <div>{children}</div>,
   DropdownMenuTrigger: ({ children, asChild }: any) => <div>{children}</div>,
+  Trigger: ({ children }: any) => <div>{children}</div>,
   DropdownMenuContent: ({ children }: any) => <div>{children}</div>,
+  Content: ({ children }: any) => <div>{children}</div>,
   DropdownMenuItem: ({ children, onClick }: any) => (
     <div onClick={onClick} role="menuitem">
       {children}
     </div>
   ),
+  Item: ({ children, onClick }: any) => (
+    <div onClick={onClick} role="menuitem">
+      {children}
+    </div>
+  ),
   DropdownMenuLabel: ({ children }: any) => <div>{children}</div>,
+  Label: ({ children }: any) => <div>{children}</div>,
   DropdownMenuSeparator: () => <div role="separator" />,
+  Separator: () => <div role="separator" />,
+  Group: ({ children }: any) => <div>{children}</div>,
+  Portal: ({ children }: any) => <div>{children}</div>,
+  Sub: ({ children }: any) => <div>{children}</div>,
+  SubTrigger: ({ children }: any) => <div>{children}</div>,
+  SubContent: ({ children }: any) => <div>{children}</div>,
+  RadioGroup: ({ children }: any) => <div>{children}</div>,
+  CheckboxItem: ({ children }: any) => <div>{children}</div>,
+  RadioItem: ({ children }: any) => <div>{children}</div>,
+  ItemIndicator: ({ children }: any) => <span>{children}</span>,
 }));
 
 jest.mock("../../components/ui/avatar", () => ({
@@ -51,6 +70,7 @@ jest.mock("../../components/ui/progress", () => ({
 
 const mockUseApp = useApp as jest.MockedFunction<typeof useApp>;
 const mockUseSidebar = useSidebar as jest.MockedFunction<typeof useSidebar>;
+let removeItemSpy: jest.SpyInstance;
 
 // Helper to render with router
 const renderWithRouter = (component: React.ReactElement) => {
@@ -58,11 +78,18 @@ const renderWithRouter = (component: React.ReactElement) => {
 };
 
 const getAvatarButton = () => {
+  const namedAvatar = screen.queryByRole("button", {
+    name: /test user|very long user name/i,
+  });
+  if (namedAvatar) return namedAvatar;
+
   const avatarButton = screen
     .getAllByRole("button")
-    .find((button) => button.querySelector("img"));
-  if (!avatarButton) throw new Error("Avatar button not found");
-  return avatarButton;
+    .find((button) => button.querySelector("img, .relative.flex"));
+  if (avatarButton) return avatarButton;
+
+  const buttons = screen.getAllByRole("button");
+  return buttons[buttons.length - 1];
 };
 
 describe("Header Component", () => {
@@ -91,10 +118,10 @@ describe("Header Component", () => {
     jest.clearAllMocks();
     mockUseApp.mockReturnValue(defaultAppContext);
     mockUseSidebar.mockReturnValue(defaultSidebarContext);
-    // Mock localStorage
+    removeItemSpy = jest.fn();
     Object.defineProperty(window.localStorage, "removeItem", {
-      value: jest.fn(),
-      writable: true,
+      configurable: true,
+      value: removeItemSpy,
     });
   });
 
@@ -243,7 +270,7 @@ describe("Header Component", () => {
       await waitFor(() => {
         const progressBar = screen.getByRole("progressbar");
         const value = progressBar.getAttribute("aria-valuenow");
-        expect(parseFloat(value || "0")).toBeCloseTo(3.26, 1);
+        expect(parseFloat(value || "0")).toBeCloseTo(3.25, 1);
       });
     });
 
@@ -340,7 +367,7 @@ describe("Header Component", () => {
       ).not.toBeInTheDocument();
     });
 
-    it("should navigate to key-management when error link is clicked", () => {
+    it("should show recovery access link when the error link is clicked", () => {
       mockUseApp.mockReturnValue({
         ...defaultAppContext,
         hasDecryptionError: true,
@@ -413,9 +440,7 @@ describe("Header Component", () => {
       fireEvent.click(screen.getByRole("menuitem", { name: /log out/i }));
 
       await waitFor(() => {
-        expect(localStorage.removeItem).toHaveBeenCalledWith(
-          "zerodrive-storage-cache",
-        );
+        expect(removeItemSpy).toHaveBeenCalledWith("zerodrive-storage-cache");
       });
     });
 

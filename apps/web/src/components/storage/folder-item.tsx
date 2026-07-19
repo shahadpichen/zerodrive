@@ -3,6 +3,7 @@ import type { FolderMeta } from "../../utils/dexieDB";
 import { moveFile } from "../../utils/folderOperations";
 import { useFolderContext } from "./folder-context";
 import { FolderActions } from "./folder-actions";
+import { showVaultMetadataWriteBlockedToast } from "../../utils/vaultMetadataWriteGuard";
 
 interface FolderItemProps {
   folder: FolderMeta;
@@ -10,6 +11,7 @@ interface FolderItemProps {
   // Called whenever the folder is mutated (renamed or deleted) so the list refreshes
   onDeleted: () => void;
   onFileMoved?: () => void;
+  canWriteVaultMetadata?: boolean;
 }
 
 export function FolderItem({
@@ -17,6 +19,7 @@ export function FolderItem({
   userEmail,
   onDeleted,
   onFileMoved,
+  canWriteVaultMetadata = true,
 }: FolderItemProps) {
   const { navigateToFolder, setCurrentPath, currentPath } = useFolderContext();
   const [dragOver, setDragOver] = useState(false);
@@ -34,6 +37,7 @@ export function FolderItem({
       onClick={handleNavigate}
       title={folder.name}
       onDragOver={(e) => {
+        if (!canWriteVaultMetadata) return;
         e.preventDefault();
         setDragOver(true);
       }}
@@ -44,6 +48,10 @@ export function FolderItem({
         const fileId = e.dataTransfer.getData("text/x-file-id");
         const fileName = e.dataTransfer.getData("text/x-file-name");
         if (!fileId || !fileName) return;
+        if (!canWriteVaultMetadata) {
+          showVaultMetadataWriteBlockedToast();
+          return;
+        }
         const success = await moveFile(fileId, fileName, folder.id, userEmail);
         if (success) onFileMoved?.();
       }}
@@ -58,6 +66,7 @@ export function FolderItem({
           userEmail={userEmail}
           onChanged={onDeleted}
           variant="menu"
+          canWriteVaultMetadata={canWriteVaultMetadata}
         />
       </div>
 
