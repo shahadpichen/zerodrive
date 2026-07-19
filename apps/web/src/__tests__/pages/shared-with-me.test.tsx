@@ -204,7 +204,7 @@ describe("SharedWithMePage", () => {
     expect(await screen.findByText("Your inbox is empty")).toBeInTheDocument();
     expect(screen.getByText("Shared with me")).toBeInTheDocument();
     expect(
-      screen.getByText(/files shared with this account/i),
+      screen.getByText(/files shared to this zerodrive account/i),
     ).toBeInTheDocument();
   });
 
@@ -213,7 +213,7 @@ describe("SharedWithMePage", () => {
     renderPage();
 
     expect(
-      await screen.findByText("Recover your encryption key"),
+      await screen.findByText("Recover vault access first"),
     ).toBeInTheDocument();
     fireEvent.click(
       screen.getByRole("button", { name: /open recovery & access/i }),
@@ -230,9 +230,11 @@ describe("SharedWithMePage", () => {
     renderPage();
 
     expect(
-      await screen.findByText("Enable encrypted sharing"),
+      await screen.findByText("Create your receiving identity"),
     ).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /enable sharing/i }));
+    fireEvent.click(
+      screen.getByRole("button", { name: /create sharing identity/i }),
+    );
     expect(mockNavigate).toHaveBeenCalledWith("/share");
   });
 
@@ -248,7 +250,7 @@ describe("SharedWithMePage", () => {
       expect.any(Object),
     );
     expect(
-      screen.queryByText("Unlock your sharing key"),
+      screen.queryByText("Unlock files shared with you"),
     ).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: /^download$/i })).toBeEnabled();
   });
@@ -260,10 +262,10 @@ describe("SharedWithMePage", () => {
     renderPage();
 
     expect(
-      await screen.findByText("Unlock your sharing key"),
+      await screen.findByText("Unlock files shared with you"),
     ).toBeInTheDocument();
     expect(
-      screen.getByText(/file encryption key is active/i),
+      screen.getByText(/vault key is active/i),
     ).toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText("Recovery phrase for sharing key"), {
@@ -277,7 +279,7 @@ describe("SharedWithMePage", () => {
       expect(mockSetMnemonic).toHaveBeenCalledWith("valid recovery phrase"),
     );
     expect(
-      screen.queryByText("Unlock your sharing key"),
+      screen.queryByText("Unlock files shared with you"),
     ).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: /^download$/i })).toBeEnabled();
   });
@@ -293,6 +295,9 @@ describe("SharedWithMePage", () => {
     ).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: /save to storage/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/download saves plaintext to this device/i),
     ).toBeInTheDocument();
   });
 
