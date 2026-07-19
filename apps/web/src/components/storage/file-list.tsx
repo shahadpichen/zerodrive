@@ -41,6 +41,10 @@ import { FolderActions } from "./folder-actions";
 import { FolderBreadcrumb } from "./folder-breadcrumb";
 import { moveFile } from "../../utils/folderOperations";
 import { useOptionalVaultData } from "../../contexts/vault-data-context";
+import {
+  assertCanWriteVaultMetadata,
+  showVaultMetadataWriteBlockedToast,
+} from "../../utils/vaultMetadataWriteGuard";
 
 interface FileListProps {
   view?: "compact" | "recent" | "full";
@@ -50,6 +54,7 @@ interface FileListProps {
   hasVaultKey?: boolean | null;
   onRecoverAccessClick?: () => void;
   isVaultMetadataLoading?: boolean;
+  canWriteVaultMetadata?: boolean;
 }
 
 // Helper hook to safely get folder context
@@ -86,6 +91,7 @@ export const FileList: React.FC<FileListProps> = ({
   hasVaultKey = null,
   onRecoverAccessClick,
   isVaultMetadataLoading = false,
+  canWriteVaultMetadata = true,
 }) => {
   const { currentFolderId, currentPath, navigateToFolder, setCurrentPath } =
     useSafeFolderContext();
@@ -411,6 +417,8 @@ export const FileList: React.FC<FileListProps> = ({
     let deleteSuccess = false;
 
     try {
+      assertCanWriteVaultMetadata(userEmail);
+
       deleteToastId = toast.loading(`Deleting ${fileName}...`);
 
       const { getGoogleAccessToken } = await import("../../utils/gapiInit");
@@ -439,7 +447,7 @@ export const FileList: React.FC<FileListProps> = ({
       replaceVaultData?.(userEmail, updatedFiles, updatedFolders);
 
       console.log("[FileList] Deletion complete, syncing metadata...");
-      await sendToGoogleDrive(updatedFiles, updatedFolders);
+      await sendToGoogleDrive(updatedFiles, updatedFolders, { userEmail });
 
       toast.success(`Deleted ${fileName} and synced metadata.`, {
         id: deleteToastId,
@@ -468,6 +476,10 @@ export const FileList: React.FC<FileListProps> = ({
     e: React.MouseEvent,
   ) => {
     e.stopPropagation();
+    if (!canWriteVaultMetadata) {
+      showVaultMetadataWriteBlockedToast();
+      return;
+    }
     setFileToDelete({ id: fileId, name: fileName });
     setShowDeleteConfirm(true);
   };
@@ -761,6 +773,7 @@ export const FileList: React.FC<FileListProps> = ({
         <FolderBreadcrumb
           userEmail={userEmail}
           onFileMoved={() => setRefreshFileListKey((prev) => prev + 1)}
+          canWriteVaultMetadata={canWriteVaultMetadata}
         />
       )}
 
@@ -840,6 +853,7 @@ export const FileList: React.FC<FileListProps> = ({
               userEmail={userEmail!}
               onDeleted={() => setRefreshFileListKey((prev) => prev + 1)}
               onFileMoved={() => setRefreshFileListKey((prev) => prev + 1)}
+              canWriteVaultMetadata={canWriteVaultMetadata}
             />
           ))}
 
@@ -849,8 +863,13 @@ export const FileList: React.FC<FileListProps> = ({
               className={`relative flex flex-col items-center gap-2 p-4 cursor-pointer group ${
                 draggingFileId === file.id ? "opacity-50" : ""
               }`}
-              draggable
+              draggable={canWriteVaultMetadata}
               onDragStart={(e) => {
+                if (!canWriteVaultMetadata) {
+                  e.preventDefault();
+                  showVaultMetadataWriteBlockedToast();
+                  return;
+                }
                 e.dataTransfer.setData("text/x-file-id", file.id);
                 e.dataTransfer.setData("text/x-file-name", file.name);
                 e.dataTransfer.effectAllowed = "move";
@@ -865,6 +884,7 @@ export const FileList: React.FC<FileListProps> = ({
                 className="absolute top-2 right-2 p-1 rounded-md opacity-0 group-hover:opacity-100 transition-opacity text-destructive hover:bg-destructive/10"
                 aria-label="Delete file"
                 title="Delete file"
+                disabled={!canWriteVaultMetadata}
               >
                 <Trash2 className="h-4 w-4" />
               </button>
@@ -910,6 +930,7 @@ export const FileList: React.FC<FileListProps> = ({
                     navigateToFolder(folder.id);
                   }}
                   onDragOver={(e) => {
+                    if (!canWriteVaultMetadata) return;
                     e.preventDefault();
                     setDragOverFolderId(folder.id);
                   }}
@@ -920,6 +941,10 @@ export const FileList: React.FC<FileListProps> = ({
                     const fileId = e.dataTransfer.getData("text/x-file-id");
                     const fileName = e.dataTransfer.getData("text/x-file-name");
                     if (!fileId || !fileName || !userEmail) return;
+                    if (!canWriteVaultMetadata) {
+                      showVaultMetadataWriteBlockedToast();
+                      return;
+                    }
                     const ok = await moveFile(
                       fileId,
                       fileName,
@@ -949,6 +974,7 @@ export const FileList: React.FC<FileListProps> = ({
                         setRefreshFileListKey((prev) => prev + 1)
                       }
                       variant="inline"
+                      canWriteVaultMetadata={canWriteVaultMetadata}
                     />
                   </td>
                 </tr>
@@ -1016,6 +1042,7 @@ export const FileList: React.FC<FileListProps> = ({
                           }
                           className="text-muted-foreground hover:text-destructive"
                           aria-label="Delete file"
+                          disabled={!canWriteVaultMetadata}
                         >
                           <Trash2 className="h-4 w-4" />
                         </button>

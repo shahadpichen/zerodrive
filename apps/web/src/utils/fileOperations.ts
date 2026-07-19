@@ -12,6 +12,7 @@ import { encryptFile } from "./encryptFile";
 import { getStoredKey } from "./cryptoUtils";
 import logger from "./logger";
 import { trackFileAddedToDrive } from "./analyticsTracker";
+import { assertCanWriteVaultMetadata } from "./vaultMetadataWriteGuard";
 
 // --- Upload Operation ---
 
@@ -26,7 +27,8 @@ import { trackFileAddedToDrive } from "./analyticsTracker";
 export const uploadAndSyncFile = async (
   file: File,
   userEmail: string,
-  folderId?: string | null
+  folderId?: string | null,
+  options: { allowMetadataReplacement?: boolean } = {},
 ): Promise<FileMeta | null> => {
   const uploadToastId = toast.loading(`Preparing ${file.name}...`);
 
@@ -36,6 +38,10 @@ export const uploadAndSyncFile = async (
     if (!key) {
       throw new Error("No encryption key found. Please manage keys.");
     }
+
+    assertCanWriteVaultMetadata(userEmail, {
+      allowMetadataReplacement: options.allowMetadataReplacement,
+    });
 
     // 2. Validate file size (max 100MB)
     const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB in bytes
@@ -113,7 +119,10 @@ export const uploadAndSyncFile = async (
     const updatedFolders = await getFoldersForUser(userEmail);
 
     // 9. Sync updated list to db-list.json on Google Drive
-    await sendToGoogleDrive(updatedList, updatedFolders); // This handles its own toasts
+    await sendToGoogleDrive(updatedList, updatedFolders, {
+      userEmail,
+      allowMetadataReplacement: options.allowMetadataReplacement,
+    }); // This handles its own toasts
 
     toast.success(`Successfully uploaded and synced ${file.name}`, {
       id: uploadToastId,
@@ -151,6 +160,8 @@ export const deleteAndSyncFile = async (
   const deleteToastId = toast.loading(`Deleting ${fileName}...`);
 
   try {
+    assertCanWriteVaultMetadata(userEmail);
+
     // 1. Check auth and get token
     const { getGoogleAccessToken } = await import("./gapiInit");
     const token = await getGoogleAccessToken();
@@ -196,7 +207,7 @@ export const deleteAndSyncFile = async (
     const updatedFolders = await getFoldersForUser(userEmail);
 
     // 5. Sync updated list to db-list.json on Google Drive
-    await sendToGoogleDrive(updatedList, updatedFolders); // This handles its own success/error toast for sync
+    await sendToGoogleDrive(updatedList, updatedFolders, { userEmail }); // This handles its own success/error toast for sync
 
     toast.success(`Successfully processed deletion for ${fileName}.`, {
       id: deleteToastId,
@@ -224,6 +235,8 @@ export const deleteAllAndSyncFiles = async (
   const deleteToastId = toast.loading(`Fetching file list to delete...`);
 
   try {
+    assertCanWriteVaultMetadata(userEmail);
+
     // 1. Get all file IDs for the user
     const allFiles = await getAllFilesForUser(userEmail);
     if (allFiles.length === 0) {
@@ -287,7 +300,7 @@ export const deleteAllAndSyncFiles = async (
 
     // 5. Sync the (now empty) list to db-list.json on Google Drive
     const updatedFolders = await getFoldersForUser(userEmail);
-    await sendToGoogleDrive([], updatedFolders); // Send empty file array
+    await sendToGoogleDrive([], updatedFolders, { userEmail }); // Send empty file array
 
     toast.success(
       `Successfully deleted all ${fileIds.length} files and synced metadata.`,

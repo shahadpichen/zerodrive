@@ -100,13 +100,27 @@ function PrivateStorageContent() {
     hasCurrentVaultSnapshot ? vaultState.hasVaultKey : null,
   );
   const initialVaultStateRef = useRef(vaultState);
+  const activeUserEmail = userEmail.trim().toLowerCase();
+  const hasCurrentUserVaultState =
+    !!activeUserEmail && vaultState.userEmail === activeUserEmail;
   const isVaultSafetyCheckPending =
     isLoadingUserFiles ||
     isVerifyingVaultMetadata ||
     isRefreshingFiles ||
-    (vaultState.userEmail === userEmail.trim().toLowerCase() &&
-      vaultState.metadataStatus !== "ready" &&
-      vaultState.metadataStatus !== "decryption_error");
+    (hasCurrentUserVaultState && vaultState.metadataStatus === "verifying");
+  const isVaultMetadataUploadSafe =
+    hasCurrentUserVaultState &&
+    (vaultState.metadataStatus === "ready" ||
+      vaultState.metadataStatus === "decryption_error");
+  const isVaultMetadataWriteSafe =
+    hasCurrentUserVaultState && vaultState.metadataStatus === "ready";
+
+  const showVaultMetadataBlockedToast = useCallback(() => {
+    toast.error("Vault metadata could not be verified", {
+      description:
+        "Refresh Storage before uploading so ZeroDrive does not replace an existing encrypted file list with stale local data.",
+    });
+  }, []);
 
   const openRecoveryAccess = useCallback(() => {
     navigate("/recovery-access?returnTo=%2Fstorage");
@@ -349,6 +363,11 @@ function PrivateStorageContent() {
         id: refreshToastId,
       });
     } catch (error: any) {
+      setVaultMetadataStatus(
+        userEmail,
+        "error",
+        error.message || "Could not verify vault metadata",
+      );
       console.error("Error refreshing files:", error);
       toast.error("Failed to refresh file list.", {
         description: error.message || "Could not sync with Google Drive.",
@@ -380,11 +399,18 @@ function PrivateStorageContent() {
       openRecoveryAccess();
       return;
     }
+
+    if (!isVaultMetadataUploadSafe) {
+      showVaultMetadataBlockedToast();
+      return;
+    }
     document.getElementById("file-upload")?.click();
   }, [
     isVaultSafetyCheckPending,
+    isVaultMetadataUploadSafe,
     openRecoveryAccess,
     setVaultKeyStatus,
+    showVaultMetadataBlockedToast,
     userEmail,
   ]);
 
@@ -427,7 +453,15 @@ function PrivateStorageContent() {
       return;
     }
 
-    if (hasDecryptionError && !options.skipMetadataReplaceWarning) {
+    if (!isVaultMetadataUploadSafe) {
+      showVaultMetadataBlockedToast();
+      return;
+    }
+
+    if (
+      (hasDecryptionError || vaultState.metadataStatus === "decryption_error") &&
+      !options.skipMetadataReplaceWarning
+    ) {
       openMetadataReplaceConfirm(filesToUpload);
       return;
     }
@@ -436,7 +470,11 @@ function PrivateStorageContent() {
     let successCount = 0;
 
     for (const file of filesToUpload) {
-      const result = await uploadAndSyncFile(file, userEmail, currentFolderId);
+      const result = await uploadAndSyncFile(file, userEmail, currentFolderId, {
+        allowMetadataReplacement:
+          options.skipMetadataReplaceWarning &&
+          vaultState.metadataStatus === "decryption_error",
+      });
       if (result) successCount++;
     }
 
@@ -502,6 +540,12 @@ function PrivateStorageContent() {
 
   const performDeleteAllFiles = async () => {
     if (!userEmail) return;
+
+    if (!isVaultMetadataWriteSafe) {
+      showVaultMetadataBlockedToast();
+      setShowDeleteConfirm(false);
+      return;
+    }
 
     // Check for encryption key before allowing deletion
     const key = await getStoredKey();
@@ -591,7 +635,7 @@ function PrivateStorageContent() {
                 variant="outline"
                 size="sm"
                 onClick={() => setShowCreateFolder(true)}
-                disabled={isLoadingUserFiles}
+                disabled={isLoadingUserFiles || !isVaultMetadataWriteSafe}
               >
                 <FolderPlus className="h-4 w-4 mr-2" />
                 New Folder
@@ -618,7 +662,7 @@ function PrivateStorageContent() {
                     size="sm"
                     className="px-2"
                     aria-label="More actions"
-                    disabled={isLoadingUserFiles}
+                    disabled={isLoadingUserFiles || !isVaultMetadataWriteSafe}
                   >
                     <MoreVertical className="h-4 w-4" />
                   </Button>
@@ -648,6 +692,7 @@ function PrivateStorageContent() {
           isVaultMetadataLoading={
             (!userEmail && isLoadingUserFiles) || isVaultSafetyCheckPending
           }
+          canWriteVaultMetadata={isVaultMetadataWriteSafe}
         />
 
         {/* Persistent drop hint */}
@@ -666,7 +711,9 @@ function PrivateStorageContent() {
             parentFolderId={currentFolderId}
             userEmail={userEmail}
             onSuccess={() => {
-              void refreshVaultFromLocal(userEmail);
+              void refreshVaultFromLocal(userEmail, {
+                metadataStatus: "ready",
+              });
               setRefreshFileListKey((prev) => prev + 1);
             }}
           />

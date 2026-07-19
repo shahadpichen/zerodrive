@@ -12,6 +12,7 @@ import {
 } from "./dexieDB";
 import type { FolderMeta } from "./dexieDB";
 import logger from "./logger";
+import { assertCanWriteVaultMetadata } from "./vaultMetadataWriteGuard";
 
 export const createFolder = async (
   folderName: string,
@@ -21,6 +22,8 @@ export const createFolder = async (
   const createToastId = toast.loading(`Creating folder "${folderName}"...`);
 
   try {
+    assertCanWriteVaultMetadata(userEmail);
+
     const { getGoogleAccessToken } = await import("./gapiInit");
     const token = await getGoogleAccessToken();
     if (!token) throw new Error("User not authenticated.");
@@ -67,7 +70,7 @@ export const createFolder = async (
     // Sync metadata
     const updatedFiles = await getAllFilesForUser(userEmail);
     const updatedFolders = await getFoldersForUser(userEmail);
-    await sendToGoogleDrive(updatedFiles, updatedFolders);
+    await sendToGoogleDrive(updatedFiles, updatedFolders, { userEmail });
 
     toast.success(`Folder "${folderName}" created`, { id: createToastId });
     return newFolder;
@@ -90,6 +93,8 @@ export const deleteFolder = async (
   const deleteToastId = toast.loading(`Deleting folder "${folderName}"...`);
 
   try {
+    assertCanWriteVaultMetadata(userEmail);
+
     // Check if folder has files
     const filesInFolder = await getFilesInFolder(userEmail, folderId);
 
@@ -135,7 +140,7 @@ export const deleteFolder = async (
     // Sync metadata
     const updatedFiles = await getAllFilesForUser(userEmail);
     const updatedFolders = await getFoldersForUser(userEmail);
-    await sendToGoogleDrive(updatedFiles, updatedFolders);
+    await sendToGoogleDrive(updatedFiles, updatedFolders, { userEmail });
 
     toast.success(`Folder "${folderName}" deleted`, { id: deleteToastId });
     return true;
@@ -161,6 +166,8 @@ export const renameFolder = async (
   const renameToastId = toast.loading(`Renaming "${oldName}"...`);
 
   try {
+    assertCanWriteVaultMetadata(userEmail);
+
     const { getGoogleAccessToken } = await import("./gapiInit");
     const token = await getGoogleAccessToken();
     if (!token) throw new Error("User not authenticated.");
@@ -191,7 +198,7 @@ export const renameFolder = async (
     // Sync metadata
     const updatedFiles = await getAllFilesForUser(userEmail);
     const updatedFolders = await getFoldersForUser(userEmail);
-    await sendToGoogleDrive(updatedFiles, updatedFolders);
+    await sendToGoogleDrive(updatedFiles, updatedFolders, { userEmail });
 
     toast.success(`Renamed to "${trimmed}"`, { id: renameToastId });
     return true;
@@ -214,6 +221,8 @@ export const moveFile = async (
   const moveToastId = toast.loading(`Moving "${fileName}"...`);
 
   try {
+    assertCanWriteVaultMetadata(userEmail);
+
     const { getGoogleAccessToken } = await import("./gapiInit");
     const token = await getGoogleAccessToken();
     if (!token) throw new Error("User not authenticated.");
@@ -263,7 +272,7 @@ export const moveFile = async (
     // Sync metadata
     const updatedFiles = await getAllFilesForUser(userEmail);
     const updatedFolders = await getFoldersForUser(userEmail);
-    await sendToGoogleDrive(updatedFiles, updatedFolders);
+    await sendToGoogleDrive(updatedFiles, updatedFolders, { userEmail });
 
     toast.success(`Moved "${fileName}"`, { id: moveToastId });
     return true;
