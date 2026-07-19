@@ -50,7 +50,7 @@ function Faq() {
         {FAQS.map((item, i) => (
           <div key={i} className="border-b px-4 py-4 last:border-b-0">
             <div className="flex gap-2.5 text-[0.92rem] font-medium">
-              <span className="text-[#3182ce]">+</span>
+              <span className="text-[hsl(var(--link))]">+</span>
               <span>{item.q}</span>
             </div>
             <p className="mt-2 pl-[22px] text-sm font-light leading-relaxed">

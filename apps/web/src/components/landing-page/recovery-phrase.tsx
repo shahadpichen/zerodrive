@@ -71,7 +71,7 @@ function RecoveryPhrase() {
               key={i}
               className="relative pl-6 text-sm font-light leading-relaxed"
             >
-              <span className="absolute left-0 text-[#3182ce]">→</span>
+              <span className="absolute left-0 text-[hsl(var(--link))]">→</span>
               {point}
             </li>
           ))}

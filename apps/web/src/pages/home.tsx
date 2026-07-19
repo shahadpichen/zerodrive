@@ -548,7 +548,7 @@ function HomeContent() {
               <span>Recent files</span>
               <button
                 onClick={() => navigate("/storage")}
-                className="text-xs text-[#3182ce] hover:underline"
+                className="text-xs text-[hsl(var(--link))] hover:underline"
               >
                 View all →
               </button>
@@ -629,7 +629,7 @@ function HomeContent() {
                   {isSharingIdentityActive
                     ? "Ready to send and receive private shares."
                     : "Needed for private shared files."}{" "}
-                  <span className="text-[#3182ce]">
+                  <span className="text-[hsl(var(--link))]">
                     {isSharingIdentityActive ? "Share →" : "Set up →"}
                   </span>
                 </div>

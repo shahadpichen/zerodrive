@@ -32,6 +32,7 @@ body {
     --accent: 166 48% 91%;
     --accent-foreground: 40 0% 5%;
     --accent-border: 212 50% 75%;
+    --link: 209 61.6% 50%;
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 40 0% 5%;
     --border: 35 7% 68%;
@@ -45,26 +46,27 @@ body {
     --radius: 0rem;
   }
   .dark {
-    --background: 0, 0%, 0%;
-    --foreground: 30, 20%, 90%;
-    --card: 0, 0%, 15%;
-    --card-foreground: 30, 20%, 90%;
-    --popover: 240 10% 3.9%;
-    --popover-foreground: 30, 20%, 90%;
-    --primary: 0, 0%, 0%;
-    --primary-foreground: 240 5.9% 10%;
-    --secondary: 12 58% 82%;
-    --secondary-foreground: 240 5.9% 10%;
-    --muted: 240 3.7% 15.9%;
-    --muted-foreground: 240 5% 64.9%;
-    --accent: 240 3.7% 15.9%;
-    --accent-foreground: 30, 20%, 90%;
-    --accent-border: 240 3.7% 15.9%;
+    --background: 24 10% 7%;
+    --foreground: 216 12.2% 83.9%;
+    --card: 12 6.5% 15.1%;
+    --card-foreground: 0 0% 100%;
+    --popover: 30 6.5% 12.2%;
+    --popover-foreground: 216 12.2% 83.9%;
+    --primary: 0 0% 100%;
+    --primary-foreground: 24 9.8% 10%;
+    --secondary: 12 6.5% 15.1%;
+    --secondary-foreground: 0 0% 100%;
+    --muted: 12 6.5% 15.1%;
+    --muted-foreground: 218 10.6% 64.9%;
+    --accent: 12 6.5% 15.1%;
+    --accent-foreground: 0 0% 100%;
+    --accent-border: 24 5.2% 19%;
+    --link: 31 40.7% 62.9%;
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 0 0% 98%;
-    --border: 240 3.7% 15.9%;
-    --input: 240 3.7% 15.9%;
-    --ring: 240 4.9% 83.9%;
+    --border: 24 5.2% 19%;
+    --input: 24 5.2% 19%;
+    --ring: 216 12.2% 83.9%;
     --chart-1: 220 70% 50%;
     --chart-2: 160 60% 45%;
     --chart-3: 30 80% 55%;
@@ -83,7 +85,7 @@ body {
 }
 
 u {
-  color: #3182ce;
+  color: hsl(var(--link));
 }
 
 #google-signin-button div:hover {
