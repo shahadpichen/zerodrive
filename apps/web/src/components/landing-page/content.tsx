@@ -1,18 +1,18 @@
 export const content = [
   {
-    heading: "It’s Time to Secure Your Google Drive Files",
+    heading: "An Encryption Layer for Your Google Drive",
     description:
-      "Google Drive is convenient, but it lacks the privacy many users need. Our tool provides <u>end-to-end encryption</u>, ensuring that your files are <u>encrypted</u> on your device before they even leave. This way, only you can access them, no matter where they are stored. Your data remains <u>private</u> and <u>secure</u>, giving you peace of mind.",
+      "ZeroDrive does not replace your Google Drive. It adds a <u>private encryption layer</u> on top of it. When you upload a file, your browser encrypts it first, then saves only the encrypted version to your own Google Drive. Google stores the protected copy, while the readable file stays on your device.",
   },
   {
-    heading: "Take Full Control with Open Source",
+    heading: "Your Storage, Your Keys, Open Source",
     description:
-      "As an <u>open source</u> solution, our tool puts you in the driver's seat. You can review, customize, and even host the tool on your own servers to ensure it meets your specific needs. With us, you're not just a user—you have complete control over your <u>data security</u>.",
+      "Your files stay in the Google account you already control, and your encryption keys are created in your browser. ZeroDrive is <u>open source</u>, so the encryption flow can be reviewed, self-hosted, or improved by the community. The goal is simple: keep the convenience of Google Drive, but make the file contents private before they reach storage.",
   },
   {
-    heading: "Anonymous File Sharing",
+    heading: "Encrypted Sharing Without Sender Records",
     description:
-      "ZeroDrive uses a <u>12-word recovery phrase</u> to generate your encryption keys, keeping your identity and files fully under your control. You can securely share encrypted files with other users via email using <u>public-key cryptography</u>, so only the intended recipient can decrypt them. If a recipient isn’t on ZeroDrive yet, they’ll receive an <u>email invitation</u> to join and access the file. All your keys can also be backed up to Google Drive (encrypted), letting you recover access from any device.",
+      "Sharing works the same way: your browser encrypts the shared copy before upload, then locks it with the recipient’s <u>public sharing key</u>. The server can help route the encrypted share, but the share record does not store a sender user ID, sender email, or plaintext recipient email. The recipient’s browser uses their private key to unlock the file.\n\nYour <u>12-word recovery phrase</u> is what recreates the private keys this browser needs to open your encrypted files and restore encrypted key backups on another device. It is not stored by ZeroDrive and cannot be reset, so it should be saved somewhere safe.",
   },
   {
     description:

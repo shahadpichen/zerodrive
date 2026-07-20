@@ -90,10 +90,10 @@ function LandingPage({ onAuthChange }: LandingPageProps) {
             <h2 className="text-2xl text-center mb-[20px]">
               {section.heading}
             </h2>
-            <Markdown className="inline-block text-left md:w-[85%] font-light text-base ">
+            <Markdown className="inline-block text-left md:w-[85%] font-light text-base [&>p+p]:mt-5">
               {section.description}
             </Markdown>
-            {section.heading === "Anonymous File Sharing" && <RecoveryPhrase />}
+            {index === 2 && <RecoveryPhrase />}
           </div>
         ))}
       </div>
