@@ -389,7 +389,7 @@ function PrivateStorageContent() {
     setHasVaultKey(!!key);
     if (userEmail) setVaultKeyStatus(userEmail, !!key);
     if (!key) {
-      toast.info("Set up vault access first", {
+      toast.info("Set up Recovery & Access first", {
         description:
           "Create a new recovery phrase or enter your existing one before uploading files.",
       });
@@ -442,7 +442,7 @@ function PrivateStorageContent() {
     setHasVaultKey(!!key);
     setVaultKeyStatus(userEmail, !!key);
     if (!key) {
-      toast.info("Set up vault access first", {
+      toast.info("Set up Recovery & Access first", {
         description:
           "Create a new recovery phrase or enter your existing one before uploading files.",
       });

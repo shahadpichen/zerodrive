@@ -5,6 +5,7 @@ import ShareFilesPage from "../../pages/share-files";
 import { AppProvider } from "../../contexts/app-context";
 import {
   fetchRecipientPublicKey,
+  fetchUserPublicKey,
   prepareFileForSharing,
   storeFileShare,
 } from "../../utils/fileSharing";
@@ -23,6 +24,7 @@ import {
 } from "../../utils/dexieDB";
 import { decryptFile } from "../../utils/decryptFile";
 import { pinRecipientKey } from "../../utils/recipientKeyPins";
+import { getStoredKey } from "../../utils/cryptoUtils";
 
 const mockNavigate = jest.fn();
 
@@ -112,6 +114,9 @@ const mockGetMnemonic = getMnemonic as jest.MockedFunction<typeof getMnemonic>;
 const mockFetchPublicKey = fetchRecipientPublicKey as jest.MockedFunction<
   typeof fetchRecipientPublicKey
 >;
+const mockFetchOwnPublicKey = fetchUserPublicKey as jest.MockedFunction<
+  typeof fetchUserPublicKey
+>;
 const mockPrepareFile = prepareFileForSharing as jest.MockedFunction<
   typeof prepareFileForSharing
 >;
@@ -138,6 +143,9 @@ const mockGetStoredFiles = getAllFilesForUser as jest.MockedFunction<
   typeof getAllFilesForUser
 >;
 const mockDecryptFile = decryptFile as jest.MockedFunction<typeof decryptFile>;
+const mockGetStoredKey = getStoredKey as jest.MockedFunction<
+  typeof getStoredKey
+>;
 
 function renderPage() {
   return render(
@@ -175,6 +183,7 @@ describe("ShareFilesPage", () => {
     mockHasGoogleTokens.mockReturnValue(true);
     mockInitializeGapi.mockResolvedValue(undefined);
     mockGetGoogleAccessToken.mockResolvedValue("google-token");
+    mockGetStoredKey.mockResolvedValue({} as CryptoKey);
     mockFetchStorageMetadata.mockResolvedValue(undefined);
     mockGetStoredFiles.mockResolvedValue([]);
     mockDecryptFile.mockResolvedValue(
@@ -188,6 +197,7 @@ describe("ShareFilesPage", () => {
       recovered: false,
       keysExisted: true,
     });
+    mockFetchOwnPublicKey.mockResolvedValue(null);
     mockFetchPublicKey.mockResolvedValue({
       public_key: JSON.stringify({ kty: "RSA" }),
       key_version: 1,
@@ -264,14 +274,17 @@ describe("ShareFilesPage", () => {
     );
   });
 
-  it("asks for the recovery phrase before exposing the share form", async () => {
-    mockGetMnemonic.mockReturnValue(null);
+  it("routes missing vault access through Recovery & Access", async () => {
+    mockGetStoredKey.mockResolvedValue(null);
     renderPage();
 
     expect(
-      await screen.findByText("Unlock your sharing keys"),
+      await screen.findByText("Set up Recovery & Access first"),
     ).toBeInTheDocument();
-    expect(screen.getByLabelText("Recovery phrase")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /set up access/i }));
+    expect(mockNavigate).toHaveBeenCalledWith(
+      "/recovery-access?returnTo=%2Fshare",
+    );
     expect(screen.queryByLabelText("File to share")).not.toBeInTheDocument();
   });
 

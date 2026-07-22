@@ -798,12 +798,11 @@ export const FileList: React.FC<FileListProps> = ({
             {hasVaultKey === false ? (
               <>
                 <p className="text-lg font-semibold">
-                  Set up vault access first.
+                  Set up Recovery & Access first.
                 </p>
                 <p className="mx-auto mt-3 max-w-xl text-sm font-light leading-relaxed text-muted-foreground">
-                  This browser does not have vault access yet. Create a new
-                  recovery phrase or enter an existing one before uploading
-                  encrypted files.
+                  Create a new recovery phrase or enter an existing one before
+                  uploading encrypted files.
                 </p>
                 <p className="mx-auto mt-2 max-w-xl text-sm font-light leading-relaxed text-muted-foreground">
                   After access is active, ZeroDrive can encrypt files here in
