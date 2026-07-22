@@ -9,9 +9,9 @@ import {
   downloadEncryptedFile,
 } from "../../utils/fileSharing";
 import { getStoredKey } from "../../utils/cryptoUtils";
-import { getUserKeyPair, userHasStoredKeys } from "../../utils/keyStorage";
+import { getUserKeyPair } from "../../utils/keyStorage";
 import { uploadAndSyncFile } from "../../utils/fileOperations";
-import { getMnemonic, setMnemonic } from "../../utils/mnemonicManager";
+import { getMnemonic } from "../../utils/mnemonicManager";
 import { downloadEncryptedRsaKeyFromDrive } from "../../utils/gdriveKeyStorage";
 import { decryptRsaPrivateKeyWithAesKey } from "../../utils/rsaKeyManager";
 import { fetchAndStoreFileMetadata } from "../../utils/dexieDB";
@@ -49,7 +49,6 @@ jest.mock("../../utils/cryptoUtils", () => ({
 
 jest.mock("../../utils/keyStorage", () => ({
   getUserKeyPair: jest.fn(),
-  userHasStoredKeys: jest.fn(),
 }));
 
 jest.mock("../../utils/fileOperations", () => ({
@@ -62,7 +61,6 @@ jest.mock("../../utils/dexieDB", () => ({
 
 jest.mock("../../utils/mnemonicManager", () => ({
   getMnemonic: jest.fn(),
-  setMnemonic: jest.fn(),
 }));
 
 jest.mock("../../utils/gdriveKeyStorage", () => ({
@@ -93,12 +91,8 @@ const mockGetStoredKey = getStoredKey as jest.MockedFunction<
   typeof getStoredKey
 >;
 const mockGetMnemonic = getMnemonic as jest.MockedFunction<typeof getMnemonic>;
-const mockSetMnemonic = setMnemonic as jest.MockedFunction<typeof setMnemonic>;
 const mockGetUserKeyPair = getUserKeyPair as jest.MockedFunction<
   typeof getUserKeyPair
->;
-const mockUserHasStoredKeys = userHasStoredKeys as jest.MockedFunction<
-  typeof userHasStoredKeys
 >;
 const mockDownloadKeyBackup =
   downloadEncryptedRsaKeyFromDrive as jest.MockedFunction<
@@ -170,7 +164,6 @@ describe("SharedWithMePage", () => {
       kty: "RSA",
       d: "private",
     });
-    mockUserHasStoredKeys.mockResolvedValue(true);
     mockGetMnemonic.mockReturnValue("valid recovery phrase");
     mockGetUserKeyPair.mockResolvedValue({
       publicKeyJwk: { kty: "RSA" },
@@ -208,15 +201,15 @@ describe("SharedWithMePage", () => {
     ).toBeInTheDocument();
   });
 
-  it("shows primary-key recovery as a clear prerequisite", async () => {
+  it("shows vault access as a clear prerequisite", async () => {
     mockGetStoredKey.mockResolvedValue(null);
     renderPage();
 
     expect(
-      await screen.findByText("Recover vault access first"),
+      await screen.findByText("Set up Recovery & Access first"),
     ).toBeInTheDocument();
     fireEvent.click(
-      screen.getByRole("button", { name: /open recovery & access/i }),
+      screen.getByRole("button", { name: /set up access/i }),
     );
     expect(mockNavigate).toHaveBeenCalledWith(
       "/recovery-access?returnTo=%2Fshared-with-me",
@@ -225,12 +218,12 @@ describe("SharedWithMePage", () => {
 
   it("directs users to sharing setup when recipient keys are missing", async () => {
     mockDownloadKeyBackup.mockRejectedValue(new Error("Backup not found"));
-    mockUserHasStoredKeys.mockResolvedValue(false);
-    mockGetMnemonic.mockReturnValue(null);
+    mockGetMnemonic.mockReturnValue("valid recovery phrase");
+    mockGetUserKeyPair.mockResolvedValue(null);
     renderPage();
 
     expect(
-      await screen.findByText("Create your receiving identity"),
+      await screen.findByText("Create your sharing identity"),
     ).toBeInTheDocument();
     fireEvent.click(
       screen.getByRole("button", { name: /create sharing identity/i }),
@@ -250,38 +243,27 @@ describe("SharedWithMePage", () => {
       expect.any(Object),
     );
     expect(
-      screen.queryByText("Unlock files shared with you"),
+      screen.queryByText("Set up Recovery & Access first"),
     ).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: /^download$/i })).toBeEnabled();
   });
 
-  it("distinguishes an active file key from a locked sharing key", async () => {
+  it("uses Recovery & Access instead of an inline sharing-key unlock", async () => {
     mockDownloadKeyBackup.mockRejectedValue(new Error("Legacy local key"));
     mockGetMnemonic.mockReturnValue(null);
     showFiles();
     renderPage();
 
     expect(
-      await screen.findByText("Unlock files shared with you"),
+      await screen.findByText("Set up Recovery & Access first"),
     ).toBeInTheDocument();
-    expect(
-      screen.getByText(/vault key is active/i),
-    ).toBeInTheDocument();
-
-    fireEvent.change(screen.getByLabelText("Recovery phrase for sharing key"), {
-      target: { value: "valid recovery phrase" },
-    });
+    expect(screen.queryByLabelText(/recovery phrase/i)).not.toBeInTheDocument();
     fireEvent.click(
-      screen.getByRole("button", { name: /unlock sharing key/i }),
+      screen.getByRole("button", { name: /set up access/i }),
     );
-
-    await waitFor(() =>
-      expect(mockSetMnemonic).toHaveBeenCalledWith("valid recovery phrase"),
+    expect(mockNavigate).toHaveBeenCalledWith(
+      "/recovery-access?returnTo=%2Fshared-with-me",
     );
-    expect(
-      screen.queryByText("Unlock files shared with you"),
-    ).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /^download$/i })).toBeEnabled();
   });
 
   it("renders current backend metadata and separates file actions", async () => {

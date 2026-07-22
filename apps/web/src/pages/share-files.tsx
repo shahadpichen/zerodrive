@@ -4,8 +4,6 @@ import {
   AlertCircle,
   ArrowLeft,
   Check,
-  Eye,
-  EyeOff,
   FileUp,
   HardDrive,
   KeyRound,
@@ -24,6 +22,7 @@ import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
 import { Progress } from "../components/ui/progress";
 import { Textarea } from "../components/ui/textarea";
+import { VaultAccessRequired } from "../components/vault-access-required";
 import { useApp } from "../contexts/app-context";
 import { getFileIconPath } from "../lib/mime-types";
 import {
@@ -55,8 +54,8 @@ import { recoverRsaKeysIfNeeded } from "../utils/rsaKeyRecovery";
 
 type PageState =
   | "checking"
+  | "access"
   | "setup"
-  | "unlock"
   | "compose"
   | "review"
   | "invite"
@@ -66,7 +65,7 @@ type PageState =
 type ShareStage = "preparing" | "encrypting" | "uploading" | "finishing";
 type FileSource = "device" | "storage";
 
-type CachedShareSetupState = "compose" | "unlock";
+type CachedShareSetupState = "compose";
 
 const SHARE_SETUP_CACHE_KEY = "zerodrive-share-setup-cache";
 const SHARE_SETUP_CACHE_TTL = 5 * 60 * 1000;
@@ -106,9 +105,7 @@ function readCachedShareSetupState(email: string): CachedShareSetupState | null 
       return null;
     }
 
-    return parsed.state === "compose" || parsed.state === "unlock"
-      ? parsed.state
-      : null;
+    return parsed.state === "compose" ? parsed.state : null;
   } catch {
     return null;
   }
@@ -235,9 +232,6 @@ const ShareFilesPage: React.FC = () => {
     useState<DirectoryPublicKey | null>(null);
   const [customMessage, setCustomMessage] = useState("");
   const [showMessage, setShowMessage] = useState(false);
-  const [mnemonicInput, setMnemonicInput] = useState("");
-  const [showMnemonic, setShowMnemonic] = useState(false);
-  const [isVerifyingMnemonic, setIsVerifyingMnemonic] = useState(false);
   const [isGeneratingKeys, setIsGeneratingKeys] = useState(false);
   const [isSendingInvitation, setIsSendingInvitation] = useState(false);
   const [invitationSent, setInvitationSent] = useState(false);
@@ -275,18 +269,27 @@ const ShareFilesPage: React.FC = () => {
         setSenderEmail(email);
         setSenderLookupId(identity.data?.emailHash || "");
 
-        const result = await recoverRsaKeysIfNeeded(email, true);
+        const primaryKey = await getStoredKey();
+        if (!primaryKey) {
+          writeCachedShareSetupState(email, null);
+          setPageState("access");
+          return;
+        }
+
+        const [result, serverPublicKey] = await Promise.all([
+          recoverRsaKeysIfNeeded(email, true),
+          fetchUserPublicKey(email).catch(() => null),
+        ]);
         if (!active) return;
 
-        if (result.keysExisted || result.recovered) {
+        if (result.keysExisted || result.recovered || serverPublicKey) {
           const mnemonic = getMnemonic();
           if (mnemonic) {
             await syncPublicKeyIfNeeded(email, mnemonic);
           }
           if (active) {
-            const nextState = mnemonic ? "compose" : "unlock";
-            writeCachedShareSetupState(email, nextState);
-            setPageState(nextState);
+            writeCachedShareSetupState(email, "compose");
+            setPageState("compose");
           }
         } else {
           writeCachedShareSetupState(email, null);
@@ -370,28 +373,6 @@ const ShareFilesPage: React.FC = () => {
       );
     } finally {
       setIsGeneratingKeys(false);
-    }
-  };
-
-  const verifyMnemonic = async () => {
-    if (!mnemonicInput.trim() || !senderEmail || isVerifyingMnemonic) return;
-
-    setIsVerifyingMnemonic(true);
-    setShareError("");
-    try {
-      const keyPair = await getUserKeyPair(senderEmail, mnemonicInput.trim());
-      if (!keyPair) throw new Error("Sharing keys were not found");
-      await syncPublicKeyIfNeeded(senderEmail, mnemonicInput.trim());
-      writeCachedShareSetupState(senderEmail, "compose");
-      setPageState("compose");
-      toast.success("Sharing keys unlocked");
-    } catch (error) {
-      console.error("[Share] Mnemonic verification failed:", error);
-      setShareError(
-        "That recovery phrase could not unlock your sharing keys. Check it and try again.",
-      );
-    } finally {
-      setIsVerifyingMnemonic(false);
     }
   };
 
@@ -611,10 +592,10 @@ const ShareFilesPage: React.FC = () => {
   const handleShareFile = async () => {
     if (!hasSelectedFile || !senderEmail || !recipientVerified) return;
 
-    const mnemonic = getMnemonic() || mnemonicInput.trim();
-    if (!mnemonic) {
-      setShareError("Unlock your sharing keys before continuing.");
-      setPageState("unlock");
+    const primaryKey = await getStoredKey();
+    if (!primaryKey) {
+      setShareError("Set up vault access before sharing files.");
+      setPageState("access");
       return;
     }
 
@@ -629,7 +610,7 @@ const ShareFilesPage: React.FC = () => {
         fileToShare,
         recipientEmail,
         senderEmail,
-        mnemonic,
+        getMnemonic() || undefined,
         customMessage.trim() || undefined,
         recipientDirectoryKey || undefined,
       );
@@ -734,6 +715,15 @@ const ShareFilesPage: React.FC = () => {
       );
     }
 
+    if (pageState === "access") {
+      return (
+        <VaultAccessRequired
+          intent="share"
+          onSetUpAccess={openKeyManagement}
+        />
+      );
+    }
+
     if (pageState === "setup") {
       return (
         <div className="border">
@@ -798,79 +788,7 @@ const ShareFilesPage: React.FC = () => {
     }
 
     return (
-      <div className="border">
-        <div className="border-b p-6 sm:p-8">
-          <div className="flex h-10 w-10 items-center justify-center border">
-            <LockKeyhole className="h-5 w-5" />
-          </div>
-          <h2 className="mt-5 text-lg font-semibold">
-            Unlock your sharing keys
-          </h2>
-          <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted-foreground">
-            Enter your recovery phrase to use the encrypted sharing key stored
-            on this device.
-          </p>
-        </div>
-        <div className="space-y-4 p-6 sm:p-8">
-          <div className="space-y-2">
-            <Label htmlFor="share-mnemonic">Recovery phrase</Label>
-            <div className="relative">
-              <Input
-                id="share-mnemonic"
-                type={showMnemonic ? "text" : "password"}
-                value={mnemonicInput}
-                onChange={(event) => {
-                  setMnemonicInput(event.target.value);
-                  setShareError("");
-                }}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") verifyMnemonic();
-                }}
-                placeholder="Enter your 12-word recovery phrase"
-                className="pr-10"
-                autoComplete="off"
-                disabled={isVerifyingMnemonic}
-              />
-              <button
-                type="button"
-                onClick={() => setShowMnemonic((visible) => !visible)}
-                className="absolute inset-y-0 right-0 flex w-10 items-center justify-center text-muted-foreground hover:text-foreground"
-                aria-label={
-                  showMnemonic ? "Hide recovery phrase" : "Show recovery phrase"
-                }
-              >
-                {showMnemonic ? <EyeOff /> : <Eye />}
-              </button>
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Used only in this tab and never sent to the server.
-            </p>
-          </div>
-          {renderError()}
-          <div className="flex flex-col gap-2 sm:flex-row">
-            <Button
-              onClick={verifyMnemonic}
-              disabled={!mnemonicInput.trim() || isVerifyingMnemonic}
-            >
-              {isVerifyingMnemonic ? (
-                <>
-                  <Loader2 className="animate-spin" />
-                  Unlocking
-                </>
-              ) : (
-                "Unlock sharing"
-              )}
-            </Button>
-            <Button
-              variant="outline"
-              onClick={openKeyManagement}
-              disabled={isVerifyingMnemonic}
-            >
-              Open Recovery & Access
-            </Button>
-          </div>
-        </div>
-      </div>
+      <VaultAccessRequired intent="share" onSetUpAccess={openKeyManagement} />
     );
   };
 
@@ -1172,7 +1090,7 @@ const ShareFilesPage: React.FC = () => {
                 />
                 <div className="flex justify-between text-xs text-muted-foreground">
                   <span>
-                    Adding a message sends the recipient an email notification.
+                    The message stays encrypted. The email notification stays generic.
                   </span>
                   <span>{customMessage.length}/500</span>
                 </div>
@@ -1244,10 +1162,13 @@ const ShareFilesPage: React.FC = () => {
           </div>
           <div className="grid gap-1 px-5 py-4 sm:grid-cols-[140px_1fr]">
             <dt className="text-xs text-muted-foreground">Notification</dt>
-            <dd className="text-sm">
-              {customMessage.trim()
-                ? "Email notification with your message"
-                : "No email notification"}
+            <dd className="space-y-1 text-sm">
+              <span>Generic email notification</span>
+              {customMessage.trim() && (
+                <span className="block text-xs text-muted-foreground">
+                  Your message is included only inside the encrypted share.
+                </span>
+              )}
             </dd>
           </div>
           {customMessage.trim() && (
@@ -1463,7 +1384,7 @@ const ShareFilesPage: React.FC = () => {
   );
 
   const renderContent = () => {
-    if (["checking", "setup", "unlock"].includes(pageState)) {
+    if (["checking", "access", "setup"].includes(pageState)) {
       return renderPrerequisite();
     }
     if (pageState === "compose") return renderCompose();

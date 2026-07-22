@@ -22,6 +22,14 @@ import {
   DropdownMenuTrigger,
 } from "../components/ui/dropdown-menu";
 import { Progress } from "../components/ui/progress";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "../components/ui/dialog";
 import { getFileIconPath } from "../lib/mime-types";
 import {
   FileMeta,
@@ -53,6 +61,8 @@ import {
   writeCachedHomeDashboard,
 } from "../utils/homeDashboardCache";
 import { useVaultData } from "../contexts/vault-data-context";
+
+type LockedSharingDestination = "share" | "inbox";
 
 function formatBytes(bytes: number) {
   if (!bytes || bytes === 0) return "0 B";
@@ -143,6 +153,8 @@ function HomeContent() {
   );
   const [isVaultStateLoading, setIsVaultStateLoading] =
     useState(!warmVaultSetup);
+  const [lockedSharingDestination, setLockedSharingDestination] =
+    useState<LockedSharingDestination | null>(null);
 
   useEffect(() => {
     if (showLoginWelcome) {
@@ -313,6 +325,15 @@ function HomeContent() {
   const nextTask = incompleteTasks.find((task) => !task.optional);
   const sharingTask = vaultSetup?.tasks.find((task) => task.id === "sharing");
   const isSharingIdentityActive = !!sharingTask?.complete;
+  const hasVaultAccess = vaultSetup
+    ? vaultSetup.status !== "needs_key"
+    : hasWarmVaultState && !!sharedVaultState.hasVaultKey;
+  const shouldHoldSharingDestinations = isVaultStateLoading || !hasVaultAccess;
+  const shouldGateSharingDestinations =
+    !isVaultStateLoading && !hasVaultAccess;
+
+  const sharingDestinationPath = (destination: LockedSharingDestination) =>
+    destination === "inbox" ? "/shared-with-me" : "/share";
 
   const handleDismissGuidance = () => {
     dismissOnboardingGuidance();
@@ -330,15 +351,25 @@ function HomeContent() {
     },
     {
       title: "Share Files",
-      subtitle: "Send encrypted files by email",
+      subtitle: isVaultStateLoading
+        ? "Checking access"
+        : shouldGateSharingDestinations
+          ? "Set up access first"
+          : "Send encrypted files by email",
       icon: Send,
       path: "/share",
+      lockedDestination: "share" as const,
     },
     {
       title: "Shared With Me",
-      subtitle: "Files others sent you",
+      subtitle: isVaultStateLoading
+        ? "Checking access"
+        : shouldGateSharingDestinations
+          ? "Set up access first"
+          : "Files others sent you",
       icon: Inbox,
       path: "/shared-with-me",
+      lockedDestination: "inbox" as const,
     },
     {
       title: "Recovery & Access",
@@ -357,6 +388,63 @@ function HomeContent() {
         ]
       : []),
   ];
+  const lockedDialogCopy =
+    isVaultStateLoading
+      ? {
+          title: "Checking Recovery & Access",
+          description:
+            "ZeroDrive is checking whether this session already has the recovery key needed for sharing.",
+          returnTo: sharingDestinationPath(lockedSharingDestination || "share"),
+        }
+      : lockedSharingDestination === "inbox"
+      ? {
+          title: "Set up Recovery & Access first",
+          description:
+            "Create or enter your recovery phrase so ZeroDrive can open shared files locally or save encrypted copies to Storage. After that, ZeroDrive will bring you back here.",
+          returnTo: "/shared-with-me",
+        }
+      : {
+          title: "Set up Recovery & Access first",
+          description:
+            "Create or enter your recovery phrase so ZeroDrive can encrypt files locally for the recipient. After that, ZeroDrive will bring you back here.",
+          returnTo: "/share",
+        };
+
+  useEffect(() => {
+    if (!lockedSharingDestination || isVaultStateLoading || !hasVaultAccess) {
+      return;
+    }
+
+    const destination = sharingDestinationPath(lockedSharingDestination);
+    setLockedSharingDestination(null);
+    navigate(destination);
+  }, [
+    hasVaultAccess,
+    isVaultStateLoading,
+    lockedSharingDestination,
+    navigate,
+  ]);
+
+  const openSharingDestination = (destination: LockedSharingDestination) => {
+    if (shouldHoldSharingDestinations) {
+      setLockedSharingDestination(destination);
+      return;
+    }
+
+    navigate(sharingDestinationPath(destination));
+  };
+
+  const openNavCard = (card: (typeof navCards)[number]) => {
+    if (
+      card.lockedDestination &&
+      (card.lockedDestination === "share" ||
+        card.lockedDestination === "inbox")
+    ) {
+      openSharingDestination(card.lockedDestination);
+      return;
+    }
+    navigate(card.path);
+  };
 
   return (
     <div className="container mx-auto w-full relative min-h-screen bg-background text-foreground">
@@ -522,15 +610,24 @@ function HomeContent() {
         <div className="mt-8 grid gap-4 sm:grid-cols-2">
           {navCards.map((card) => {
             const Icon = card.icon;
+            const isSoftLocked =
+              !!card.lockedDestination && shouldHoldSharingDestinations;
             return (
               <button
                 key={card.title}
-                onClick={() => navigate(card.path)}
+                onClick={() => openNavCard(card)}
                 className="flex items-center gap-4 border p-5 text-left transition-colors hover:bg-muted/50"
               >
                 <Icon className="h-6 w-6 flex-shrink-0 text-muted-foreground" />
                 <div className="min-w-0 flex-1">
-                  <div className="text-[15px] font-semibold">{card.title}</div>
+                  <div className="flex items-center gap-2 text-[15px] font-semibold">
+                    {card.title}
+                    {isSoftLocked && (
+                      <span className="border px-1.5 py-0.5 text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+                        {isVaultStateLoading ? "checking" : "locked"}
+                      </span>
+                    )}
+                  </div>
                   <div className="truncate text-xs font-light text-muted-foreground">
                     {card.subtitle}
                   </div>
@@ -613,7 +710,7 @@ function HomeContent() {
               </div>
             </div>
             <button
-              onClick={() => navigate("/share")}
+              onClick={() => openSharingDestination("share")}
               className="flex w-full items-start gap-2.5 px-5 py-3.5 text-left text-sm hover:bg-muted/50"
             >
               {isSharingIdentityActive ? (
@@ -638,6 +735,45 @@ function HomeContent() {
           </div>
         </div>
       </div>
+      <Dialog
+        open={!!lockedSharingDestination}
+        onOpenChange={(open) => {
+          if (!open) setLockedSharingDestination(null);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{lockedDialogCopy.title}</DialogTitle>
+            <DialogDescription className="leading-relaxed">
+              {lockedDialogCopy.description}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <button
+              type="button"
+              onClick={() => setLockedSharingDestination(null)}
+              className="border px-4 py-2 text-sm font-semibold hover:bg-muted/50"
+            >
+              Not now
+            </button>
+            <button
+              type="button"
+              disabled={isVaultStateLoading}
+              onClick={() => {
+                if (isVaultStateLoading) return;
+                navigate(
+                  `/recovery-access?returnTo=${encodeURIComponent(
+                    lockedDialogCopy.returnTo,
+                  )}`,
+                );
+              }}
+              className="border bg-foreground px-4 py-2 text-sm font-semibold text-background hover:bg-foreground/90 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {isVaultStateLoading ? "Checking..." : "Set up access"}
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

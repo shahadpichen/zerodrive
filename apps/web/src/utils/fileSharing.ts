@@ -332,12 +332,12 @@ export async function encryptSharedMetadata(
  * 2. Encrypting the file content with this key.
  * 3. Hashing the recipient's email.
  * 4. Encrypting the file key for the recipient using their public key.
- * 5. Generating a sender identity proof.
+ * 5. Preparing encrypted metadata and upload identifiers.
  *
  * @param file The file to be shared.
  * @param recipientEmail The email address of the intended recipient.
  * @param senderEmail The email address of the sender (used for generating sender proof).
- * @param mnemonic The mnemonic phrase used to decrypt sender's RSA private key.
+ * @param mnemonic Optional recovery phrase for legacy sender-key compatibility.
  * @param customMessage Optional custom message to include with the shared file.
  * @returns A Promise that resolves to a FilePreparationResult object containing all necessary components.
  */
@@ -345,7 +345,7 @@ export async function prepareFileForSharing(
   file: File,
   recipientEmail: string,
   senderEmail: string,
-  mnemonic: string,
+  mnemonic?: string,
   customMessage?: string,
   pinnedRecipientKey?: DirectoryPublicKey,
 ): Promise<{
@@ -363,12 +363,16 @@ export async function prepareFileForSharing(
   recipientKeyFingerprint: string;
 }> {
   try {
-    // Get the sender's private key (requires mnemonic to decrypt)
-    const senderKeyPair = await getUserKeyPair(senderEmail, mnemonic);
-    if (!senderKeyPair) {
-      throw new Error(
-        "Sender private key not found. Please generate your keys first.",
-      );
+    // Sender identity is intentionally not stored in the share record. Older
+    // browser sessions may still have a locally encrypted sender key, so verify
+    // it opportunistically when the recovery phrase is already active, but do
+    // not require a separate "unlock sharing" step for sending.
+    if (mnemonic) {
+      try {
+        await getUserKeyPair(senderEmail, mnemonic);
+      } catch (error) {
+        logger.warn("[FILE-SHARE] Sender key check skipped", error);
+      }
     }
 
     // We don't need to import the sender's private key for this operation,

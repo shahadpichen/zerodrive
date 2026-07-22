@@ -4,8 +4,6 @@ import {
   AlertCircle,
   Check,
   Download,
-  Eye,
-  EyeOff,
   HardDrive,
   Inbox,
   KeyRound,
@@ -16,6 +14,7 @@ import {
 } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
+import { VaultAccessRequired } from "../components/vault-access-required";
 import { getFileIconPath } from "../lib/mime-types";
 import {
   arrayBufferToBase64,
@@ -23,12 +22,12 @@ import {
   decryptSharedMetadata,
   downloadEncryptedFile,
 } from "../utils/fileSharing";
-import { getUserKeyPair, userHasStoredKeys } from "../utils/keyStorage";
+import { getUserKeyPair } from "../utils/keyStorage";
 import apiClient from "../utils/apiClient";
 import { getStoredKey } from "../utils/cryptoUtils";
 import { fetchAndStoreFileMetadata } from "../utils/dexieDB";
 import { uploadAndSyncFile } from "../utils/fileOperations";
-import { getMnemonic, setMnemonic } from "../utils/mnemonicManager";
+import { getMnemonic } from "../utils/mnemonicManager";
 import { downloadEncryptedRsaKeyFromDrive } from "../utils/gdriveKeyStorage";
 import { decryptRsaPrivateKeyWithAesKey } from "../utils/rsaKeyManager";
 import { readRecipientKeyVersion } from "@zerodrive/crypto";
@@ -41,8 +40,7 @@ type KeyState =
   | "checking"
   | "ready"
   | "primary-missing"
-  | "sharing-missing"
-  | "mnemonic-missing";
+  | "sharing-missing";
 
 type FileAction = "download" | "save";
 type ActionStage = "downloading" | "decrypting" | "saving";
@@ -122,10 +120,6 @@ const SharedWithMePage: React.FC = () => {
   const [loadError, setLoadError] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [savedFileIds, setSavedFileIds] = useState<Set<string>>(new Set());
-  const [mnemonicInput, setMnemonicInput] = useState("");
-  const [showMnemonic, setShowMnemonic] = useState(false);
-  const [isUnlocking, setIsUnlocking] = useState(false);
-  const [unlockError, setUnlockError] = useState("");
   const [processing, setProcessing] = useState<{
     fileId: string;
     action: FileAction;
@@ -262,11 +256,8 @@ const SharedWithMePage: React.FC = () => {
                 setKeyState("sharing-missing");
               }
             } else {
-              const hasLegacyLocalKey = await userHasStoredKeys(email);
               if (!active) return;
-              setKeyState(
-                hasLegacyLocalKey ? "mnemonic-missing" : "sharing-missing",
-              );
+              setKeyState("primary-missing");
             }
           }
         }
@@ -431,143 +422,46 @@ const SharedWithMePage: React.FC = () => {
     }
   };
 
-  const unlockSharingKey = async () => {
-    const mnemonic = mnemonicInput.trim();
-    if (!mnemonic || !userEmail || isUnlocking) return;
-
-    setIsUnlocking(true);
-    setUnlockError("");
-    try {
-      const keyPair = await getUserKeyPair(userEmail, mnemonic);
-      if (!keyPair?.privateKeyJwk) {
-        throw new Error("Sharing key not found");
-      }
-      setMnemonic(mnemonic);
-      setSharingPrivateKey(keyPair.privateKeyJwk);
-      setMnemonicInput("");
-      setKeyState("ready");
-      toast.success("Sharing key unlocked");
-    } catch (error) {
-      console.error("[SharedWithMe] Sharing-key unlock failed:", error);
-      setUnlockError(
-        "That recovery phrase could not unlock your sharing key. Check it and try again.",
-      );
-    } finally {
-      setIsUnlocking(false);
-    }
-  };
-
   const renderKeyStatus = () => {
     if (keyState === "checking" || keyState === "ready") return null;
 
-    if (keyState === "mnemonic-missing") {
-      return (
-        <div className="border p-5">
-          <div className="flex items-start gap-3">
-            <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center border">
-              <KeyRound className="h-4 w-4" />
-            </span>
-            <div className="min-w-0 flex-1">
-              <h2 className="text-sm font-semibold">
-                Unlock files shared with you
-              </h2>
-              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                Your vault key is active, but this browser still needs your
-                recovery phrase to unlock files sent to this account.
-              </p>
-
-              <div className="mt-4 flex flex-col gap-2 sm:flex-row">
-                <div className="relative min-w-0 flex-1">
-                  <Input
-                    type={showMnemonic ? "text" : "password"}
-                    value={mnemonicInput}
-                    onChange={(event) => {
-                      setMnemonicInput(event.target.value);
-                      setUnlockError("");
-                    }}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter") void unlockSharingKey();
-                    }}
-                    placeholder="Enter your recovery phrase"
-                    aria-label="Recovery phrase for sharing key"
-                    className="pr-10"
-                    autoComplete="off"
-                    disabled={isUnlocking}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowMnemonic((visible) => !visible)}
-                    className="absolute inset-y-0 right-0 flex w-10 items-center justify-center text-muted-foreground hover:text-foreground"
-                    aria-label={
-                      showMnemonic
-                        ? "Hide recovery phrase"
-                        : "Show recovery phrase"
-                    }
-                  >
-                    {showMnemonic ? <EyeOff /> : <Eye />}
-                  </button>
-                </div>
-                <Button
-                  size="sm"
-                  onClick={unlockSharingKey}
-                  disabled={!mnemonicInput.trim() || isUnlocking}
-                >
-                  {isUnlocking ? (
-                    <Loader2 className="animate-spin" />
-                  ) : (
-                    <KeyRound />
-                  )}
-                  {isUnlocking ? "Unlocking" : "Unlock sharing key"}
-                </Button>
-              </div>
-
-              {unlockError && (
-                <p className="mt-2 text-xs text-destructive" role="alert">
-                  {unlockError}
-                </p>
-              )}
-            </div>
-          </div>
-        </div>
-      );
-    }
-
     const content = {
       "primary-missing": {
-        title: "Recover vault access first",
-        description:
-          "Files in this inbox stay encrypted until this browser has your vault key. Enter your recovery phrase to continue.",
-        action: "Open Recovery & Access",
-        onClick: () =>
-          navigate("/recovery-access?returnTo=%2Fshared-with-me"),
+        component: (
+          <VaultAccessRequired
+            intent="inbox"
+            onSetUpAccess={() =>
+              navigate("/recovery-access?returnTo=%2Fshared-with-me")
+            }
+          />
+        ),
       },
       "sharing-missing": {
-        title: "Create your receiving identity",
-        description:
-          "ZeroDrive needs a recipient key for this account before other people can send files that only you can unlock.",
-        action: "Create sharing identity",
-        onClick: () => navigate("/share"),
+        component: (
+          <div className="flex flex-col gap-4 border p-5 sm:flex-row sm:items-center">
+            <div className="flex min-w-0 flex-1 items-start gap-3">
+              <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center border">
+                <KeyRound className="h-4 w-4" />
+              </span>
+              <div>
+                <h2 className="text-sm font-semibold">
+                  Create your sharing identity
+                </h2>
+                <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                  ZeroDrive needs a receiving key before other people can send
+                  files that only you can unlock.
+                </p>
+              </div>
+            </div>
+            <Button onClick={() => navigate("/share")} size="sm">
+              Create sharing identity
+            </Button>
+          </div>
+        ),
       },
     }[keyState];
 
-    return (
-      <div className="flex flex-col gap-4 border p-5 sm:flex-row sm:items-center">
-        <div className="flex min-w-0 flex-1 items-start gap-3">
-          <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center border">
-            <KeyRound className="h-4 w-4" />
-          </span>
-          <div>
-            <h2 className="text-sm font-semibold">{content.title}</h2>
-            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-              {content.description}
-            </p>
-          </div>
-        </div>
-        <Button onClick={content.onClick} size="sm">
-          {content.action}
-        </Button>
-      </div>
-    );
+    return content.component;
   };
 
   const actionLabel = (fileId: string, action: FileAction) => {

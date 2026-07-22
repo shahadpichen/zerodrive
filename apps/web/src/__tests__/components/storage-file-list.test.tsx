@@ -176,10 +176,10 @@ describe("Storage FileList empty state", () => {
     );
 
     expect(
-      await screen.findByText("Set up vault access first."),
+      await screen.findByText("Set up Recovery & Access first."),
     ).toBeInTheDocument();
     expect(
-      screen.getByText(/does not have vault access yet/i),
+      screen.getByText(/create a new recovery phrase/i),
     ).toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: /upload first encrypted file/i }),

@@ -1,5 +1,11 @@
 import React from "react";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import Home from "../../pages/home";
 import {
@@ -230,6 +236,16 @@ describe("Home guided vault setup", () => {
       screen.getByText("Setting up your private vault"),
     ).toBeInTheDocument();
     expect(screen.queryByText(/Welcome back/i)).not.toBeInTheDocument();
+  });
+
+  it("holds Share Files clicks while access state is still loading", () => {
+    renderHome();
+
+    fireEvent.click(screen.getByRole("button", { name: /share files/i }));
+
+    expect(screen.getByText("Checking Recovery & Access")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /checking/i })).toBeDisabled();
+    expect(mockNavigate).not.toHaveBeenCalledWith("/share");
   });
 
   it("shows the login welcome only for the first Home visit after sign-in", async () => {
