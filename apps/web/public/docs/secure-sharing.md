@@ -1,12 +1,12 @@
 <h2 id="sharing-flow">The sharing flow</h2>
 
-When Alice shares with Bob, Alice does not share her master key. Her browser creates a new file key for the shared file and locks that file key for Bob.
+When Alice shares with Bob, Alice does not share her recovery phrase or personal-vault key. Her browser creates a Capsule v1 object with a fresh data key and wraps access to that Capsule for Bob’s public sharing key.
 
 In plain language, the shared file gets its own temporary lock. Bob receives the ability to open that one lock, but he does not receive Alice’s main ZeroDrive key and he does not get access to Alice’s Google Drive.
 
 This is safer than sending someone your recovery phrase or uploading an unencrypted attachment somewhere else. The share is prepared for one recipient, and the file content is still encrypted before it reaches storage.
 
-The flow is: Alice chooses a file, ZeroDrive finds Bob’s public sharing key, Alice’s browser encrypts the file, Alice’s browser locks the file key for Bob, and Bob’s browser unlocks it locally with Bob’s private key.
+The flow is: Alice chooses a file, ZeroDrive finds Bob’s public sharing key, Alice’s browser creates the recipient-encrypted content and metadata Capsules, and Bob’s browser opens them locally with the matching private key.
 
 The server helps coordinate the process, but it should not see the readable file or the unencrypted file key.
 
@@ -16,9 +16,9 @@ Metadata is the information around a file. The file content might be private, bu
 
 For example, a name like `medical-report.pdf`, `passport-scan.png`, or `company-acquisition-plan.docx` can be sensitive even before the file is opened.
 
-ZeroDrive’s sharing design should avoid storing those readable details in the database. Instead, the app stores encrypted metadata, so the recipient can read it after decryption but a database dump should not expose it directly.
+ZeroDrive’s sharing design avoids storing those readable details in the database. Instead, the app stores a small recipient-encrypted metadata Capsule, so the inbox can reveal the details locally without downloading the full content object and a database dump does not expose them directly.
 
-A share record still needs some information to work. It may store encrypted metadata, a file key locked for the recipient, a random-looking storage key, status, expiry, timestamps, and retry state. Those are coordination details, not the readable file itself.
+A Capsule v1 share record still needs some information to work. It stores the metadata Capsule, recipient key version and fingerprint, a random-looking storage key, status, expiry, timestamps, and retry state. Historical shares can still contain the older wrapped-key fields, but new Capsule shares do not use a separate database file-key envelope.
 
 <h2 id="key-pinning">Key pinning</h2>
 

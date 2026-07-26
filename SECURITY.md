@@ -1,11 +1,19 @@
 # Security model
 
+ZeroDrive writes personal files, vault indexes, shared files, shared metadata,
+and sharing-key backups with `@zerodrivehq/capsule` v1. Capsule creation and
+opening happen in the frontend. The recovery phrase remains in frontend memory
+for the active tab and is never sent to the API. Capsule’s legacy readers keep
+historical ZeroDrive objects readable; the application writes no legacy format.
+
 ZeroDrive provides recipient-exclusive, authenticated encryption. It does not
 provide cryptographic proof of sender identity.
 
-The sharing database stores a secret-derived recipient lookup ID, encrypted
-metadata, wrapped file keys, opaque object keys, lifecycle state, and anonymous
-management-capability hashes. It must never store sender account identifiers or
+For Capsule v1 shares, the sharing database stores a secret-derived recipient
+lookup ID, a recipient-encrypted metadata Capsule, recipient key version and
+fingerprint, opaque object keys, lifecycle state, and anonymous
+management-capability hashes. It stores wrapped file-key envelopes only for
+historical legacy shares. It must never store sender account identifiers or
 plaintext recipient email addresses. The directory HMAC secret must be supplied
 outside PostgreSQL and rotated only with a planned identifier migration.
 
@@ -19,7 +27,8 @@ reduce bulk probing but do not provide private contact discovery. Avoid treating
 directory membership as confidential until a capability-based or OPRF-based
 discovery protocol replaces direct email lookup.
 
-Browser key material is cleared on logout and account changes. Google refresh
+Browser key material is cleared on logout and account changes. A hard refresh
+or new tab requires recovery-phrase entry again. Google refresh
 tokens use HTTP-only cookies. An active same-origin XSS can still access
 decrypted files, short-lived access tokens, and keys currently in JavaScript
 memory, so CSP and dependency integrity remain part of the security boundary.
