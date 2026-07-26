@@ -76,7 +76,16 @@ CREATE TABLE IF NOT EXISTS shared_files (
     pending_expires_at TIMESTAMP WITH TIME ZONE,
     deletion_attempts INTEGER NOT NULL DEFAULT 0,
     deletion_last_error TEXT,
-    encrypted_file_key TEXT NOT NULL,
+    content_format VARCHAR(32) NOT NULL DEFAULT 'legacy_zdse'
+        CHECK (content_format IN ('legacy_zdse', 'capsule_v1')),
+    recipient_key_version INTEGER CHECK (
+        recipient_key_version IS NULL OR recipient_key_version > 0
+    ),
+    recipient_key_fingerprint CHAR(64) CHECK (
+        recipient_key_fingerprint IS NULL
+        OR recipient_key_fingerprint ~ '^[0-9a-f]{64}$'
+    ),
+    encrypted_file_key TEXT,
     file_name VARCHAR(500),
     file_size BIGINT NOT NULL,
     mime_type VARCHAR(200),
@@ -90,7 +99,22 @@ CREATE TABLE IF NOT EXISTS shared_files (
     CONSTRAINT shared_files_expected_size_positive
         CHECK (expected_encrypted_size IS NULL OR expected_encrypted_size > 0),
     CONSTRAINT shared_files_deletion_attempts_nonnegative
-        CHECK (deletion_attempts >= 0)
+        CHECK (deletion_attempts >= 0),
+    CONSTRAINT shared_files_encryption_representation_check
+        CHECK (
+            (
+                content_format = 'legacy_zdse'
+                AND encrypted_file_key IS NOT NULL
+            )
+            OR
+            (
+                content_format = 'capsule_v1'
+                AND encrypted_file_key IS NULL
+                AND encrypted_metadata IS NOT NULL
+                AND recipient_key_version IS NOT NULL
+                AND recipient_key_fingerprint IS NOT NULL
+            )
+        )
 );
 
 -- Create indexes for better query performance
@@ -211,15 +235,13 @@ CREATE INDEX IF NOT EXISTS idx_oauth_exchanges_expiry
     ON oauth_exchanges(expires_at);
 
 -- TABLE REMOVED: user_google_tokens (Risk #35 - Zero-knowledge architecture)
--- Google OAuth tokens are now encrypted client-side with PBKDF2 and stored in sessionStorage
+-- Google OAuth tokens are kept client-side in sessionStorage
 -- Backend never stores or has access to Google Drive tokens
--- This implements true zero-knowledge encryption where:
--- - Frontend encrypts tokens with mnemonic-derived key
+-- This preserves the storage boundary where:
 -- - Backend only handles OAuth flow and returns tokens once
 -- - User's Google Drive access is never compromised even if backend is breached
 --
--- See: apps/web/src/utils/authService.ts for encrypted storage implementation
--- See: apps/web/src/utils/cryptoUtils.ts for PBKDF2 encryption functions
+-- See: apps/web/src/utils/authService.ts for browser token lifecycle
 
 -- Create a view for finalized active shared files (not expired)
 CREATE OR REPLACE VIEW active_shared_files AS

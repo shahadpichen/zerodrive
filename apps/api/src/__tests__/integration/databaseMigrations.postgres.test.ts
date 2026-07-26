@@ -140,7 +140,17 @@ describeWithPostgres("database migrations against PostgreSQL", () => {
            SELECT 1 FROM information_schema.columns
            WHERE table_name = 'active_shared_files'
              AND column_name = 'deployment_id'
-         ) AS active_shared_files_deployment_id`,
+         ) AS active_shared_files_deployment_id,
+         EXISTS (
+           SELECT 1 FROM information_schema.columns
+           WHERE table_name = 'shared_files'
+             AND column_name = 'content_format'
+         ) AS shared_file_content_format,
+         EXISTS (
+           SELECT 1 FROM information_schema.columns
+           WHERE table_name = 'active_shared_files'
+             AND column_name = 'recipient_key_fingerprint'
+         ) AS active_shared_files_capsule_fields`,
     );
     expect(result.rows[0]).toEqual({
       deployments: true,
@@ -159,7 +169,69 @@ describeWithPostgres("database migrations against PostgreSQL", () => {
       public_keys_deployment_index: true,
       shared_files_deployment_index: true,
       active_shared_files_deployment_id: true,
+      shared_file_content_format: true,
+      active_shared_files_capsule_fields: true,
     });
+  });
+
+  it("preserves legacy shares while accepting Capsule v1 rows", async () => {
+    const legacy = await testPool.query(
+      `SELECT content_format, encrypted_file_key
+         FROM shared_files
+        WHERE file_id = 'shared/legacy-object'`,
+    );
+    expect(legacy.rows[0]).toEqual({
+      content_format: "legacy_zdse",
+      encrypted_file_key: "legacy-wrapped-key",
+    });
+
+    await expect(
+      testPool.query(
+        `INSERT INTO shared_files
+           (file_id, recipient_user_id, content_format, encrypted_file_key,
+            encrypted_metadata, file_size, expected_encrypted_size)
+         VALUES
+           ('shared/pre-zdse-object', $1, 'legacy_zdse',
+            'legacy-wrapped-key', NULL, 20, 40)`,
+        ["d".repeat(64)],
+      ),
+    ).resolves.toBeDefined();
+
+    await expect(
+      testPool.query(
+        `INSERT INTO shared_files
+           (file_id, recipient_user_id, content_format, encrypted_file_key,
+            encrypted_metadata, file_size, expected_encrypted_size)
+         VALUES
+           ('shared/invalid-legacy-object', $1, 'legacy_zdse',
+            NULL, NULL, 20, 40)`,
+        ["d".repeat(64)],
+      ),
+    ).rejects.toThrow();
+
+    await expect(
+      testPool.query(
+        `INSERT INTO shared_files
+           (file_id, recipient_user_id, content_format, encrypted_file_key,
+            encrypted_metadata, recipient_key_version,
+            recipient_key_fingerprint, file_size, expected_encrypted_size)
+         VALUES
+           ('shared/capsule-object', $1, 'capsule_v1', NULL, $2, 3, $3, 20, 40)`,
+        ["d".repeat(64), "WkRDUAE=", "e".repeat(64)],
+      ),
+    ).resolves.toBeDefined();
+
+    await expect(
+      testPool.query(
+        `INSERT INTO shared_files
+           (file_id, recipient_user_id, content_format, encrypted_file_key,
+            encrypted_metadata, file_size, expected_encrypted_size)
+         VALUES
+           ('shared/invalid-capsule-object', $1, 'capsule_v1',
+            'must-be-null', $2, 20, 40)`,
+        ["d".repeat(64), "WkRDUAE="],
+      ),
+    ).rejects.toThrow();
   });
 
   it("keeps deployment identity singleton for this rollout stage", async () => {

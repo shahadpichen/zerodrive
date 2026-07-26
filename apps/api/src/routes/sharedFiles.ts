@@ -13,6 +13,7 @@ import {
   UpdateSharedFileRequest,
   GetSharedFileRequest,
   GetSharedFilesQuery,
+  PublicKey,
 } from "../types";
 import { sendFileShareNotification } from "../services/emailService";
 import {
@@ -21,7 +22,10 @@ import {
   AnalyticsCategory,
   getFileSizeBucket,
 } from "../services/analytics";
-import { deriveRecipientLookupId } from "../utils/identity";
+import {
+  deriveLookupCandidates,
+  deriveRecipientLookupId,
+} from "../utils/identity";
 import { shareCapabilityMatches } from "../utils/shareCapability";
 import { DeleteObjectCommand, HeadObjectCommand } from "@aws-sdk/client-s3";
 import { MINIO_BUCKET, s3Client } from "../config/s3";
@@ -81,10 +85,27 @@ function toClientSharedFile(file: SharedFile) {
 const createSharedFileSchema = Joi.object({
   management_capability_hash: Joi.string().hex().length(64).required(),
   recipient_email: Joi.string().email().required(),
-  encrypted_file_key: Joi.string()
-    .max(2048)
-    .custom(validateWrappedFileKey, "versioned wrapped file key")
-    .required(),
+  content_format: Joi.string()
+    .valid("legacy_zdse", "capsule_v1")
+    .default("legacy_zdse"),
+  recipient_key_version: Joi.when("content_format", {
+    is: "capsule_v1",
+    then: Joi.number().integer().min(1).max(2147483647).required(),
+    otherwise: Joi.number().integer().min(1).max(2147483647).optional(),
+  }),
+  recipient_key_fingerprint: Joi.when("content_format", {
+    is: "capsule_v1",
+    then: Joi.string().hex().lowercase().length(64).required(),
+    otherwise: Joi.string().hex().lowercase().length(64).optional(),
+  }),
+  encrypted_file_key: Joi.when("content_format", {
+    is: "capsule_v1",
+    then: Joi.valid(null).optional(),
+    otherwise: Joi.string()
+      .max(2048)
+      .custom(validateWrappedFileKey, "versioned wrapped file key")
+      .required(),
+  }),
   encrypted_metadata: Joi.string().base64().required().max(32768),
   file_size: Joi.number().integer().min(0).required(),
   encrypted_size: Joi.number()
@@ -138,6 +159,9 @@ router.post(
     const {
       management_capability_hash,
       recipient_email,
+      content_format,
+      recipient_key_version,
+      recipient_key_fingerprint,
       encrypted_file_key,
       encrypted_metadata,
       file_size,
@@ -149,6 +173,28 @@ router.post(
     const objectKey = `shared/${crypto.randomUUID()}`;
 
     try {
+      if (content_format === "capsule_v1") {
+        const recipientLookupIds = deriveLookupCandidates(recipient_email);
+        const activeKey = await query<PublicKey>(
+          `SELECT key_version, fingerprint
+           FROM public_keys
+           WHERE user_id = ANY($1::varchar[]) AND is_active = TRUE
+           ORDER BY CASE WHEN user_id = $2 THEN 0 ELSE 1 END
+           LIMIT 1`,
+          [recipientLookupIds, recipientLookupIds[0]],
+        );
+        const activeRecipientKey = activeKey.rows[0];
+        if (
+          !activeRecipientKey ||
+          activeRecipientKey.key_version !== recipient_key_version ||
+          activeRecipientKey.fingerprint !== recipient_key_fingerprint
+        ) {
+          throw ApiErrors.Conflict(
+            "Recipient sharing identity changed; refresh it before sharing",
+          );
+        }
+      }
+
       const existingShare = await query<SharedFile>(
         "SELECT id FROM shared_files WHERE management_capability_hash = $1",
         [management_capability_hash],
@@ -164,9 +210,10 @@ router.post(
         file_id, recipient_user_id, encrypted_file_key,
         encrypted_metadata, file_size, expires_at, access_type,
         management_capability_hash, status, expected_encrypted_size,
-        pending_expires_at
+        pending_expires_at, content_format, recipient_key_version,
+        recipient_key_fingerprint
       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'pending', $9,
-        CURRENT_TIMESTAMP + INTERVAL '15 minutes')
+        CURRENT_TIMESTAMP + INTERVAL '15 minutes', $10, $11, $12)
       RETURNING *`,
         [
           objectKey,
@@ -178,6 +225,9 @@ router.post(
           access_type,
           management_capability_hash,
           encrypted_size,
+          content_format,
+          recipient_key_version || null,
+          recipient_key_fingerprint || null,
         ],
       );
 

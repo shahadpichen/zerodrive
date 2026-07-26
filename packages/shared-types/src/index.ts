@@ -3,6 +3,7 @@ export interface SharedFileMetadata {
   name: string;
   mimeType: string;
   message?: string;
+  bindingId?: string;
 }
 
 export interface ApiErrorPayload {
