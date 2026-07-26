@@ -7,3 +7,5 @@ allowBuilds:
   core-js: false
   core-js-pure: false
   esbuild: true
+minimumReleaseAgeExclude:
+  - '@zerodrivehq/capsule@0.4.0'

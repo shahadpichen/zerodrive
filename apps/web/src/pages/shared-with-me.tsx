@@ -1,4 +1,10 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useNavigate } from "react-router-dom";
 import {
   AlertCircle,
@@ -17,24 +23,32 @@ import { Input } from "../components/ui/input";
 import { VaultAccessRequired } from "../components/vault-access-required";
 import { getFileIconPath } from "../lib/mime-types";
 import {
-  arrayBufferToBase64,
   decryptSharedFile,
   decryptSharedMetadata,
   downloadEncryptedFile,
 } from "../utils/fileSharing";
-import { getUserKeyPair } from "../utils/keyStorage";
+import {
+  getUserKeyPair,
+  getUserKeyPairs,
+  type StoredUserKeyPair,
+} from "../utils/keyStorage";
 import apiClient from "../utils/apiClient";
-import { getStoredKey } from "../utils/cryptoUtils";
 import { fetchAndStoreFileMetadata } from "../utils/dexieDB";
 import { uploadAndSyncFile } from "../utils/fileOperations";
 import { getMnemonic } from "../utils/mnemonicManager";
-import { downloadEncryptedRsaKeyFromDrive } from "../utils/gdriveKeyStorage";
-import { decryptRsaPrivateKeyWithAesKey } from "../utils/rsaKeyManager";
-import { readRecipientKeyVersion } from "@zerodrive/crypto";
-import { recoverRsaKeyVersion } from "../utils/rsaKeyRecovery";
+import {
+  recoverRsaKeysIfNeeded,
+  recoverRsaKeyVersion,
+} from "../utils/rsaKeyRecovery";
 import { useOptionalVaultData } from "../contexts/vault-data-context";
 import { rememberVaultMetadataStatus } from "../utils/vaultMetadataWriteGuard";
 import { toast } from "sonner";
+import { inspectSharedMetadataCapsule } from "../utils/capsuleAdapter";
+import type { UserKeyPair } from "../utils/fileSharing";
+import type {
+  JsonObject,
+  ZeroDriveSharedPrivateKey,
+} from "@zerodrivehq/capsule";
 
 type KeyState =
   | "checking"
@@ -51,12 +65,15 @@ interface SharedFile {
   createdAt: Date;
   expiresAt: Date | null;
   encryptedFileKey: string;
+  contentFormat: "legacy_zdse" | "capsule_v1";
   encryptedMetadata: string | null;
   metadataDecrypted: boolean;
   fileSize: number | null;
   mimeType: string;
   message?: string;
+  bindingId?: string;
   recipientKeyVersion: number | null;
+  recipientKeyFingerprint: string | null;
 }
 
 function formatBytes(bytes: number | null): string {
@@ -70,30 +87,53 @@ function formatBytes(bytes: number | null): string {
   return `${(bytes / 1024 ** index).toFixed(index === 0 ? 0 : 1)} ${units[index]}`;
 }
 
-function normalizeEncryptedKey(rawKey: unknown): string {
-  if (typeof rawKey === "string") return rawKey;
-  if (rawKey instanceof ArrayBuffer) return arrayBufferToBase64(rawKey);
-  if (ArrayBuffer.isView(rawKey)) {
-    return arrayBufferToBase64(
-      rawKey.buffer.slice(
-        rawKey.byteOffset,
-        rawKey.byteOffset + rawKey.byteLength,
-      ) as ArrayBuffer,
-    );
-  }
-  return "";
-}
-
 function mapSharedFile(row: any): SharedFile {
+  if (
+    row.content_format !== "capsule_v1" &&
+    row.content_format !== "legacy_zdse"
+  ) {
+    throw new Error("The inbox returned an unsupported encrypted format.");
+  }
+
+  if (row.content_format === "capsule_v1") {
+    if (
+      typeof row.encrypted_metadata !== "string" ||
+      typeof row.recipient_key_version !== "number" ||
+      typeof row.recipient_key_fingerprint !== "string"
+    ) {
+      throw new Error("The inbox returned incomplete Capsule details.");
+    }
+    const recipients = inspectSharedMetadataCapsule(row.encrypted_metadata);
+    if (
+      recipients.length !== 1 ||
+      recipients[0].keyVersion !== row.recipient_key_version ||
+      recipients[0].fingerprint !== row.recipient_key_fingerprint
+    ) {
+      throw new Error(
+        "The inbox Capsule does not match its recipient-key details.",
+      );
+    }
+  } else if (typeof row.encrypted_file_key !== "string") {
+    throw new Error("The inbox returned an incomplete legacy share.");
+  }
+
   return {
     id: row.id,
     name: row.file_name || "Encrypted file",
     createdAt: new Date(row.created_at),
     expiresAt: row.expires_at ? new Date(row.expires_at) : null,
-    encryptedFileKey: normalizeEncryptedKey(row.encrypted_file_key),
-    recipientKeyVersion:
+    encryptedFileKey:
       typeof row.encrypted_file_key === "string"
-        ? readRecipientKeyVersion(row.encrypted_file_key)
+        ? row.encrypted_file_key
+        : "",
+    contentFormat: row.content_format,
+    recipientKeyVersion:
+      typeof row.recipient_key_version === "number"
+        ? row.recipient_key_version
+        : null,
+    recipientKeyFingerprint:
+      typeof row.recipient_key_fingerprint === "string"
+        ? row.recipient_key_fingerprint
         : null,
     encryptedMetadata: row.encrypted_metadata || null,
     metadataDecrypted: !row.encrypted_metadata,
@@ -107,6 +147,72 @@ function mapSharedFile(row: any): SharedFile {
   };
 }
 
+async function getRecipientPrivateKeyCandidates(
+  file: SharedFile,
+  userEmail: string,
+  storedKeyPairs: StoredUserKeyPair[],
+  recoveryCache: Map<string, Promise<UserKeyPair | null>>,
+): Promise<ZeroDriveSharedPrivateKey[]> {
+  const mnemonic = getMnemonic();
+  let exactKeyPair: UserKeyPair | StoredUserKeyPair | null =
+    file.recipientKeyVersion
+      ? storedKeyPairs.find(
+          (keyPair) =>
+            keyPair.keyVersion === file.recipientKeyVersion &&
+            (!file.recipientKeyFingerprint ||
+              keyPair.fingerprint === file.recipientKeyFingerprint),
+        ) || null
+      : null;
+
+  if (!exactKeyPair && file.recipientKeyVersion && mnemonic) {
+    const recoveryKey = `${file.recipientKeyVersion}:${
+      file.recipientKeyFingerprint || ""
+    }`;
+    let recovery = recoveryCache.get(recoveryKey);
+    if (!recovery) {
+      recovery = recoverRsaKeyVersion(
+        userEmail,
+        file.recipientKeyVersion,
+        mnemonic,
+        file.recipientKeyFingerprint || undefined,
+      );
+      recoveryCache.set(recoveryKey, recovery);
+    }
+    exactKeyPair = await recovery;
+  }
+
+  const candidates: ZeroDriveSharedPrivateKey[] = [];
+  const seenModuli = new Set<string>();
+
+  const addCandidate = (
+    privateKeyJwk: JsonWebKey,
+    keyVersion?: number,
+  ): void => {
+    const identity = privateKeyJwk.n || JSON.stringify(privateKeyJwk);
+    if (seenModuli.has(identity)) return;
+    seenModuli.add(identity);
+    candidates.push({
+      privateKeyJwk: privateKeyJwk as unknown as JsonObject,
+      ...(keyVersion ? { keyVersion } : {}),
+    });
+  };
+
+  if (exactKeyPair) {
+    addCandidate(
+      exactKeyPair.privateKeyJwk,
+      file.recipientKeyVersion || undefined,
+    );
+  }
+  if (file.contentFormat === "capsule_v1") {
+    return candidates;
+  }
+  storedKeyPairs.forEach((keyPair) => {
+    addCandidate(keyPair.privateKeyJwk, keyPair.keyVersion);
+  });
+
+  return candidates;
+}
+
 const SharedWithMePage: React.FC = () => {
   const navigate = useNavigate();
   const vaultData = useOptionalVaultData();
@@ -115,6 +221,9 @@ const SharedWithMePage: React.FC = () => {
   const [sharingPrivateKey, setSharingPrivateKey] = useState<JsonWebKey | null>(
     null,
   );
+  const [storedSharingKeys, setStoredSharingKeys] = useState<
+    StoredUserKeyPair[]
+  >([]);
   const [keyState, setKeyState] = useState<KeyState>("checking");
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
@@ -125,6 +234,9 @@ const SharedWithMePage: React.FC = () => {
     action: FileAction;
     stage: ActionStage;
   } | null>(null);
+  const historicalRecoveryCache = useRef(
+    new Map<string, Promise<UserKeyPair | null>>(),
+  );
 
   const loadSharedFiles = useCallback(async (showConfirmation = false) => {
     setIsLoading(true);
@@ -156,32 +268,23 @@ const SharedWithMePage: React.FC = () => {
     void Promise.all(
       pending.map(async (file) => {
         try {
-          const mnemonic = getMnemonic();
-          let versionedKeyPair =
-            file.recipientKeyVersion && mnemonic
-              ? await getUserKeyPair(
-                  userEmail,
-                  mnemonic,
-                  file.recipientKeyVersion,
-                )
-              : null;
-          if (!versionedKeyPair && file.recipientKeyVersion && mnemonic) {
-            versionedKeyPair = await recoverRsaKeyVersion(
+          const metadata = await decryptSharedMetadata({
+            encryptedMetadata: file.encryptedMetadata!,
+            encryptedFileKey: file.encryptedFileKey,
+            contentFormat: file.contentFormat,
+            recipientPrivateKeys: await getRecipientPrivateKeyCandidates(
+              file,
               userEmail,
-              file.recipientKeyVersion,
-              mnemonic,
-            );
-          }
-          const metadata = await decryptSharedMetadata(
-            file.encryptedMetadata!,
-            file.encryptedFileKey,
-            versionedKeyPair?.privateKeyJwk || sharingPrivateKey,
-          );
+              storedSharingKeys,
+              historicalRecoveryCache.current,
+            ),
+          });
           return {
             id: file.id,
             name: metadata.name,
             mimeType: metadata.mimeType,
             message: metadata.message,
+            bindingId: metadata.bindingId,
           };
         } catch {
           return {
@@ -208,7 +311,7 @@ const SharedWithMePage: React.FC = () => {
     return () => {
       active = false;
     };
-  }, [sharedFiles, sharingPrivateKey]);
+  }, [sharedFiles, sharingPrivateKey, storedSharingKeys, userEmail]);
 
   useEffect(() => {
     let active = true;
@@ -224,41 +327,24 @@ const SharedWithMePage: React.FC = () => {
         if (!active) return;
         setUserEmail(email);
 
-        const primaryKey = await getStoredKey();
+        const mnemonic = getMnemonic();
         if (!active) return;
 
-        if (!primaryKey) {
+        if (!mnemonic) {
           setKeyState("primary-missing");
         } else {
-          try {
-            const encryptedBackup = await downloadEncryptedRsaKeyFromDrive();
-            const privateKey = await decryptRsaPrivateKeyWithAesKey(
-              encryptedBackup,
-              primaryKey,
-            );
-            if (!active) return;
-            setSharingPrivateKey(privateKey);
+          await recoverRsaKeysIfNeeded(email, true);
+          const [localKeyPair, allKeyPairs] = await Promise.all([
+            getUserKeyPair(email, mnemonic),
+            getUserKeyPairs(email, mnemonic),
+          ]);
+          if (!active) return;
+          if (localKeyPair?.privateKeyJwk) {
+            setSharingPrivateKey(localKeyPair.privateKeyJwk);
+            setStoredSharingKeys(allKeyPairs);
             setKeyState("ready");
-          } catch (backupError) {
-            console.warn(
-              "[SharedWithMe] AES sharing-key recovery unavailable:",
-              backupError,
-            );
-
-            const mnemonic = getMnemonic();
-            if (mnemonic) {
-              const localKeyPair = await getUserKeyPair(email, mnemonic);
-              if (!active) return;
-              if (localKeyPair?.privateKeyJwk) {
-                setSharingPrivateKey(localKeyPair.privateKeyJwk);
-                setKeyState("ready");
-              } else {
-                setKeyState("sharing-missing");
-              }
-            } else {
-              if (!active) return;
-              setKeyState("primary-missing");
-            }
+          } else {
+            setKeyState("sharing-missing");
           }
         }
 
@@ -365,27 +451,21 @@ const SharedWithMePage: React.FC = () => {
 
       const encryptedBlob = await downloadEncryptedFile(file.id);
       setProcessing({ fileId: file.id, action, stage: "decrypting" });
-      const mnemonic = getMnemonic();
-      let versionedKeyPair =
-        file.recipientKeyVersion && mnemonic
-          ? await getUserKeyPair(userEmail, mnemonic, file.recipientKeyVersion)
-          : null;
-      if (!versionedKeyPair && file.recipientKeyVersion && mnemonic) {
-        versionedKeyPair = await recoverRsaKeyVersion(
+      const decrypted = await decryptSharedFile({
+        encryptedFileBlob: encryptedBlob,
+        encryptedFileKey: file.encryptedFileKey,
+        encryptedMetadata: file.encryptedMetadata,
+        contentFormat: file.contentFormat,
+        recipientPrivateKeys: await getRecipientPrivateKeyCandidates(
+          file,
           userEmail,
-          file.recipientKeyVersion,
-          mnemonic,
-        );
-      }
-      const decrypted = await decryptSharedFile(
-        encryptedBlob,
-        file.encryptedFileKey,
-        userEmail,
-        file.name,
-        file.mimeType,
-        "",
-        versionedKeyPair?.privateKeyJwk || sharingPrivateKey,
-      );
+          storedSharingKeys,
+          historicalRecoveryCache.current,
+        ),
+        fallbackName: file.name,
+        fallbackMimeType: file.mimeType,
+        expectedBindingId: file.bindingId,
+      });
 
       if (action === "download") {
         downloadDecryptedFile(decrypted.decryptedFile, decrypted.fileName);
@@ -395,7 +475,7 @@ const SharedWithMePage: React.FC = () => {
         const fileForVault = new File(
           [decrypted.decryptedFile],
           decrypted.fileName,
-          { type: file.mimeType },
+          { type: decrypted.mimeType },
         );
         const saved = await uploadAndSyncFile(fileForVault, userEmail);
         if (!saved) throw new Error("The file could not be saved to storage.");

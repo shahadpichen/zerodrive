@@ -5,11 +5,13 @@
 
 import { toast } from "sonner";
 import { downloadEncryptedRsaKeyFromDrive } from "./gdriveKeyStorage";
-import { decryptRsaPrivateKeyWithAesKey } from "./rsaKeyManager";
-import { getStoredKey } from "./cryptoUtils";
 import { userHasStoredKeys, storeUserKeyPair } from "./keyStorage";
-import { storeUserPublicKey, UserKeyPair } from "./fileSharing";
+import { fetchRecipientPublicKey, UserKeyPair } from "./fileSharing";
 import { getMnemonic } from "./mnemonicManager";
+import {
+  fingerprintSharingPublicKey,
+  openSharingKeyBackupCapsule,
+} from "./capsuleAdapter";
 import logger from "./logger";
 
 function publicKeyFromPrivate(privateKeyJwk: JsonWebKey): JsonWebKey {
@@ -31,21 +33,38 @@ export async function recoverRsaKeyVersion(
   userEmail: string,
   keyVersion: number,
   mnemonic: string,
+  expectedFingerprint?: string,
 ): Promise<UserKeyPair | null> {
-  const primaryAesKey = await getStoredKey();
-  if (!primaryAesKey) return null;
   try {
     const encrypted = await downloadEncryptedRsaKeyFromDrive(keyVersion);
-    const privateKeyJwk = await decryptRsaPrivateKeyWithAesKey(
+    const opened = await openSharingKeyBackupCapsule(
       encrypted,
-      primaryAesKey,
+      mnemonic,
+      { legacyKeyVersion: keyVersion },
     );
+    if (opened.keyVersion !== undefined && opened.keyVersion !== keyVersion) {
+      throw new Error("Sharing-key backup version does not match the share");
+    }
+    const privateKeyJwk = opened.privateKeyJwk as JsonWebKey;
     privateKeyJwk.key_ops = ["decrypt"];
-    const keyPair = {
-      publicKeyJwk: publicKeyFromPrivate(privateKeyJwk),
+    const keyPair: UserKeyPair = {
+      publicKeyJwk:
+        (opened.publicKeyJwk as JsonWebKey | undefined) ||
+        publicKeyFromPrivate(privateKeyJwk),
       privateKeyJwk,
     };
-    await storeUserKeyPair(userEmail, keyPair, mnemonic, keyVersion);
+    const fingerprint = await fingerprintSharingPublicKey(
+      keyPair.publicKeyJwk,
+    );
+    if (
+      (opened.fingerprint && opened.fingerprint !== fingerprint) ||
+      (expectedFingerprint && expectedFingerprint !== fingerprint)
+    ) {
+      throw new Error("Sharing-key backup fingerprint does not match the share");
+    }
+    await storeUserKeyPair(userEmail, keyPair, mnemonic, keyVersion, {
+      makeCurrent: false,
+    });
     return keyPair;
   } catch (error) {
     logger.warn(`[RSA Recovery] Key version ${keyVersion} unavailable`, error);
@@ -149,16 +168,14 @@ export async function recoverRsaKeysIfNeeded(
       });
     }
 
-    const primaryAesKey = await getStoredKey();
-
-    if (!primaryAesKey) {
-      const errorMsg = "Primary encryption key not found in session storage";
+    const mnemonic = getMnemonic();
+    if (!mnemonic) {
+      const errorMsg = "Recovery phrase is not active in this browser tab";
       logger.error("[RSA Recovery]", errorMsg);
 
       if (toastId && !silent) {
         toast.error("Cannot decrypt RSA key backup", {
-          description:
-            "Primary encryption key not found. Please enter your recovery phrase in Recovery & Access.",
+          description: "Enter your recovery phrase in Recovery & Access.",
           id: toastId,
           duration: 7000,
         });
@@ -173,15 +190,23 @@ export async function recoverRsaKeysIfNeeded(
     }
 
     try {
-      // Decrypt the private key
-      const privateKeyJwk = await decryptRsaPrivateKeyWithAesKey(
-        encryptedKeyBlob,
-        primaryAesKey,
-      );
+      const activeDirectoryKey = await fetchRecipientPublicKey(userEmail);
+      if (!activeDirectoryKey) {
+        throw new Error(
+          "The backup cannot be activated because no current sharing identity exists.",
+        );
+      }
 
-      // Construct public key from private key
-      // RSA private JWK contains public components (n, e)
-      const publicKeyJwk = publicKeyFromPrivate(privateKeyJwk);
+      const opened = await openSharingKeyBackupCapsule(
+        encryptedKeyBlob,
+        mnemonic,
+        { legacyKeyVersion: activeDirectoryKey.key_version },
+      );
+      const privateKeyJwk = opened.privateKeyJwk as JsonWebKey;
+
+      const publicKeyJwk =
+        (opened.publicKeyJwk as JsonWebKey | undefined) ||
+        publicKeyFromPrivate(privateKeyJwk);
 
       // Ensure private key has correct key_ops
       if (!privateKeyJwk.key_ops) {
@@ -193,24 +218,24 @@ export async function recoverRsaKeysIfNeeded(
         privateKeyJwk,
       };
 
-      // Get mnemonic for encrypting private key in IndexedDB
-      const mnemonic = getMnemonic();
-      if (!mnemonic) {
+      const fingerprint = await fingerprintSharingPublicKey(
+        recoveredKeyPair.publicKeyJwk,
+      );
+      if (
+        opened.keyVersion !== activeDirectoryKey.key_version ||
+        opened.fingerprint !== fingerprint ||
+        fingerprint !== activeDirectoryKey.fingerprint
+      ) {
         throw new Error(
-          "Mnemonic not available - cannot encrypt RSA private key",
+          "The backup does not match the current sharing identity. Create or rotate the identity explicitly.",
         );
       }
 
-      // Store in IndexedDB (private key encrypted with mnemonic)
-      // Store public key in PostgreSQL
-      const storedPublicKey = await storeUserPublicKey(
-        recoveredKeyPair.publicKeyJwk,
-      );
       await storeUserKeyPair(
         userEmail,
         recoveredKeyPair,
         mnemonic,
-        storedPublicKey.keyVersion,
+        activeDirectoryKey.key_version,
       );
 
       logger.log(

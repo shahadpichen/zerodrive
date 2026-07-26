@@ -9,7 +9,7 @@ import {
   getFoldersForUser, // Get folders for sync
 } from "./dexieDB";
 import { encryptFile } from "./encryptFile";
-import { getStoredKey } from "./cryptoUtils";
+import { requireActiveRecoveryPhrase } from "./mnemonicManager";
 import logger from "./logger";
 import { trackFileAddedToDrive } from "./analyticsTracker";
 import { assertCanWriteVaultMetadata } from "./vaultMetadataWriteGuard";
@@ -33,11 +33,9 @@ export const uploadAndSyncFile = async (
   const uploadToastId = toast.loading(`Preparing ${file.name}...`);
 
   try {
-    // 1. Check key
-    const key = await getStoredKey();
-    if (!key) {
-      throw new Error("No encryption key found. Please manage keys.");
-    }
+    // Capsule v1 writes require the in-memory recovery phrase. The derived
+    // legacy AES key is used only when opening historical ZeroDrive objects.
+    requireActiveRecoveryPhrase();
 
     assertCanWriteVaultMetadata(userEmail, {
       allowMetadataReplacement: options.allowMetadataReplacement,
@@ -61,15 +59,14 @@ export const uploadAndSyncFile = async (
 
     // 4. Encrypt
     toast.loading(`Encrypting ${file.name}...`, { id: uploadToastId });
-    const encryptedBlob = await encryptFile(file);
+    const objectId = crypto.randomUUID();
+    const encryptedBlob = await encryptFile(file, objectId);
 
     // 5. Prepare metadata & form data
     const metadata = {
-      name: file.name, // Drive uses this name
-      mimeType: "application/octet-stream", // Store as generic binary
-      parents: folderId ? [folderId] : undefined, // Upload to folder if specified
-      // Optional: Use original mimeType if needed elsewhere, but store generically
-      // properties: { originalMimeType: file.type }
+      name: `${crypto.randomUUID()}.zd`,
+      mimeType: "application/octet-stream",
+      parents: folderId ? [folderId] : undefined,
     };
     const form = new FormData();
     form.append(
@@ -106,6 +103,8 @@ export const uploadAndSyncFile = async (
     // 7. Add metadata to IndexedDB
     const newFileMeta: FileMeta = {
       id: data.id,
+      objectId,
+      revision: 1,
       name: file.name, // Store original name
       mimeType: file.type, // Store original mimeType
       userEmail: userEmail,
@@ -160,6 +159,7 @@ export const deleteAndSyncFile = async (
   const deleteToastId = toast.loading(`Deleting ${fileName}...`);
 
   try {
+    requireActiveRecoveryPhrase();
     assertCanWriteVaultMetadata(userEmail);
 
     // 1. Check auth and get token
@@ -235,6 +235,7 @@ export const deleteAllAndSyncFiles = async (
   const deleteToastId = toast.loading(`Fetching file list to delete...`);
 
   try {
+    requireActiveRecoveryPhrase();
     assertCanWriteVaultMetadata(userEmail);
 
     // 1. Get all file IDs for the user

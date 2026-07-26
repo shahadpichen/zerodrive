@@ -1,63 +1,51 @@
-import { getStoredKey } from './cryptoUtils';
+import {
+  createPersonalFileCapsule,
+  openPersonalFileCapsule,
+} from "./capsuleAdapter";
+import { hasMnemonic } from "./mnemonicManager";
 
 /**
- * Tests if the stored encryption key works correctly
- * by performing a full encrypt/decrypt cycle
+ * Verify the currently active recovery phrase through the same Capsule v1
+ * personal-file contract used by Storage.
  */
 export async function testEncryptionKey(): Promise<{
   success: boolean;
   message: string;
 }> {
   try {
-    const key = await getStoredKey();
-
-    if (!key) {
+    if (!hasMnemonic()) {
       return {
         success: false,
-        message: "❌ No encryption key found in storage"
+        message: "No recovery phrase is active in this browser tab.",
       };
     }
 
-    // Test data with special characters
     const testString = "ZeroDrive Test Data 🔐✓";
-    const encoder = new TextEncoder();
-    const data = encoder.encode(testString);
-
-    // Encrypt the test data
-    const iv = crypto.getRandomValues(new Uint8Array(12));
-    const encrypted = await crypto.subtle.encrypt(
-      { name: "AES-GCM", iv },
-      key,
-      data
+    const encrypted = await createPersonalFileCapsule(
+      new File([testString], "capsule-access-test.txt", {
+        type: "text/plain",
+      }),
+      crypto.randomUUID(),
     );
-
-    // Decrypt the encrypted data
-    const decrypted = await crypto.subtle.decrypt(
-      { name: "AES-GCM", iv },
-      key,
-      encrypted
-    );
-
-    // Verify the result
-    const decoder = new TextDecoder();
-    const result = decoder.decode(decrypted);
+    const opened = await openPersonalFileCapsule(encrypted.encryptedBlob);
+    const result = await opened.contentBlob.text();
 
     if (result === testString) {
       return {
         success: true,
-        message: "✅ Your encryption key works perfectly!"
-      };
-    } else {
-      return {
-        success: false,
-        message: "❌ Decryption mismatch - key may be corrupted"
+        message: "Your recovery phrase can open Capsule v1 files.",
       };
     }
-  } catch (error) {
-    console.error('Key test failed:', error);
+
     return {
       success: false,
-      message: "❌ Encryption test failed - key may be invalid"
+      message: "The encrypted access check did not match.",
+    };
+  } catch (error) {
+    console.error("Recovery access test failed:", error);
+    return {
+      success: false,
+      message: "ZeroDrive could not verify this recovery phrase.",
     };
   }
 }

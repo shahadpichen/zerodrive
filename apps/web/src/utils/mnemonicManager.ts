@@ -3,16 +3,25 @@
  * Securely manages mnemonic phrase in memory (cleared on page refresh)
  */
 
-import { toast } from 'sonner';
+import { toast } from "sonner";
+
+export const RECOVERY_PHRASE_MEMORY_EVENT =
+  "zerodrive-recovery-phrase-memory-changed";
 
 // In-memory storage for mnemonic (cleared on page refresh/navigation)
 let mnemonicCache: string | null = null;
+
+function notifyRecoveryPhraseChanged(): void {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new Event(RECOVERY_PHRASE_MEMORY_EVENT));
+}
 
 /**
  * Store mnemonic in memory
  */
 export function setMnemonic(mnemonic: string): void {
   mnemonicCache = mnemonic;
+  notifyRecoveryPhraseChanged();
 }
 
 /**
@@ -27,6 +36,7 @@ export function getMnemonic(): string | null {
  */
 export function clearMnemonic(): void {
   mnemonicCache = null;
+  notifyRecoveryPhraseChanged();
 }
 
 /**
@@ -34,6 +44,15 @@ export function clearMnemonic(): void {
  */
 export function hasMnemonic(): boolean {
   return mnemonicCache !== null;
+}
+
+export function requireActiveRecoveryPhrase(): string {
+  if (!mnemonicCache) {
+    throw new Error(
+      "Open Recovery & Access and enter the recovery phrase for this vault.",
+    );
+  }
+  return mnemonicCache;
 }
 
 /**

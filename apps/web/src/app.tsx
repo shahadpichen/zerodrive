@@ -6,7 +6,6 @@ import {
   Navigate,
   useLocation,
 } from "react-router-dom";
-import { Buffer } from "buffer/";
 import PrivateStorage from "./pages/private-storage";
 import Home from "./pages/home";
 import LandingPage from "./pages/landing-page";
@@ -19,16 +18,12 @@ import OAuthCallback from "./pages/oauth-callback";
 import { KeyManagementPage } from "./pages/key-management-page";
 import ShareFilesPage from "./pages/share-files";
 import SharedWithMePage from "./pages/shared-with-me";
-import KeyTestPage from "./pages/KeyTestPage";
 import { isAuthenticated as checkAuth } from "./utils/authService";
 import { useRsaKeyRecovery } from "./hooks/useRsaKeyRecovery";
 import { AuthenticatedLayout } from "./components/layout/authenticated-layout";
 import AnalyticsDashboard from "./pages/analytics-dashboard";
 import { AppProvider } from "./contexts/app-context";
 import { VaultDataProvider } from "./contexts/vault-data-context";
-
-// Polyfill global Buffer for libraries that expect it (e.g., bip39)
-window.Buffer = Buffer as any;
 
 // Check environment variables on app startup
 const checkEnvironmentVariables = () => {
@@ -73,7 +68,7 @@ function App() {
     checkEnvironmentVariables();
   }, []);
 
-  // Automatically recover RSA keys on page load if mnemonic is available
+  // Recover the account's sharing identity when the in-memory phrase is active.
   useRsaKeyRecovery();
 
   return (
@@ -135,16 +130,6 @@ function App() {
                 <ProtectedRoute>
                   <AuthenticatedLayout>
                     <SharedWithMePage />
-                  </AuthenticatedLayout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/key-test"
-              element={
-                <ProtectedRoute>
-                  <AuthenticatedLayout>
-                    <KeyTestPage />
                   </AuthenticatedLayout>
                 </ProtectedRoute>
               }

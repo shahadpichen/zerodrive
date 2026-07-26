@@ -5,9 +5,12 @@ import { initializeGapi, refreshGapiToken } from "./gapiInit";
 import logger from "./logger";
 import { encryptMetadata, decryptMetadata } from "./metadataEncryption";
 import { assertCanWriteVaultMetadata } from "./vaultMetadataWriteGuard";
+import { requireActiveRecoveryPhrase } from "./mnemonicManager";
 
 export interface FileMeta {
   id: string;
+  objectId?: string;
+  revision?: number;
   name: string;
   mimeType: string;
   userEmail: string;
@@ -156,6 +159,7 @@ const sendToGoogleDrive = async (
         "Cannot safely sync vault metadata without an account identifier.",
       );
     }
+    requireActiveRecoveryPhrase();
     assertCanWriteVaultMetadata(userEmail, {
       allowMetadataReplacement: options.allowMetadataReplacement,
     });

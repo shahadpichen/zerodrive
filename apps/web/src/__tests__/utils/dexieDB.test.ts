@@ -14,6 +14,10 @@ import {
   FileMeta,
 } from '../../utils/dexieDB';
 import { rememberVaultMetadataStatus } from '../../utils/vaultMetadataWriteGuard';
+import {
+  clearMnemonic,
+  setMnemonic,
+} from '../../utils/mnemonicManager';
 
 jest.mock('dexie', () => {
   const mockTable = {
@@ -106,8 +110,15 @@ describe('DexieDB - Google Drive Sync', () => {
 
   beforeEach(() => {
     sessionStorage.clear();
+    setMnemonic(
+      "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
+    );
     rememberVaultMetadataStatus(testUser, "ready");
     jest.clearAllMocks();
+  });
+
+  afterEach(() => {
+    clearMnemonic();
   });
 
   describe('sendToGoogleDrive', () => {

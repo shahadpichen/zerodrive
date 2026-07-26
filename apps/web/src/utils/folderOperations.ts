@@ -13,6 +13,7 @@ import {
 import type { FolderMeta } from "./dexieDB";
 import logger from "./logger";
 import { assertCanWriteVaultMetadata } from "./vaultMetadataWriteGuard";
+import { requireActiveRecoveryPhrase } from "./mnemonicManager";
 
 export const createFolder = async (
   folderName: string,
@@ -22,6 +23,7 @@ export const createFolder = async (
   const createToastId = toast.loading(`Creating folder "${folderName}"...`);
 
   try {
+    requireActiveRecoveryPhrase();
     assertCanWriteVaultMetadata(userEmail);
 
     const { getGoogleAccessToken } = await import("./gapiInit");
@@ -93,6 +95,7 @@ export const deleteFolder = async (
   const deleteToastId = toast.loading(`Deleting folder "${folderName}"...`);
 
   try {
+    requireActiveRecoveryPhrase();
     assertCanWriteVaultMetadata(userEmail);
 
     // Check if folder has files
@@ -166,6 +169,7 @@ export const renameFolder = async (
   const renameToastId = toast.loading(`Renaming "${oldName}"...`);
 
   try {
+    requireActiveRecoveryPhrase();
     assertCanWriteVaultMetadata(userEmail);
 
     const { getGoogleAccessToken } = await import("./gapiInit");
@@ -221,6 +225,7 @@ export const moveFile = async (
   const moveToastId = toast.loading(`Moving "${fileName}"...`);
 
   try {
+    requireActiveRecoveryPhrase();
     assertCanWriteVaultMetadata(userEmail);
 
     const { getGoogleAccessToken } = await import("./gapiInit");

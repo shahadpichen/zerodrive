@@ -1,13 +1,17 @@
 import { recoverRsaKeyVersion } from "../../utils/rsaKeyRecovery";
 import { downloadEncryptedRsaKeyFromDrive } from "../../utils/gdriveKeyStorage";
-import { decryptRsaPrivateKeyWithAesKey } from "../../utils/rsaKeyManager";
-import { getStoredKey } from "../../utils/cryptoUtils";
 import { storeUserKeyPair } from "../../utils/keyStorage";
+import {
+  fingerprintSharingPublicKey,
+  openSharingKeyBackupCapsule,
+} from "../../utils/capsuleAdapter";
 
 jest.mock("sonner", () => ({ toast: {} }));
 jest.mock("../../utils/gdriveKeyStorage");
-jest.mock("../../utils/rsaKeyManager");
-jest.mock("../../utils/cryptoUtils");
+jest.mock("../../utils/capsuleAdapter", () => ({
+  fingerprintSharingPublicKey: jest.fn(),
+  openSharingKeyBackupCapsule: jest.fn(),
+}));
 jest.mock("../../utils/keyStorage", () => ({
   userHasStoredKeys: jest.fn(),
   storeUserKeyPair: jest.fn(),
@@ -30,10 +34,12 @@ jest.mock("../../utils/logger", () => ({
 describe("recoverRsaKeyVersion", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    (fingerprintSharingPublicKey as jest.Mock).mockResolvedValue(
+      "a".repeat(64),
+    );
   });
 
   it("downloads, decrypts, and stores the requested historical key version", async () => {
-    const aesKey = {} as CryptoKey;
     const encryptedBackup = new Blob(["encrypted"]);
     const privateKeyJwk: JsonWebKey = {
       kty: "RSA",
@@ -43,13 +49,15 @@ describe("recoverRsaKeyVersion", () => {
       key_ops: ["decrypt"],
     };
 
-    (getStoredKey as jest.Mock).mockResolvedValue(aesKey);
     (downloadEncryptedRsaKeyFromDrive as jest.Mock).mockResolvedValue(
       encryptedBackup,
     );
-    (decryptRsaPrivateKeyWithAesKey as jest.Mock).mockResolvedValue(
+    (openSharingKeyBackupCapsule as jest.Mock).mockResolvedValue({
       privateKeyJwk,
-    );
+      keyVersion: 3,
+      fingerprint: "a".repeat(64),
+      format: "capsule_v1",
+    });
 
     const result = await recoverRsaKeyVersion(
       "user@example.com",
@@ -58,9 +66,10 @@ describe("recoverRsaKeyVersion", () => {
     );
 
     expect(downloadEncryptedRsaKeyFromDrive).toHaveBeenCalledWith(3);
-    expect(decryptRsaPrivateKeyWithAesKey).toHaveBeenCalledWith(
+    expect(openSharingKeyBackupCapsule).toHaveBeenCalledWith(
       encryptedBackup,
-      aesKey,
+      "recovery phrase",
+      { legacyKeyVersion: 3 },
     );
     expect(storeUserKeyPair).toHaveBeenCalledWith(
       "user@example.com",
@@ -77,16 +86,49 @@ describe("recoverRsaKeyVersion", () => {
       },
       "recovery phrase",
       3,
+      { makeCurrent: false },
     );
     expect(result?.publicKeyJwk.n).toBe("modulus");
   });
 
-  it("does not attempt recovery without the primary AES key", async () => {
-    (getStoredKey as jest.Mock).mockResolvedValue(null);
+  it("rejects a historical backup whose authenticated fingerprint is wrong", async () => {
+    (downloadEncryptedRsaKeyFromDrive as jest.Mock).mockResolvedValue(
+      new Blob(["encrypted"]),
+    );
+    (openSharingKeyBackupCapsule as jest.Mock).mockResolvedValue({
+      privateKeyJwk: {
+        kty: "RSA",
+        n: "modulus",
+        e: "AQAB",
+        d: "private-exponent",
+      },
+      keyVersion: 3,
+      fingerprint: "b".repeat(64),
+      format: "capsule_v1",
+    });
+
+    await expect(
+      recoverRsaKeyVersion(
+        "user@example.com",
+        3,
+        "recovery phrase",
+        "a".repeat(64),
+      ),
+    ).resolves.toBeNull();
+    expect(storeUserKeyPair).not.toHaveBeenCalled();
+  });
+
+  it("returns null when the requested backup cannot be opened", async () => {
+    (downloadEncryptedRsaKeyFromDrive as jest.Mock).mockResolvedValue(
+      new Blob(["encrypted"]),
+    );
+    (openSharingKeyBackupCapsule as jest.Mock).mockRejectedValue(
+      new Error("No matching backup"),
+    );
 
     await expect(
       recoverRsaKeyVersion("user@example.com", 2, "recovery phrase"),
     ).resolves.toBeNull();
-    expect(downloadEncryptedRsaKeyFromDrive).not.toHaveBeenCalled();
+    expect(storeUserKeyPair).not.toHaveBeenCalled();
   });
 });

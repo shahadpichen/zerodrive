@@ -1,5 +1,6 @@
 import { decryptFile } from "./decryptFile";
 import { getStoredKey } from "./cryptoUtils";
+import { hasMnemonic } from "./mnemonicManager";
 
 // Extension-to-MIME fallback for files with missing/incorrect MIME types
 const EXTENSION_MIME_MAP: Record<string, string> = {
@@ -95,12 +96,16 @@ export function getPreviewType(
 export async function decryptFileForPreview(
   fileId: string,
   fileName: string,
-  mimeType: string
+  mimeType: string,
+  objectId?: string,
+  revision?: number,
 ): Promise<{ blobUrl: string; blob: Blob; mimeType?: string }> {
   // Check for encryption key
   const key = await getStoredKey();
-  if (!key) {
-    throw new Error("No encryption key found");
+  if (!key && !hasMnemonic()) {
+    throw new Error(
+      "Open Recovery & Access and enter the recovery phrase for this vault.",
+    );
   }
 
   // Get Google access token
@@ -128,16 +133,19 @@ export async function decryptFileForPreview(
   const encryptedBlob = await response.blob();
 
   // Decrypt the file
-  const decryptedBlob = await decryptFile(encryptedBlob);
-
-  // Create blob with correct MIME type
-  const typedBlob = new Blob([decryptedBlob], { type: mimeType });
+  const decrypted = await decryptFile(encryptedBlob, {
+    name: fileName,
+    mimeType,
+    objectId,
+    revision,
+  });
+  const typedBlob = decrypted.contentBlob;
   const blobUrl = URL.createObjectURL(typedBlob);
 
   return {
     blobUrl,
     blob: typedBlob,
-    mimeType,
+    mimeType: decrypted.mimeType,
   };
 }
 

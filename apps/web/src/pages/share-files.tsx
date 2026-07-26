@@ -46,11 +46,10 @@ import {
   getUserKeyPair,
   storeUserKeyPair,
 } from "../utils/keyStorage";
-import { encryptRsaPrivateKeyWithAesKey } from "../utils/rsaKeyManager";
 import { uploadEncryptedRsaKeyToDrive } from "../utils/gdriveKeyStorage";
-import { getStoredKey } from "../utils/cryptoUtils";
 import { getMnemonic } from "../utils/mnemonicManager";
 import { recoverRsaKeysIfNeeded } from "../utils/rsaKeyRecovery";
+import { createSharingKeyBackupCapsule } from "../utils/capsuleAdapter";
 
 type PageState =
   | "checking"
@@ -213,7 +212,6 @@ const ShareFilesPage: React.FC = () => {
     () => readCachedShareSetupState(userEmail) || "checking",
   );
   const [senderEmail, setSenderEmail] = useState("");
-  const [senderLookupId, setSenderLookupId] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [storedFile, setStoredFile] = useState<FileMeta | null>(null);
   const [fileSource, setFileSource] = useState<FileSource>("device");
@@ -247,10 +245,6 @@ const ShareFilesPage: React.FC = () => {
         const { getUserEmail, hasGoogleTokensInStorage, logout } =
           await import("../utils/authService");
         const email = await getUserEmail();
-        const identity = await apiClient.get<{
-          email: string;
-          emailHash: string;
-        }>("/auth/me");
 
         if (!email || !hasGoogleTokensInStorage()) {
           await logout();
@@ -267,10 +261,8 @@ const ShareFilesPage: React.FC = () => {
 
         if (!active) return;
         setSenderEmail(email);
-        setSenderLookupId(identity.data?.emailHash || "");
 
-        const primaryKey = await getStoredKey();
-        if (!primaryKey) {
+        if (!getMnemonic()) {
           writeCachedShareSetupState(email, null);
           setPageState("access");
           return;
@@ -326,10 +318,9 @@ const ShareFilesPage: React.FC = () => {
     setShareError("");
 
     try {
-      const primaryAesKey = await getStoredKey();
       const mnemonic = getMnemonic();
 
-      if (!primaryAesKey || !mnemonic) {
+      if (!mnemonic) {
         toast.info("Set up your encryption key first");
         openKeyManagement();
         return;
@@ -345,10 +336,13 @@ const ShareFilesPage: React.FC = () => {
       );
 
       try {
-        const encryptedPrivateKey = await encryptRsaPrivateKeyWithAesKey(
-          keyPair.privateKeyJwk,
-          primaryAesKey,
-        );
+        const encryptedPrivateKey = await createSharingKeyBackupCapsule({
+          privateKeyJwk: keyPair.privateKeyJwk,
+          publicKeyJwk: keyPair.publicKeyJwk,
+          keyVersion: storedPublicKey.keyVersion,
+          fingerprint: storedPublicKey.fingerprint,
+          recoveryPhrase: mnemonic,
+        });
         const backupId =
           await uploadEncryptedRsaKeyToDrive(encryptedPrivateKey);
         if (!backupId) throw new Error("Google Drive backup failed");
@@ -487,10 +481,7 @@ const ShareFilesPage: React.FC = () => {
         return false;
       }
 
-      if (!senderLookupId) {
-        throw new Error("Authenticated account identity is unavailable");
-      }
-      const pinnedKey = getRecipientKeyPin(senderLookupId, normalizedEmail);
+      const pinnedKey = getRecipientKeyPin(normalizedEmail);
       if (pinnedKey && pinnedKey.fingerprint !== publicKey.fingerprint) {
         setRecipientVerified(false);
         setChangedRecipientKey(publicKey);
@@ -502,7 +493,6 @@ const ShareFilesPage: React.FC = () => {
 
       if (!pinnedKey) {
         pinRecipientKey(
-          senderLookupId,
           normalizedEmail,
           publicKey.fingerprint,
           publicKey.key_version,
@@ -531,7 +521,6 @@ const ShareFilesPage: React.FC = () => {
     if (validRecipient) {
       if (recipientDirectoryKey) {
         pinRecipientKey(
-          senderLookupId,
           recipientEmail,
           recipientDirectoryKey.fingerprint,
           recipientDirectoryKey.key_version,
@@ -545,7 +534,6 @@ const ShareFilesPage: React.FC = () => {
   const confirmChangedRecipientKey = () => {
     if (!changedRecipientKey) return;
     pinRecipientKey(
-      senderLookupId,
       recipientEmail,
       changedRecipientKey.fingerprint,
       changedRecipientKey.key_version,
@@ -582,9 +570,9 @@ const ShareFilesPage: React.FC = () => {
     }
 
     const encryptedBlob = await response.blob();
-    const decryptedBlob = await decryptFile(encryptedBlob);
-    return new File([decryptedBlob], storedFile.name, {
-      type: storedFile.mimeType || "application/octet-stream",
+    const decrypted = await decryptFile(encryptedBlob, storedFile);
+    return new File([decrypted.contentBlob], decrypted.fileName, {
+      type: decrypted.mimeType,
       lastModified: new Date(storedFile.uploadedDate).getTime(),
     });
   };
@@ -592,8 +580,7 @@ const ShareFilesPage: React.FC = () => {
   const handleShareFile = async () => {
     if (!hasSelectedFile || !senderEmail || !recipientVerified) return;
 
-    const primaryKey = await getStoredKey();
-    if (!primaryKey) {
+    if (!getMnemonic()) {
       setShareError("Set up vault access before sharing files.");
       setPageState("access");
       return;
@@ -609,8 +596,6 @@ const ShareFilesPage: React.FC = () => {
       const preparation = await prepareFileForSharing(
         fileToShare,
         recipientEmail,
-        senderEmail,
-        getMnemonic() || undefined,
         customMessage.trim() || undefined,
         recipientDirectoryKey || undefined,
       );

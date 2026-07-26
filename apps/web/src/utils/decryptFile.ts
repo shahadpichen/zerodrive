@@ -1,51 +1,74 @@
 import logger from "./logger";
-import { getStoredKey } from "./cryptoUtils";
+import {
+  openPersonalFileCapsule,
+  type CapsuleContentFormat,
+} from "./capsuleAdapter";
 
-export const decryptFile = async (fileBlob: Blob): Promise<Blob> => {
+export interface PersonalFileIdentity {
+  name?: string;
+  mimeType?: string;
+  objectId?: string;
+  revision?: number;
+}
+
+export interface DecryptedPersonalFile {
+  contentBlob: Blob;
+  fileName: string;
+  mimeType: string;
+  objectId?: string;
+  revision?: number;
+  contentFormat: CapsuleContentFormat;
+}
+
+export const decryptFile = async (
+  fileBlob: Blob,
+  expected: PersonalFileIdentity = {},
+): Promise<DecryptedPersonalFile> => {
   try {
-    // Get the decryption key using getStoredKey (handles encrypted storage)
-    const key = await getStoredKey();
-    if (!key) {
-      throw new Error("No encryption key found in session storage");
-    }
+    const opened = await openPersonalFileCapsule(fileBlob);
+    const metadata = opened.metadata;
+    const fileName =
+      typeof metadata.name === "string"
+        ? metadata.name
+        : expected.name || "decrypted-file";
+    const mimeType =
+      typeof metadata.mimeType === "string"
+        ? metadata.mimeType
+        : expected.mimeType || "application/octet-stream";
+    const objectId =
+      typeof metadata.objectId === "string" ? metadata.objectId : undefined;
+    const revision =
+      typeof metadata.revision === "number" ? metadata.revision : undefined;
 
-    const fileArrayBuffer = await fileBlob.arrayBuffer();
-
-    // Check for minimum file size (IV + some encrypted data)
-    if (fileArrayBuffer.byteLength < 13) {
-      throw new Error("File is not properly encrypted (too small)");
-    }
-
-    const iv = new Uint8Array(12);
-    iv.set(new Uint8Array(fileArrayBuffer.slice(0, 12)));
-    const encryptedData = new Uint8Array(fileArrayBuffer.slice(12));
-
-    // Attempt decryption
-    try {
-      const decryptedBuffer = await crypto.subtle.decrypt(
-        {
-          name: "AES-GCM",
-          iv: iv,
-        },
-        key,
-        encryptedData
-      );
-
-      return new Blob([decryptedBuffer]);
-    } catch (decryptError: unknown) {
-      logger.error("Decryption operation error:", decryptError);
-
-      // Check for specific error types
-      if (decryptError instanceof Error && decryptError.name === "OperationError") {
+    if (opened.contentFormat === "capsule_v1") {
+      const size =
+        typeof metadata.size === "number" ? metadata.size : undefined;
+      const identityMismatch =
+        (expected.name !== undefined && expected.name !== fileName) ||
+        (expected.mimeType !== undefined &&
+          (expected.mimeType || "application/octet-stream") !== mimeType) ||
+        (expected.objectId !== undefined &&
+          expected.objectId !== objectId) ||
+        (expected.revision !== undefined &&
+          expected.revision !== revision) ||
+        (size !== undefined && size !== opened.contentBlob.size);
+      if (identityMismatch) {
         throw new Error(
-          "Decryption failed: the encryption key doesn't match the one used to encrypt this file"
+          "The encrypted file does not match its authenticated vault entry.",
         );
-      } else {
-        throw new Error("Decryption failed: " + (decryptError instanceof Error ? decryptError.message : String(decryptError)));
       }
     }
+
+    return {
+      contentBlob: opened.contentBlob,
+      fileName,
+      mimeType,
+      objectId,
+      revision,
+      contentFormat: opened.contentFormat,
+    };
   } catch (error) {
     logger.error("Decryption error:", error);
-    throw error; // Re-throw to be handled by the caller
+    throw error;
   }
 };
