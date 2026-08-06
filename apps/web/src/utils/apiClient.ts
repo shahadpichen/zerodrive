@@ -56,7 +56,10 @@ interface SharedFileData {
   id?: string;
   file_id?: string;
   recipient_user_id?: string;
-  encrypted_file_key: string;
+  content_format: "legacy_zdse" | "capsule_v1";
+  recipient_key_version?: number | null;
+  recipient_key_fingerprint?: string | null;
+  encrypted_file_key?: string | null;
   encrypted_metadata?: string;
   file_name?: string;
   file_size: number;
@@ -353,7 +356,10 @@ export const sharedFilesApi = {
   async create(shareData: {
     management_capability_hash: string;
     recipient_email: string;
-    encrypted_file_key: string;
+    content_format?: "legacy_zdse" | "capsule_v1";
+    recipient_key_version?: number;
+    recipient_key_fingerprint?: string;
+    encrypted_file_key?: string | null;
     encrypted_metadata: string;
     file_size: number;
     encrypted_size: number;

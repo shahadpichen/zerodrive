@@ -1,10 +1,20 @@
 /**
- * KeyStorage utility for securely managing cryptographic keys
- * Stores keys in IndexedDB associated with specific user accounts
- * Keys are stored unencrypted (IndexedDB is client-side only)
+ * Account-scoped sharing-key storage.
+ *
+ * Private keys are stored as Capsule sharing-key backups. Historical
+ * PBKDF2-encrypted records are opened only through Capsule's legacy reader.
  */
 
 import { openDB, IDBPDatabase } from "idb";
+import {
+  base64ToBytes,
+  blobToBytes,
+  bytesToBase64,
+  bytesToBlob,
+  createSharingKeyBackupCapsule,
+  fingerprintSharingPublicKey,
+  openSharingKeyBackupCapsule,
+} from "./capsuleAdapter";
 import logger from "./logger";
 
 const DB_NAME = "zerodrive-keys";
@@ -15,9 +25,16 @@ const VERSIONED_KEY_STORE = "versioned-user-keys";
 interface UserKeyData {
   email: string;
   publicKeyJwk: JsonWebKey;
-  encryptedPrivateKey: string; // RSA private key encrypted with mnemonic
+  encryptedPrivateKey: string; // Base64-encoded Capsule or legacy backup bytes
   createdAt: number;
   keyVersion?: number;
+}
+
+export interface StoredUserKeyPair {
+  publicKeyJwk: JsonWebKey;
+  privateKeyJwk: JsonWebKey;
+  keyVersion?: number;
+  fingerprint: string;
 }
 
 let dbPromise: Promise<IDBPDatabase> | null = null;
@@ -56,6 +73,7 @@ export async function storeUserKeyPair(
   keyPair: { publicKeyJwk: JsonWebKey; privateKeyJwk: JsonWebKey },
   mnemonic: string,
   keyVersion: number = 1,
+  options: { makeCurrent?: boolean } = {},
 ): Promise<void> {
   if (!email) throw new Error("User email is required");
   if (!keyPair?.publicKeyJwk || !keyPair?.privateKeyJwk) {
@@ -63,13 +81,23 @@ export async function storeUserKeyPair(
   }
   if (!mnemonic) throw new Error("Mnemonic is required to encrypt private key");
 
-  const { encryptRsaPrivateKey } = await import("./cryptoUtils");
-
-  // Encrypt private key with mnemonic
-  const encryptedPrivateKey = await encryptRsaPrivateKey(
-    keyPair.privateKeyJwk,
-    mnemonic,
+  const fingerprint = await fingerprintSharingPublicKey(
+    keyPair.publicKeyJwk,
   );
+  const encryptedPrivateKeyBlob = await createSharingKeyBackupCapsule({
+    privateKeyJwk: keyPair.privateKeyJwk,
+    publicKeyJwk: keyPair.publicKeyJwk,
+    recoveryPhrase: mnemonic,
+    keyVersion,
+    fingerprint,
+  });
+  const encryptedBytes = await blobToBytes(encryptedPrivateKeyBlob);
+  let encryptedPrivateKey: string;
+  try {
+    encryptedPrivateKey = bytesToBase64(encryptedBytes);
+  } finally {
+    encryptedBytes.fill(0);
+  }
 
   const db = await getDb();
   const userData: UserKeyData = {
@@ -80,11 +108,11 @@ export async function storeUserKeyPair(
     keyVersion,
   };
 
-  await db.put(KEY_STORE, userData);
   await db.put(VERSIONED_KEY_STORE, userData);
-  logger.info(
-    "[KeyStorage] RSA keys stored (private key encrypted with PBKDF2)",
-  );
+  if (options.makeCurrent !== false) {
+    await db.put(KEY_STORE, userData);
+  }
+  logger.info("[KeyStorage] Sharing keys stored in a Capsule backup");
 }
 
 /**
@@ -115,7 +143,7 @@ export async function getUserKeyPair(
   email: string,
   mnemonic: string,
   keyVersion?: number,
-): Promise<{ publicKeyJwk: JsonWebKey; privateKeyJwk: JsonWebKey } | null> {
+): Promise<StoredUserKeyPair | null> {
   if (!email) return null;
   if (!mnemonic) throw new Error("Mnemonic is required to decrypt private key");
 
@@ -127,26 +155,121 @@ export async function getUserKeyPair(
 
     if (!userData) return null;
 
-    if (!userData.encryptedPrivateKey) {
-      throw new Error("No encrypted private key found in IndexedDB");
-    }
-
-    const { decryptRsaPrivateKey } = await import("./cryptoUtils");
-
-    // Decrypt private key with mnemonic
-    const privateKeyJwk = await decryptRsaPrivateKey(
-      userData.encryptedPrivateKey,
-      mnemonic,
-    );
-
-    return {
-      publicKeyJwk: userData.publicKeyJwk,
-      privateKeyJwk,
-    };
+    const opened = await openUserKeyData(userData, mnemonic, keyVersion);
+    return opened;
   } catch (error) {
-    logger.error("Error retrieving/decrypting RSA keys:", error);
+    logger.error("Error retrieving sharing keys:", error);
     throw error; // Propagate error so caller can handle wrong mnemonic
   }
+}
+
+async function openUserKeyData(
+  userData: UserKeyData,
+  mnemonic: string,
+  fallbackKeyVersion?: number,
+): Promise<StoredUserKeyPair> {
+  if (!userData.encryptedPrivateKey) {
+    throw new Error("No encrypted private key found in IndexedDB");
+  }
+
+  const encryptedBytes = base64ToBytes(userData.encryptedPrivateKey);
+  try {
+    const opened = await openSharingKeyBackupCapsule(
+      bytesToBlob(encryptedBytes),
+      mnemonic,
+      {
+        legacyPbkdf2Salt:
+          process.env.REACT_APP_RSA_PBKDF2_SALT || "default-rsa-salt",
+        legacyKeyVersion:
+          userData.keyVersion || fallbackKeyVersion || 1,
+      },
+    );
+
+    const expectedKeyVersion =
+      userData.keyVersion || fallbackKeyVersion || opened.keyVersion || 1;
+    if (
+      opened.keyVersion !== undefined &&
+      opened.keyVersion !== expectedKeyVersion
+    ) {
+      throw new Error("Sharing-key backup version does not match its record");
+    }
+
+    const publicKeyJwk =
+      (opened.publicKeyJwk as JsonWebKey | undefined) || userData.publicKeyJwk;
+    const [fingerprint, storedPublicKeyFingerprint] = await Promise.all([
+      fingerprintSharingPublicKey(publicKeyJwk),
+      fingerprintSharingPublicKey(userData.publicKeyJwk),
+    ]);
+    if (
+      (opened.fingerprint && opened.fingerprint !== fingerprint) ||
+      storedPublicKeyFingerprint !== fingerprint
+    ) {
+      throw new Error(
+        "Sharing-key backup fingerprint does not match its record",
+      );
+    }
+
+    return {
+      publicKeyJwk,
+      privateKeyJwk: opened.privateKeyJwk as JsonWebKey,
+      keyVersion: expectedKeyVersion,
+      fingerprint,
+    };
+  } finally {
+    encryptedBytes.fill(0);
+  }
+}
+
+/**
+ * Open every locally retained sharing key for an account. Legacy shares may
+ * not identify their recipient-key version, so Capsule needs all historical
+ * private keys as candidates and performs the actual key match.
+ */
+export async function getUserKeyPairs(
+  email: string,
+  mnemonic: string,
+): Promise<StoredUserKeyPair[]> {
+  if (!email) return [];
+  if (!mnemonic) throw new Error("Mnemonic is required to decrypt private keys");
+
+  const db = await getDb();
+  const [current, versioned] = await Promise.all([
+    db.get(KEY_STORE, email) as Promise<UserKeyData | undefined>,
+    db.getAllFromIndex(
+      VERSIONED_KEY_STORE,
+      "email",
+      email,
+    ) as Promise<UserKeyData[]>,
+  ]);
+
+  const records = [...versioned];
+  if (
+    current &&
+    !records.some(
+      (record) =>
+        record.keyVersion === current.keyVersion &&
+        JSON.stringify(record.publicKeyJwk) ===
+          JSON.stringify(current.publicKeyJwk),
+    )
+  ) {
+    records.push(current);
+  }
+
+  const opened = await Promise.all(
+    records.map(async (record) => {
+      try {
+        return await openUserKeyData(record, mnemonic);
+      } catch (error) {
+        logger.warn(
+          `[KeyStorage] Sharing key version ${record.keyVersion ?? "unknown"} could not be opened`,
+          error,
+        );
+        return null;
+      }
+    }),
+  );
+
+  return opened.filter((key): key is StoredUserKeyPair => key !== null);
 }
 
 /**

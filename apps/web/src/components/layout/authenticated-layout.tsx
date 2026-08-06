@@ -2,7 +2,11 @@ import React, { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { ArrowLeft, AlertTriangle } from "lucide-react";
 import { useApp } from "../../contexts/app-context";
-import { getStoredKey, VAULT_KEY_STORAGE_EVENT } from "../../utils/cryptoUtils";
+import {
+  RECOVERY_PHRASE_MEMORY_EVENT,
+} from "../../utils/mnemonicManager";
+import { VAULT_KEY_STORAGE_EVENT } from "../../utils/cryptoUtils";
+import { hasVaultReadAccess } from "../../utils/vaultAccess";
 
 function AuthenticatedLayoutContent({
   children,
@@ -22,14 +26,9 @@ function AuthenticatedLayoutContent({
   useEffect(() => {
     let isMounted = true;
 
-    const refreshBrowserVaultKey = () => {
-      getStoredKey()
-        .then((key) => {
-          if (isMounted) setHasBrowserVaultKey(!!key);
-        })
-        .catch(() => {
-          if (isMounted) setHasBrowserVaultKey(false);
-        });
+    const refreshBrowserVaultKey = async () => {
+      const hasAccess = await hasVaultReadAccess();
+      if (isMounted) setHasBrowserVaultKey(hasAccess);
     };
 
     if (!hasDecryptionError) {
@@ -37,12 +36,20 @@ function AuthenticatedLayoutContent({
       return;
     }
 
-    refreshBrowserVaultKey();
+    void refreshBrowserVaultKey();
+    window.addEventListener(
+      RECOVERY_PHRASE_MEMORY_EVENT,
+      refreshBrowserVaultKey,
+    );
     window.addEventListener(VAULT_KEY_STORAGE_EVENT, refreshBrowserVaultKey);
     window.addEventListener("focus", refreshBrowserVaultKey);
 
     return () => {
       isMounted = false;
+      window.removeEventListener(
+        RECOVERY_PHRASE_MEMORY_EVENT,
+        refreshBrowserVaultKey,
+      );
       window.removeEventListener(
         VAULT_KEY_STORAGE_EVENT,
         refreshBrowserVaultKey,

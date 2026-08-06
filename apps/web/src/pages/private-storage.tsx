@@ -5,7 +5,8 @@ import { Button } from "../components/ui/button";
 import { toast } from "sonner";
 import { useApp } from "../contexts/app-context";
 
-import { getStoredKey } from "../utils/cryptoUtils";
+import { hasMnemonic } from "../utils/mnemonicManager";
+import { hasVaultReadAccess } from "../utils/vaultAccess";
 import { fetchAndStoreFileMetadata } from "../utils/dexieDB";
 import {
   uploadAndSyncFile,
@@ -180,9 +181,9 @@ function PrivateStorageContent() {
           setSessionUser(email);
         }
 
-        const key = await getStoredKey();
-        setHasVaultKey(!!key);
-        setVaultKeyStatus(email, !!key);
+        const hasVaultAccess = await hasVaultReadAccess();
+        setHasVaultKey(hasVaultAccess);
+        setVaultKeyStatus(email, hasVaultAccess);
 
         // Initialize GAPI first so we can fetch profile info
         const { hasGoogleTokensInStorage, logout } =
@@ -385,10 +386,10 @@ function PrivateStorageContent() {
       return;
     }
 
-    const key = await getStoredKey();
-    setHasVaultKey(!!key);
-    if (userEmail) setVaultKeyStatus(userEmail, !!key);
-    if (!key) {
+    const hasVaultAccess = hasMnemonic();
+    setHasVaultKey(hasVaultAccess);
+    if (userEmail) setVaultKeyStatus(userEmail, hasVaultAccess);
+    if (!hasVaultAccess) {
       toast.info("Set up Recovery & Access first", {
         description:
           "Create a new recovery phrase or enter your existing one before uploading files.",
@@ -438,10 +439,10 @@ function PrivateStorageContent() {
     }
 
     // Encryption key is required to upload (files are encrypted client-side)
-    const key = await getStoredKey();
-    setHasVaultKey(!!key);
-    setVaultKeyStatus(userEmail, !!key);
-    if (!key) {
+    const hasVaultAccess = hasMnemonic();
+    setHasVaultKey(hasVaultAccess);
+    setVaultKeyStatus(userEmail, hasVaultAccess);
+    if (!hasVaultAccess) {
       toast.info("Set up Recovery & Access first", {
         description:
           "Create a new recovery phrase or enter your existing one before uploading files.",
@@ -545,11 +546,11 @@ function PrivateStorageContent() {
     }
 
     // Check for encryption key before allowing deletion
-    const key = await getStoredKey();
-    setHasVaultKey(!!key);
-    setVaultKeyStatus(userEmail, !!key);
-    if (!key) {
-      toast.error("Encryption key required", {
+    const hasVaultAccess = hasMnemonic();
+    setHasVaultKey(hasVaultAccess);
+    setVaultKeyStatus(userEmail, hasVaultAccess);
+    if (!hasVaultAccess) {
+      toast.error("Recovery & Access required", {
         description:
           "Recover access to this vault before deleting encrypted files.",
       });

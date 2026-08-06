@@ -1,210 +1,106 @@
-/**
- * Unit Tests for File Decryption
- * Tests file decryption with AES-GCM
- */
+import { decryptFile } from "../../utils/decryptFile";
+import { encryptFile } from "../../utils/encryptFile";
+import {
+  clearMnemonic,
+  setMnemonic,
+} from "../../utils/mnemonicManager";
+import { generateVaultRecoveryPhrase } from "../../utils/capsuleAdapter";
 
-import { decryptFile } from '../../utils/decryptFile';
-import { generateKey, storeKey, generateMnemonic } from '../../utils/cryptoUtils';
-import { encryptFile } from '../../utils/encryptFile';
-import { setMnemonic, clearMnemonic } from '../../utils/mnemonicManager';
-
-describe('DecryptFile', () => {
-  let testMnemonic: string;
+describe("decryptFile with Capsule v1", () => {
+  const legacyRecoveryPhrase =
+    "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
+  const legacyPersonalFileBase64 =
+    "AAECAwQFBgcICQoLSgY+SADIxXyrQ5kz3Xa0MMYJEqYY4z55XcvEBwX3pJZ9isLWt073c+FwrrGoLu3LntG9I8+zBPhd";
+  const legacyPersonalPlaintext =
+    "ZeroDrive offline recovery compatibility\n";
+  let recoveryPhrase: string;
 
   beforeEach(() => {
-    // Clear session storage before each test
     sessionStorage.clear();
-    // Set up test mnemonic
-    testMnemonic = generateMnemonic();
-    setMnemonic(testMnemonic);
+    recoveryPhrase = generateVaultRecoveryPhrase();
+    setMnemonic(recoveryPhrase);
   });
 
   afterEach(() => {
     clearMnemonic();
   });
 
-  describe('decryptFile', () => {
-    it('should decrypt file successfully with correct key', async () => {
-      // Generate and store encryption key
-      const key = await generateKey();
-      await storeKey(key);
-
-      // Create and encrypt test file
-      const originalContent = 'This is secret test content';
-      const file = new File([originalContent], 'test.txt', { type: 'text/plain' });
-      const encryptedBlob = await encryptFile(file);
-
-      // Decrypt the file
-      const decryptedBlob = await decryptFile(encryptedBlob);
-
-      // Verify decrypted content matches original
-      const decryptedText = await decryptedBlob.text();
-      expect(decryptedText).toBe(originalContent);
-      expect(decryptedBlob).toBeInstanceOf(Blob);
+  it("round-trips text, MIME type, and binary data", async () => {
+    const binary = new Uint8Array([0, 1, 2, 3, 255, 254, 253]);
+    const file = new File([binary], "archive.bin", {
+      type: "application/x-private-test",
     });
 
-    it('should throw error when no encryption key in sessionStorage', async () => {
-      const file = new File(['test'], 'test.txt', { type: 'text/plain' });
-      const blob = new Blob([file]);
+    const decrypted = await decryptFile(await encryptFile(file));
 
-      await expect(decryptFile(blob)).rejects.toThrow(
-        'No encryption key found in session storage'
-      );
-    });
+    expect(decrypted.mimeType).toBe("application/x-private-test");
+    expect(
+      new Uint8Array(await decrypted.contentBlob.arrayBuffer()),
+    ).toEqual(binary);
+  });
 
-    it('should throw error when key format is invalid JSON', async () => {
-      // Clear mnemonic so getStoredKey returns null
-      clearMnemonic();
+  it("rejects a different recovery phrase", async () => {
+    const encrypted = await encryptFile(
+      new File(["private"], "private.txt", { type: "text/plain" }),
+    );
+    setMnemonic(generateVaultRecoveryPhrase());
 
-      // Store invalid encrypted data
-      sessionStorage.setItem('aes-gcm-key', 'not-valid-json{');
+    await expect(decryptFile(encrypted)).rejects.toThrow(
+      "recovery phrase cannot open",
+    );
+  });
 
-      const blob = new Blob(['test']);
+  it("rejects tampered and truncated Capsules", async () => {
+    const encrypted = await encryptFile(
+      new File(["private"], "private.txt", { type: "text/plain" }),
+    );
+    const tampered = new Uint8Array(await encrypted.arrayBuffer());
+    tampered[tampered.length - 1] ^= 1;
 
-      // Should fail because getStoredKey() returns null
-      await expect(decryptFile(blob)).rejects.toThrow(
-        'No encryption key found in session storage'
-      );
+    await expect(decryptFile(new Blob([tampered]))).rejects.toThrow();
+    await expect(
+      decryptFile(new Blob([tampered.slice(0, 12)])),
+    ).rejects.toThrow();
+  });
 
-      // Restore mnemonic for other tests
-      setMnemonic(testMnemonic);
-    });
+  it("rejects a Capsule paired with a different vault-index entry", async () => {
+    const firstObjectId = "1490c57e-f1e1-4c37-9477-e73de4fd11fd";
+    const secondObjectId = "27375ac8-689e-46e4-8d2c-178776e5caa0";
+    const encrypted = await encryptFile(
+      new File(["first"], "first.txt", { type: "text/plain" }),
+      firstObjectId,
+    );
 
-    it('should throw error when JWK is missing required fields', async () => {
-      // Clear mnemonic so getStoredKey returns null
-      clearMnemonic();
+    await expect(
+      decryptFile(encrypted, {
+        name: "second.txt",
+        mimeType: "text/plain",
+        objectId: secondObjectId,
+        revision: 1,
+      }),
+    ).rejects.toThrow("does not match its authenticated vault entry");
+  });
 
-      // Store invalid encrypted data
-      const invalidJWK = {
-        kty: 'oct',
-        // missing 'k' field
-      };
-      sessionStorage.setItem('aes-gcm-key', JSON.stringify(invalidJWK));
+  it("requires access after the phrase is cleared", async () => {
+    const encrypted = await encryptFile(
+      new File(["private"], "private.txt", { type: "text/plain" }),
+    );
+    clearMnemonic();
 
-      const blob = new Blob(['test']);
+    await expect(decryptFile(encrypted)).rejects.toThrow();
+  });
 
-      // Should fail because getStoredKey() returns null
-      await expect(decryptFile(blob)).rejects.toThrow(
-        'No encryption key found in session storage'
-      );
+  it("opens the frozen production legacy personal-file format through Capsule", async () => {
+    setMnemonic(legacyRecoveryPhrase);
+    const encrypted = Uint8Array.from(
+      atob(legacyPersonalFileBase64),
+      (character) => character.charCodeAt(0),
+    );
 
-      // Restore mnemonic for other tests
-      setMnemonic(testMnemonic);
-    });
+    const decrypted = await decryptFile(new Blob([encrypted]));
 
-    it('should throw error when JWK has wrong key type', async () => {
-      // Clear mnemonic so getStoredKey returns null
-      clearMnemonic();
-
-      // Store invalid encrypted data
-      const invalidJWK = {
-        kty: 'RSA', // Should be 'oct' for AES
-        k: 'somebase64value',
-      };
-      sessionStorage.setItem('aes-gcm-key', JSON.stringify(invalidJWK));
-
-      const blob = new Blob(['test']);
-
-      // Should fail because getStoredKey() returns null
-      await expect(decryptFile(blob)).rejects.toThrow(
-        'No encryption key found in session storage'
-      );
-
-      // Restore mnemonic for other tests
-      setMnemonic(testMnemonic);
-    });
-
-    it('should throw error when file is too small (missing IV)', async () => {
-      // Generate and store valid key
-      const key = await generateKey();
-      await storeKey(key);
-
-      // Create blob that's too small (< 13 bytes: 12-byte IV + at least 1 byte data)
-      const tooSmallBlob = new Blob([new Uint8Array(10)]);
-
-      await expect(decryptFile(tooSmallBlob)).rejects.toThrow(
-        'File is not properly encrypted (too small)'
-      );
-    });
-
-    it('should throw error when decryption fails with wrong key', async () => {
-      // Encrypt with one key
-      const key1 = await generateKey();
-      await storeKey(key1);
-
-      const file = new File(['secret content'], 'test.txt', { type: 'text/plain' });
-      const encryptedBlob = await encryptFile(file);
-
-      // Try to decrypt with different key
-      const key2 = await generateKey();
-      await storeKey(key2);
-
-      await expect(decryptFile(encryptedBlob)).rejects.toThrow(
-        "the encryption key doesn't match the one used to encrypt this file"
-      );
-    });
-
-    it('should throw error when encrypted data is corrupted', async () => {
-      // Generate and store key
-      const key = await generateKey();
-      await storeKey(key);
-
-      // Create and encrypt file
-      const file = new File(['content'], 'test.txt', { type: 'text/plain' });
-      const encryptedBlob = await encryptFile(file);
-
-      // Corrupt the encrypted data
-      const encryptedArray = new Uint8Array(await encryptedBlob.arrayBuffer());
-      // Keep IV (first 12 bytes), corrupt encrypted data
-      for (let i = 12; i < encryptedArray.length; i++) {
-        encryptedArray[i] = Math.floor(Math.random() * 256);
-      }
-      const corruptedBlob = new Blob([encryptedArray]);
-
-      await expect(decryptFile(corruptedBlob)).rejects.toThrow();
-    });
-
-    it('should handle binary file decryption correctly', async () => {
-      // Generate and store key
-      const key = await generateKey();
-      await storeKey(key);
-
-      // Create binary data
-      const binaryData = new Uint8Array([0, 1, 2, 3, 255, 254, 253]);
-      const file = new File([binaryData], 'binary.dat', {
-        type: 'application/octet-stream',
-      });
-
-      // Encrypt and decrypt
-      const encryptedBlob = await encryptFile(file);
-      const decryptedBlob = await decryptFile(encryptedBlob);
-
-      // Verify binary data matches
-      const decryptedArray = new Uint8Array(await decryptedBlob.arrayBuffer());
-      expect(decryptedArray).toEqual(binaryData);
-    });
-
-    it('should handle large file decryption', async () => {
-      // Generate and store key
-      const key = await generateKey();
-      await storeKey(key);
-
-      // Create larger file (1MB)
-      const largeContent = 'x'.repeat(1024 * 1024);
-      const file = new File([largeContent], 'large.txt', { type: 'text/plain' });
-
-      // Encrypt and decrypt
-      const encryptedBlob = await encryptFile(file);
-      const decryptedBlob = await decryptFile(encryptedBlob);
-
-      // Verify size matches
-      expect(decryptedBlob.size).toBe(largeContent.length);
-
-      // Verify first and last characters
-      const decryptedText = await decryptedBlob.text();
-      expect(decryptedText[0]).toBe('x');
-      expect(decryptedText[decryptedText.length - 1]).toBe('x');
-      expect(decryptedText.length).toBe(largeContent.length);
-    });
+    await expect(decrypted.contentBlob.text()).resolves.toBe(
+      legacyPersonalPlaintext,
+    );
   });
 });

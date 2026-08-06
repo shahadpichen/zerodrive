@@ -7,14 +7,17 @@ import {
   ShieldCheck,
   X,
 } from "lucide-react";
-import { getStoredKey } from "../../utils/cryptoUtils";
+import {
+  getVaultAccessKind,
+  type VaultAccessKind,
+} from "../../utils/vaultAccess";
 
 interface DeviceManagementProps {
   refreshKey?: number;
 }
 
 export function DeviceManagement({ refreshKey = 0 }: DeviceManagementProps) {
-  const [hasKey, setHasKey] = useState(false);
+  const [accessKind, setAccessKind] = useState<VaultAccessKind>("none");
   const [isChecking, setIsChecking] = useState(true);
 
   useEffect(() => {
@@ -23,20 +26,22 @@ export function DeviceManagement({ refreshKey = 0 }: DeviceManagementProps) {
     const checkKeyStatus = async () => {
       setIsChecking(true);
       try {
-        const key = await getStoredKey();
-        if (active) setHasKey(Boolean(key));
+        const nextAccessKind = await getVaultAccessKind();
+        if (active) setAccessKind(nextAccessKind);
       } catch {
-        if (active) setHasKey(false);
+        if (active) setAccessKind("none");
       } finally {
         if (active) setIsChecking(false);
       }
     };
 
-    checkKeyStatus();
+    void checkKeyStatus();
     return () => {
       active = false;
     };
   }, [refreshKey]);
+
+  const hasKey = accessKind !== "none";
 
   return (
     <aside className="border">
@@ -73,12 +78,16 @@ export function DeviceManagement({ refreshKey = 0 }: DeviceManagementProps) {
               <div>
                 <p className="text-sm font-medium">
                   {hasKey
-                    ? "Encryption key active"
-                    : "No encryption key active"}
+                    ? accessKind === "recovery_phrase"
+                      ? "Recovery phrase active"
+                      : "Legacy key active"
+                    : "No recovery phrase active"}
                 </p>
                 <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
                   {hasKey
-                    ? "You can encrypt and decrypt files until this tab or session is cleared."
+                    ? accessKind === "recovery_phrase"
+                      ? "You can encrypt and decrypt files until this tab or session is cleared."
+                      : "You can open historical files in this tab. Enter a recovery phrase before creating or changing vault data."
                     : "Recover an existing key or create a new one to access encrypted files."}
                 </p>
               </div>

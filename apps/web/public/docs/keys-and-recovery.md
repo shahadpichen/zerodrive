@@ -1,6 +1,6 @@
 <h2 id="recovery-phrase">The recovery phrase</h2>
 
-The recovery phrase is not a normal password. It is the long-term route back to your encryption keys. ZeroDrive should not store it, log it, or send it to the backend.
+The recovery phrase is not a normal password. It is the long-term route back to your encryption keys. ZeroDrive does not store it, log it, or send it to the backend. The web app keeps it only in memory for the current tab, so a hard refresh or a new tab requires it again.
 
 A password proves who you are to a service. A recovery phrase is more sensitive than that. It helps recreate the keys that open encrypted data. If someone else gets it, they may be able to unlock your files. If nobody has it, ZeroDrive cannot recreate your access for you.
 
@@ -10,7 +10,7 @@ Store it in a trusted password manager, write it down and keep it somewhere safe
 
 <h2 id="browser-session">Browser session keys</h2>
 
-ZeroDrive uses keys inside your browser to encrypt and decrypt files. Some key material may exist only for the current browser session. Other encrypted backups can be stored in Google Drive so the app can recover on another device.
+ZeroDrive uses Capsule v1 inside your browser to encrypt and decrypt files. The active recovery phrase exists only in memory for the current tab. Encrypted sharing-key backups can be stored in Google Drive so the app can restore the recipient keys needed for historical shares on another device.
 
 This means the browser tab is doing real security work. When a file is opened, the browser may temporarily hold the readable file and the key needed to decrypt it.
 
@@ -22,11 +22,11 @@ When you log out or switch accounts, ZeroDrive should clear sensitive browser ke
 
 File sharing uses a public/private key pair. A simple way to picture this is a mailbox.
 
-Your public key is like a mail slot. Other people can use it to send you locked packages. Your private key is the key that opens those packages. The mail slot can be public, but the opening key must stay private.
+Your public key is like a mail slot. Other people can use it to send you locked Capsules. Your private key is the key that opens those Capsules. The mail slot can be public, but the opening key must stay private.
 
 ZeroDrive can store your public key on the backend because it is only used to encrypt data for you. Your private key should stay under your control. It may be backed up to Google Drive only in encrypted form so you can recover it on another device.
 
-When someone shares a file with you, their browser uses your public key to lock the file key for you. Your browser uses your private key to unlock it. The server should not need the private key or the readable file key.
+When someone shares a file with you, their browser uses your public key, version, and fingerprint to prepare a recipient-encrypted Capsule. Your browser uses the matching private key to open it. The server does not need the private key or the readable file key.
 
 <h2 id="safe-habits">Safe habits</h2>
 

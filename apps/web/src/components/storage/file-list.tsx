@@ -30,6 +30,10 @@ import {
   getFileIconPath,
 } from "../../lib/mime-types";
 import { getStoredKey } from "../../utils/cryptoUtils";
+import {
+  hasMnemonic,
+  requireActiveRecoveryPhrase,
+} from "../../utils/mnemonicManager";
 import { toast } from "sonner";
 import { ConfirmationDialog } from "./confirmation-dialog";
 import { Button } from "../ui/button";
@@ -135,6 +139,8 @@ export const FileList: React.FC<FileListProps> = ({
     id: string;
     name: string;
     mimeType: string;
+    objectId?: string;
+    revision?: number;
   } | null>(null);
   const [draggingFileId, setDraggingFileId] = useState<string | null>(null);
   const [dragOverFolderId, setDragOverFolderId] = useState<string | null>(null);
@@ -301,9 +307,10 @@ export const FileList: React.FC<FileListProps> = ({
 
     try {
       const key = await getStoredKey();
-      if (!key) {
-        toast.error("No encryption key found", {
-          description: "Please upload your encryption key first.",
+      if (!key && !hasMnemonic()) {
+        toast.error("Recovery & Access required", {
+          description:
+            "Enter your recovery phrase before opening encrypted files.",
         });
         setDownloadingFileId(null);
         return;
@@ -342,12 +349,15 @@ export const FileList: React.FC<FileListProps> = ({
       toast.loading("Decrypting file...");
 
       try {
-        const decryptedBlob = await decryptFile(fileBlob);
+        const fileMetadata = allUserFiles.find((file) => file.id === fileId);
+        const decrypted = await decryptFile(fileBlob, fileMetadata || {
+          name: fileName,
+        });
 
-        const url = URL.createObjectURL(decryptedBlob);
+        const url = URL.createObjectURL(decrypted.contentBlob);
         const a = document.createElement("a");
         a.href = url;
-        a.download = fileName;
+        a.download = decrypted.fileName;
         document.body.appendChild(a);
         a.click();
 
@@ -400,12 +410,10 @@ export const FileList: React.FC<FileListProps> = ({
   const performDelete = async () => {
     if (!fileToDelete || !userEmail) return;
 
-    // Check for encryption key before allowing deletion
-    const key = await getStoredKey();
-    if (!key) {
-      toast.error("Encryption key required", {
+    if (!hasMnemonic()) {
+      toast.error("Recovery & Access required", {
         description:
-          "You need your encryption key to delete files. Please upload it first.",
+          "Enter your recovery phrase before changing encrypted Storage metadata.",
       });
       setShowDeleteConfirm(false);
       setFileToDelete(null);
@@ -417,6 +425,7 @@ export const FileList: React.FC<FileListProps> = ({
     let deleteSuccess = false;
 
     try {
+      requireActiveRecoveryPhrase();
       assertCanWriteVaultMetadata(userEmail);
 
       deleteToastId = toast.loading(`Deleting ${fileName}...`);
@@ -488,10 +497,18 @@ export const FileList: React.FC<FileListProps> = ({
     fileId: string,
     fileName: string,
     mimeType: string,
+    objectId?: string,
+    revision?: number,
     e?: React.MouseEvent,
   ) => {
     if (e) e.stopPropagation();
-    setPreviewFile({ id: fileId, name: fileName, mimeType });
+    setPreviewFile({
+      id: fileId,
+      name: fileName,
+      mimeType,
+      objectId,
+      revision,
+    });
   };
 
   if (view === "compact" || view === "recent") {
@@ -524,6 +541,8 @@ export const FileList: React.FC<FileListProps> = ({
                               id: file.id,
                               name: file.name,
                               mimeType: file.mimeType,
+                              objectId: file.objectId,
+                              revision: file.revision,
                             })
                           : downloadAndDecryptFile(file.id, file.name)
                       }
@@ -556,6 +575,8 @@ export const FileList: React.FC<FileListProps> = ({
                                     file.id,
                                     file.name,
                                     file.mimeType,
+                                    file.objectId,
+                                    file.revision,
                                     e,
                                   )
                                 }
@@ -613,6 +634,8 @@ export const FileList: React.FC<FileListProps> = ({
             fileId={previewFile.id}
             fileName={previewFile.name}
             mimeType={previewFile.mimeType}
+            objectId={previewFile.objectId}
+            revision={previewFile.revision}
             open={!!previewFile}
             onOpenChange={(open) => !open && setPreviewFile(null)}
             onDownload={() => {
@@ -875,7 +898,15 @@ export const FileList: React.FC<FileListProps> = ({
                 setDraggingFileId(file.id);
               }}
               onDragEnd={() => setDraggingFileId(null)}
-              onClick={() => handlePreview(file.id, file.name, file.mimeType)}
+              onClick={() =>
+                handlePreview(
+                  file.id,
+                  file.name,
+                  file.mimeType,
+                  file.objectId,
+                  file.revision,
+                )
+              }
               title={file.name}
             >
               <button
@@ -997,7 +1028,13 @@ export const FileList: React.FC<FileListProps> = ({
                     }`}
                     onClick={() =>
                       canPreview
-                        ? handlePreview(file.id, file.name, file.mimeType)
+                        ? handlePreview(
+                            file.id,
+                            file.name,
+                            file.mimeType,
+                            file.objectId,
+                            file.revision,
+                          )
                         : downloadAndDecryptFile(file.id, file.name)
                     }
                   >
@@ -1026,6 +1063,8 @@ export const FileList: React.FC<FileListProps> = ({
                                 file.id,
                                 file.name,
                                 file.mimeType,
+                                file.objectId,
+                                file.revision,
                                 e,
                               )
                             }
@@ -1071,6 +1110,8 @@ export const FileList: React.FC<FileListProps> = ({
           fileId={previewFile.id}
           fileName={previewFile.name}
           mimeType={previewFile.mimeType}
+          objectId={previewFile.objectId}
+          revision={previewFile.revision}
           open={!!previewFile}
           onOpenChange={(open) => !open && setPreviewFile(null)}
           onDownload={() => {

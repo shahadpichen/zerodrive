@@ -19,6 +19,7 @@ jest.mock('../../utils/cryptoUtils');
 jest.mock('../../utils/gapiInit');
 jest.mock('../../utils/logger');
 jest.mock('../../utils/analyticsTracker');
+jest.mock('../../utils/mnemonicManager');
 jest.mock('sonner', () => ({
   toast: {
     loading: jest.fn(() => 'toast-id'),
@@ -57,6 +58,17 @@ jest.mock('../../utils/cryptoUtils', () => ({
   getStoredKey: (...args: any[]) => mockGetStoredKey(...args),
 }));
 
+const mockRequireActiveRecoveryPhrase = jest.fn();
+const mockAssertRecoveryPhraseSessionCurrent = jest.fn();
+jest.mock('../../utils/mnemonicManager', () => ({
+  captureActiveRecoveryPhraseSession: () => ({
+    phrase: mockRequireActiveRecoveryPhrase(),
+    generation: 1,
+  }),
+  assertRecoveryPhraseSessionCurrent: (...args: any[]) =>
+    mockAssertRecoveryPhraseSessionCurrent(...args),
+}));
+
 const mockGetGoogleAccessToken = jest.fn();
 jest.mock('../../utils/gapiInit', () => ({
   getGoogleAccessToken: (...args: any[]) => mockGetGoogleAccessToken(...args),
@@ -77,6 +89,9 @@ describe('FileOperations', () => {
     sessionStorage.clear();
     jest.clearAllMocks();
     rememberVaultMetadataStatus(testUser, "ready");
+    mockRequireActiveRecoveryPhrase.mockReturnValue(
+      "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
+    );
     mockGetStoredKey.mockResolvedValue(mockKey);
     mockGetGoogleAccessToken.mockResolvedValue(mockToken);
     mockEncryptFile.mockResolvedValue(mockEncryptedBlob);
@@ -105,12 +120,18 @@ describe('FileOperations', () => {
       expect(result?.mimeType).toBe('text/plain');
       expect(result?.userEmail).toBe(testUser);
 
-      expect(mockEncryptFile).toHaveBeenCalledWith(testFile);
+      expect(mockEncryptFile).toHaveBeenCalledWith(
+        testFile,
+        expect.any(String),
+        expect.any(String),
+      );
       expect(mockAddFile).toHaveBeenCalledWith(
         expect.objectContaining({
           id: 'drive-file-123',
           name: 'test.txt',
           userEmail: testUser,
+          objectId: expect.any(String),
+          revision: 1,
         })
       );
       expect(mockSendToGoogleDrive).toHaveBeenCalled();
@@ -122,8 +143,10 @@ describe('FileOperations', () => {
       expect(toast.success).toHaveBeenCalled();
     });
 
-    it('should return null when encryption key is missing', async () => {
-      mockGetStoredKey.mockResolvedValue(null);
+    it('should return null when the recovery phrase is missing', async () => {
+      mockRequireActiveRecoveryPhrase.mockImplementation(() => {
+        throw new Error("Open Recovery & Access and enter the recovery phrase.");
+      });
 
       const result = await uploadAndSyncFile(testFile, testUser);
 
@@ -326,6 +349,11 @@ describe('FileOperations', () => {
       expect(mockClearUserFilesFromDB).toHaveBeenCalledWith(testUser);
       expect(mockSendToGoogleDrive).toHaveBeenCalledWith([], [], {
         userEmail: testUser,
+        recoveryPhraseSession: {
+          phrase:
+            "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
+          generation: 1,
+        },
       }); // Empty files and folders
       expect(toast.success).toHaveBeenCalled();
     });

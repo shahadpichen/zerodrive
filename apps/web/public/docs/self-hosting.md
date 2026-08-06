@@ -18,7 +18,7 @@ Environment variables are settings and secrets the app reads when it starts. The
 
 Important backend values include `JWT_SECRET`, `DIRECTORY_HMAC_SECRET`, `GOOGLE_REDIRECT_URI`, `MINIO_*`, `MAILGUN_*`, `APP_URL`, and `ALLOWED_ORIGINS`.
 
-Important frontend values include `REACT_APP_API_URL` and the RSA private-key encryption salt used by the app.
+The main frontend value is `REACT_APP_API_URL`. `REACT_APP_RSA_PBKDF2_SALT` is needed only when an existing deployment must read historical sharing-key records created before Capsule v1. New sharing-key backups do not use that deployment salt.
 
 Never commit real production values to GitHub.
 

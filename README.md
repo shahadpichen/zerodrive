@@ -2,7 +2,9 @@
 
 ZeroDrive is a zero-knowledge encrypted cloud storage and private file sharing app.
 
-Files are encrypted in the browser before upload. The backend coordinates authentication, storage, sharing metadata, and lifecycle state, but it should never receive plaintext file content or encryption keys.
+Files, vault indexes, shared metadata, and sharing-key backups are encrypted in the browser with [`@zerodrivehq/capsule`](https://www.npmjs.com/package/@zerodrivehq/capsule) before upload. The backend coordinates authentication, storage, sharing metadata, and lifecycle state, but it should never receive plaintext file content, recovery phrases, or encryption keys.
+
+Offline recovery is provided separately by [`@zerodrivehq/recovery`](https://www.npmjs.com/package/@zerodrivehq/recovery); it is not a browser dependency.
 
 ## Repository layout
 

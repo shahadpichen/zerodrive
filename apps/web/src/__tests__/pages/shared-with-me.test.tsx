@@ -8,13 +8,13 @@ import {
   decryptSharedFile,
   downloadEncryptedFile,
 } from "../../utils/fileSharing";
-import { getStoredKey } from "../../utils/cryptoUtils";
-import { getUserKeyPair } from "../../utils/keyStorage";
+import { getUserKeyPair, getUserKeyPairs } from "../../utils/keyStorage";
 import { uploadAndSyncFile } from "../../utils/fileOperations";
 import { getMnemonic } from "../../utils/mnemonicManager";
 import { downloadEncryptedRsaKeyFromDrive } from "../../utils/gdriveKeyStorage";
-import { decryptRsaPrivateKeyWithAesKey } from "../../utils/rsaKeyManager";
 import { fetchAndStoreFileMetadata } from "../../utils/dexieDB";
+import { openSharingKeyBackupCapsule } from "../../utils/capsuleAdapter";
+import { useOptionalVaultData } from "../../contexts/vault-data-context";
 
 const mockNavigate = jest.fn();
 
@@ -38,17 +38,14 @@ jest.mock("../../utils/apiClient", () => ({
 }));
 
 jest.mock("../../utils/fileSharing", () => ({
-  arrayBufferToBase64: jest.fn(() => "base64-key"),
   decryptSharedFile: jest.fn(),
   downloadEncryptedFile: jest.fn(),
 }));
 
-jest.mock("../../utils/cryptoUtils", () => ({
-  getStoredKey: jest.fn(),
-}));
-
 jest.mock("../../utils/keyStorage", () => ({
   getUserKeyPair: jest.fn(),
+  getUserKeyPairs: jest.fn(),
+  userHasStoredKeys: jest.fn().mockResolvedValue(true),
 }));
 
 jest.mock("../../utils/fileOperations", () => ({
@@ -67,8 +64,21 @@ jest.mock("../../utils/gdriveKeyStorage", () => ({
   downloadEncryptedRsaKeyFromDrive: jest.fn(),
 }));
 
-jest.mock("../../utils/rsaKeyManager", () => ({
-  decryptRsaPrivateKeyWithAesKey: jest.fn(),
+jest.mock("../../utils/rsaKeyRecovery", () => ({
+  recoverRsaKeysIfNeeded: jest.fn().mockResolvedValue({
+    success: true,
+    recovered: false,
+    keysExisted: true,
+  }),
+  recoverRsaKeyVersion: jest.fn().mockResolvedValue(null),
+}));
+
+jest.mock("../../utils/capsuleAdapter", () => ({
+  openSharingKeyBackupCapsule: jest.fn(),
+}));
+
+jest.mock("../../contexts/vault-data-context", () => ({
+  useOptionalVaultData: jest.fn(),
 }));
 
 jest.mock("../../utils/analyticsTracker", () => ({
@@ -87,20 +97,20 @@ jest.mock("sonner", () => ({
 const mockGetUserEmail = getUserEmail as jest.MockedFunction<
   typeof getUserEmail
 >;
-const mockGetStoredKey = getStoredKey as jest.MockedFunction<
-  typeof getStoredKey
->;
 const mockGetMnemonic = getMnemonic as jest.MockedFunction<typeof getMnemonic>;
 const mockGetUserKeyPair = getUserKeyPair as jest.MockedFunction<
   typeof getUserKeyPair
+>;
+const mockGetUserKeyPairs = getUserKeyPairs as jest.MockedFunction<
+  typeof getUserKeyPairs
 >;
 const mockDownloadKeyBackup =
   downloadEncryptedRsaKeyFromDrive as jest.MockedFunction<
     typeof downloadEncryptedRsaKeyFromDrive
   >;
 const mockDecryptKeyBackup =
-  decryptRsaPrivateKeyWithAesKey as jest.MockedFunction<
-    typeof decryptRsaPrivateKeyWithAesKey
+  openSharingKeyBackupCapsule as jest.MockedFunction<
+    typeof openSharingKeyBackupCapsule
   >;
 const mockDownloadEncryptedFile = downloadEncryptedFile as jest.MockedFunction<
   typeof downloadEncryptedFile
@@ -115,9 +125,12 @@ const mockFetchAndStoreFileMetadata =
   fetchAndStoreFileMetadata as jest.MockedFunction<
     typeof fetchAndStoreFileMetadata
   >;
+const mockUseOptionalVaultData =
+  useOptionalVaultData as jest.MockedFunction<typeof useOptionalVaultData>;
 
 const databaseFile = {
   id: "share-123",
+  content_format: "legacy_zdse",
   file_id: "shared/storage-key",
   file_name: "project-brief.pdf",
   created_at: "2026-07-01T10:30:00.000Z",
@@ -157,24 +170,31 @@ describe("SharedWithMePage", () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    mockUseOptionalVaultData.mockReturnValue(null);
     mockGetUserEmail.mockResolvedValue("recipient@example.com");
-    mockGetStoredKey.mockResolvedValue({} as CryptoKey);
     mockDownloadKeyBackup.mockResolvedValue(new Blob(["encrypted key"]));
     mockDecryptKeyBackup.mockResolvedValue({
-      kty: "RSA",
-      d: "private",
+      privateKeyJwk: {
+        kty: "RSA",
+        d: "private",
+      },
+      format: "capsule_v1",
     });
     mockGetMnemonic.mockReturnValue("valid recovery phrase");
     mockGetUserKeyPair.mockResolvedValue({
       publicKeyJwk: { kty: "RSA" },
       privateKeyJwk: { kty: "RSA", d: "private" },
+      fingerprint: "a".repeat(64),
+      keyVersion: 1,
     });
+    mockGetUserKeyPairs.mockResolvedValue([]);
     mockDownloadEncryptedFile.mockResolvedValue(
       new Blob(["ciphertext"], { type: "application/octet-stream" }),
     );
     mockDecryptSharedFile.mockResolvedValue({
       decryptedFile: new Blob(["plaintext"], { type: "application/pdf" }),
       fileName: "project-brief.pdf",
+      mimeType: "application/pdf",
     });
     mockUploadAndSyncFile.mockResolvedValue({
       id: "drive-copy",
@@ -202,7 +222,7 @@ describe("SharedWithMePage", () => {
   });
 
   it("shows vault access as a clear prerequisite", async () => {
-    mockGetStoredKey.mockResolvedValue(null);
+    mockGetMnemonic.mockReturnValue(null);
     renderPage();
 
     expect(
@@ -231,17 +251,18 @@ describe("SharedWithMePage", () => {
     expect(mockNavigate).toHaveBeenCalledWith("/share");
   });
 
-  it("uses the active AES key to unlock the sharing-key backup", async () => {
-    mockGetMnemonic.mockReturnValue(null);
+  it("uses the active sharing identity already stored in this browser", async () => {
+    mockGetMnemonic.mockReturnValue("valid recovery phrase");
     showFiles();
     renderPage();
 
     expect(await screen.findByText("project-brief.pdf")).toBeInTheDocument();
-    expect(mockDownloadKeyBackup).toHaveBeenCalled();
-    expect(mockDecryptKeyBackup).toHaveBeenCalledWith(
-      expect.any(Blob),
-      expect.any(Object),
+    expect(mockGetUserKeyPair).toHaveBeenCalledWith(
+      "recipient@example.com",
+      "valid recovery phrase",
     );
+    expect(mockDownloadKeyBackup).not.toHaveBeenCalled();
+    expect(mockDecryptKeyBackup).not.toHaveBeenCalled();
     expect(
       screen.queryByText("Set up Recovery & Access first"),
     ).not.toBeInTheDocument();
@@ -320,6 +341,40 @@ describe("SharedWithMePage", () => {
     anchorClick.mockRestore();
   });
 
+  it("offers historical sharing keys to Capsule for unversioned legacy shares", async () => {
+    mockGetUserKeyPairs.mockResolvedValue([
+      {
+        publicKeyJwk: { kty: "RSA", n: "historical-public" },
+        privateKeyJwk: { kty: "RSA", n: "historical-private", d: "old" },
+        keyVersion: 1,
+        fingerprint: "b".repeat(64),
+      },
+    ]);
+    showFiles();
+    const anchorClick = jest
+      .spyOn(HTMLAnchorElement.prototype, "click")
+      .mockImplementation();
+    renderPage();
+
+    fireEvent.click(await screen.findByRole("button", { name: /^download$/i }));
+
+    await waitFor(() =>
+      expect(mockDecryptSharedFile).toHaveBeenCalledWith(
+        expect.objectContaining({
+          recipientPrivateKeys: expect.arrayContaining([
+            expect.objectContaining({
+              privateKeyJwk: expect.objectContaining({
+                n: "historical-private",
+              }),
+              keyVersion: 1,
+            }),
+          ]),
+        }),
+      ),
+    );
+    anchorClick.mockRestore();
+  });
+
   it("saves an explicit encrypted copy to My Storage", async () => {
     showFiles();
     renderPage();
@@ -342,6 +397,45 @@ describe("SharedWithMePage", () => {
     expect(apiClient.sharedFiles.recordAccess).toHaveBeenCalledWith(
       "share-123",
     );
+  });
+
+  it("refreshes the shared vault snapshot after saving to Storage", async () => {
+    const refreshVaultFromLocal = jest.fn().mockResolvedValue({
+      files: [],
+      folders: [],
+    });
+    mockUseOptionalVaultData.mockReturnValue({
+      state: {
+        userEmail: "recipient@example.com",
+        files: [],
+        folders: [],
+        isHydrating: false,
+        isRefreshing: false,
+        metadataStatus: "ready",
+        hasVaultKey: true,
+        lastSyncedAt: Date.now(),
+        error: null,
+      },
+      replaceVaultData: jest.fn(),
+      refreshVaultFromLocal,
+      setVaultMetadataStatus: jest.fn(),
+      setVaultKeyStatus: jest.fn(),
+      clearVaultData: jest.fn(),
+    });
+    showFiles();
+    renderPage();
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: /save to storage/i }),
+    );
+
+    await waitFor(() =>
+      expect(refreshVaultFromLocal).toHaveBeenCalledWith(
+        "recipient@example.com",
+        { metadataStatus: "ready" },
+      ),
+    );
+    expect(mockUploadAndSyncFile).toHaveBeenCalledTimes(1);
   });
 
   it("verifies Storage metadata before saving a shared file", async () => {

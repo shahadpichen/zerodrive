@@ -13,7 +13,9 @@ import {
   getAllFilesForUser,
   getFoldersForUser,
 } from "../utils/dexieDB";
-import { getStoredKey, VAULT_KEY_STORAGE_EVENT } from "../utils/cryptoUtils";
+import { RECOVERY_PHRASE_MEMORY_EVENT } from "../utils/mnemonicManager";
+import { VAULT_KEY_STORAGE_EVENT } from "../utils/cryptoUtils";
+import { hasVaultReadAccess } from "../utils/vaultAccess";
 import {
   clearRememberedVaultMetadataStatuses,
   rememberVaultMetadataStatus,
@@ -258,12 +260,12 @@ export function VaultDataProvider({ children }: { children: React.ReactNode }) {
     Promise.all([
       getAllFilesForUser(email),
       getFoldersForUser(email),
-      getStoredKey(),
+      hasVaultReadAccess(),
     ])
-      .then(([files, folders, key]) => {
+      .then(([files, folders, hasAccess]) => {
         if (!isMounted) return;
         replaceVaultData(email, files, folders);
-        setVaultKeyStatus(email, !!key);
+        setVaultKeyStatus(email, hasAccess);
       })
       .catch((error) => {
         if (!isMounted) return;
@@ -286,15 +288,31 @@ export function VaultDataProvider({ children }: { children: React.ReactNode }) {
     if (!email) return;
 
     const refreshKeyStatus = () => {
-      getStoredKey()
-        .then((key) => setVaultKeyStatus(email, !!key))
-        .catch(() => setVaultKeyStatus(email, false));
+      void hasVaultReadAccess().then((hasAccess) => {
+        setVaultKeyStatus(email, hasAccess);
+      });
     };
 
+    const handleRecoveryPhraseChange = () => {
+      // The in-memory snapshot may have been verified with a different phrase.
+      // Force the next write path to verify the encrypted Drive index again.
+      setVaultMetadataStatus(email, "unverified");
+      refreshKeyStatus();
+    };
+
+    window.addEventListener(
+      RECOVERY_PHRASE_MEMORY_EVENT,
+      handleRecoveryPhraseChange,
+    );
     window.addEventListener(VAULT_KEY_STORAGE_EVENT, refreshKeyStatus);
-    return () =>
+    return () => {
+      window.removeEventListener(
+        RECOVERY_PHRASE_MEMORY_EVENT,
+        handleRecoveryPhraseChange,
+      );
       window.removeEventListener(VAULT_KEY_STORAGE_EVENT, refreshKeyStatus);
-  }, [setVaultKeyStatus, userEmail]);
+    };
+  }, [setVaultKeyStatus, setVaultMetadataStatus, userEmail]);
 
   const exposedState = useMemo<VaultDataState>(() => {
     const activeEmail = normalizeEmail(userEmail);

@@ -12,8 +12,14 @@ import {
   sendToGoogleDrive,
   fetchAndStoreFileMetadata,
   FileMeta,
+  FolderMeta,
+  db,
 } from '../../utils/dexieDB';
 import { rememberVaultMetadataStatus } from '../../utils/vaultMetadataWriteGuard';
+import {
+  clearMnemonic,
+  setMnemonic,
+} from '../../utils/mnemonicManager';
 
 jest.mock('dexie', () => {
   const mockTable = {
@@ -103,11 +109,19 @@ describe('DexieDB - Google Drive Sync', () => {
     uploadedDate: new Date('2024-01-01'),
     folderId: null,
   };
+  const testObjectId = '22222222-2222-4222-8222-222222222222';
 
   beforeEach(() => {
     sessionStorage.clear();
+    setMnemonic(
+      "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
+    );
     rememberVaultMetadataStatus(testUser, "ready");
     jest.clearAllMocks();
+  });
+
+  afterEach(() => {
+    clearMnemonic();
   });
 
   describe('sendToGoogleDrive', () => {
@@ -118,7 +132,22 @@ describe('DexieDB - Google Drive Sync', () => {
     });
 
     it('should create new db-list.json when none exists', async () => {
-      const files = [testFile];
+      const files: FileMeta[] = [
+        {
+          ...testFile,
+          objectId: testObjectId,
+          revision: 1,
+        },
+      ];
+      const folders: FolderMeta[] = [
+        {
+          id: 'folder-123',
+          name: 'Documents',
+          parentId: null,
+          userEmail: testUser,
+          createdDate: new Date('2024-01-02T03:04:05.000Z'),
+        },
+      ];
 
       // Mock search response: no existing file
       (global.fetch as jest.Mock).mockResolvedValueOnce({
@@ -133,19 +162,52 @@ describe('DexieDB - Google Drive Sync', () => {
         text: async () => JSON.stringify({ id: 'new-file-id' }),
       });
 
-      await sendToGoogleDrive(files);
+      await sendToGoogleDrive(files, folders);
 
       expect(mockEncryptMetadata).toHaveBeenCalledWith({
         version: 2,
-        files,
-        folders: [],
-      });
+        files: [
+          {
+            id: 'file-123',
+            objectId: testObjectId,
+            revision: 1,
+            name: 'test.txt',
+            mimeType: 'text/plain',
+            userEmail: testUser,
+            uploadedDate: '2024-01-01T00:00:00.000Z',
+            folderId: null,
+          },
+        ],
+        folders: [
+          {
+            id: 'folder-123',
+            name: 'Documents',
+            parentId: null,
+            userEmail: testUser,
+            createdDate: '2024-01-02T03:04:05.000Z',
+          },
+        ],
+      }, expect.any(String));
       expect(global.fetch).toHaveBeenCalledTimes(2);
 
       // Verify POST request for creating new file
       const uploadCall = (global.fetch as jest.Mock).mock.calls[1];
       expect(uploadCall[0]).toContain('uploadType=multipart');
       expect(uploadCall[1].method).toBe('POST');
+    });
+
+    it('rejects malformed Capsule file bindings instead of omitting them', async () => {
+      const malformedFile = {
+        ...testFile,
+        objectId: 'not-a-uuid',
+        revision: 0,
+      } as FileMeta;
+
+      await expect(sendToGoogleDrive([malformedFile])).rejects.toThrow(
+        'Vault metadata contains an invalid file identifier.'
+      );
+      expect(mockEncryptMetadata).not.toHaveBeenCalled();
+      expect(global.fetch).not.toHaveBeenCalled();
     });
 
     it('should update existing db-list.json', async () => {
@@ -170,6 +232,46 @@ describe('DexieDB - Google Drive Sync', () => {
       const uploadCall = (global.fetch as jest.Mock).mock.calls[1];
       expect(uploadCall[0]).toContain('existing-file-id');
       expect(uploadCall[1].method).toBe('PATCH');
+    });
+
+    it('cancels the Drive update if recovery access changes in flight', async () => {
+      (global.fetch as jest.Mock).mockImplementationOnce(async () => {
+        setMnemonic(
+          'legal winner thank year wave sausage worth useful legal winner thank yellow',
+        );
+        return {
+          ok: true,
+          json: async () => ({ files: [] }),
+        };
+      });
+
+      await expect(sendToGoogleDrive([testFile])).rejects.toMatchObject({
+        name: 'RecoveryPhraseChangedError',
+      });
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not report an in-flight Drive write as safe after recovery access changes', async () => {
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ files: [] }),
+      });
+      (global.fetch as jest.Mock).mockImplementationOnce(async () => {
+        setMnemonic(
+          'legal winner thank year wave sausage worth useful legal winner thank yellow',
+        );
+        return {
+          ok: true,
+          status: 200,
+          text: async () => JSON.stringify({ id: 'new-file-id' }),
+        };
+      });
+
+      await expect(sendToGoogleDrive([testFile])).rejects.toMatchObject({
+        name: 'RecoveryPhraseChangedError',
+      });
+      expect(global.fetch).toHaveBeenCalledTimes(2);
+      expect(toast.success).not.toHaveBeenCalled();
     });
 
     it('should throw error when no access token available', async () => {
@@ -245,7 +347,16 @@ describe('DexieDB - Google Drive Sync', () => {
     beforeEach(() => {
       mockGetGoogleAccessToken.mockResolvedValue('mock-token');
       mockDecryptMetadata.mockResolvedValue({
-        files: [testFile],
+        version: 2,
+        files: [
+          {
+            ...testFile,
+            objectId: testObjectId,
+            revision: 1,
+            uploadedDate: testFile.uploadedDate.toISOString(),
+          },
+        ],
+        folders: [],
       });
       (global.fetch as jest.Mock).mockClear();
     });
@@ -272,6 +383,57 @@ describe('DexieDB - Google Drive Sync', () => {
       expect(mockDecryptMetadata).toHaveBeenCalled();
       // Verify gapi was called to fetch the file list
       expect(gapi.client.request).toHaveBeenCalled();
+      expect(db.table('files').add).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: testFile.id,
+          objectId: testObjectId,
+          revision: 1,
+          uploadedDate: testFile.uploadedDate,
+        })
+      );
+    });
+
+    it('rejects verification results if recovery access changes in flight', async () => {
+      const { gapi } = require('gapi-script');
+      gapi.client.request = jest.fn().mockResolvedValue({
+        result: {
+          files: [{ id: 'db-list-id', name: 'db-list.json' }],
+        },
+      });
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        blob: async () => new Blob(['encrypted-metadata']),
+      });
+      mockDecryptMetadata.mockImplementationOnce(async () => {
+        setMnemonic(
+          'legal winner thank year wave sausage worth useful legal winner thank yellow',
+        );
+        return {
+          version: 2,
+          files: [],
+          folders: [],
+        };
+      });
+
+      await expect(fetchAndStoreFileMetadata()).rejects.toMatchObject({
+        name: 'RecoveryPhraseChangedError',
+      });
+    });
+
+    it('propagates a recovery access change from a token-refresh retry', async () => {
+      const { gapi } = require('gapi-script');
+      const recoveryAccessChanged = Object.assign(
+        new Error('Recovery access changed while metadata was being verified.'),
+        { name: 'RecoveryPhraseChangedError' },
+      );
+      gapi.client.request = jest
+        .fn()
+        .mockRejectedValueOnce({ status: 401 })
+        .mockRejectedValueOnce(recoveryAccessChanged);
+
+      await expect(fetchAndStoreFileMetadata()).rejects.toBe(
+        recoveryAccessChanged,
+      );
     });
 
     it('should handle case when no db-list.json exists', async () => {

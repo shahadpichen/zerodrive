@@ -12,25 +12,25 @@ Keeping the encrypted file is only half of recovery. Keeping the key material is
 
 Recovery is not just about downloading files from Google Drive. To turn encrypted ZeroDrive files back into readable files, you need matching pieces.
 
-You need the encrypted ZeroDrive files, the correct 12-word recovery phrase or key material, a compatible ZeroDrive decryptor, the documented encrypted file format, and access to the Google Drive account holding the files.
+You need the encrypted `.zd` files, the correct 12-word recovery phrase or legacy key material, a compatible Capsule decryptor, and access to the Google Drive account holding the files.
 
 If one of those pieces is missing, recovery may fail. For example, having the encrypted file without the recovery phrase is like having a locked safe without the key.
 
 ZeroDrive also cannot recover files that were deleted directly from Google Drive, corrupted, partially uploaded, or overwritten.
 
-<h2 id="planned-recovery-tooling">Planned recovery tooling</h2>
+<h2 id="planned-recovery-tooling">Offline recovery tooling</h2>
 
-A recovery CLI or offline decryptor should be treated as planned recovery infrastructure unless it has been implemented and released.
+ZeroDrive publishes the open-source `@zerodrivehq/recovery` CLI for offline recovery. It uses the same Capsule implementation as the web app and does not depend on the hosted ZeroDrive website.
 
-The goal of this tool would be simple: let users recover their own files without depending on the hosted website. It should run on the user’s computer and should not upload the recovery phrase or encrypted files to another server.
+The tool runs on the user’s computer and should not upload the recovery phrase or encrypted files to another server. Download the encrypted `.zd` objects from Google Drive before using it.
 
 The tool should ask for the recovery phrase interactively. It should not encourage users to put the recovery phrase directly into a command, because shell history, terminal logs, and process lists can preserve command arguments.
 
-Example future shape:
+Consult the package’s current README for the exact commands and supported legacy formats:
 
-`npx @zerodrive/recovery decrypt ./file.zd --out ./file.pdf`
+`npx @zerodrivehq/recovery`
 
-This command is an intended recovery direction, not a promise that the tool is already released.
+Enter sensitive recovery material only when the tool prompts for it. Do not place a recovery phrase directly in command arguments, shell history, scripts, screenshots, or issue reports.
 
 <h2 id="pending-shares">Pending shares</h2>
 

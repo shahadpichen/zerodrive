@@ -27,7 +27,10 @@ export interface SharedFile {
   pending_expires_at?: Date | null;
   deletion_attempts?: number;
   deletion_last_error?: string | null;
-  encrypted_file_key: string;
+  content_format: "legacy_zdse" | "capsule_v1";
+  recipient_key_version?: number | null;
+  recipient_key_fingerprint?: string | null;
+  encrypted_file_key?: string | null;
   file_name?: string | null;
   file_size: number;
   mime_type?: string | null;
@@ -49,12 +52,15 @@ export interface GetPublicKeyRequest {
 }
 
 export interface CreateSharedFileRequest {
-  file_id: string;
-  recipient_user_id: string;
-  encrypted_file_key: string;
-  file_name: string;
+  management_capability_hash: string;
+  recipient_email: string;
+  content_format?: "legacy_zdse" | "capsule_v1";
+  recipient_key_version?: number;
+  recipient_key_fingerprint?: string;
+  encrypted_file_key?: string | null;
+  encrypted_metadata: string;
   file_size: number;
-  mime_type: string;
+  encrypted_size: number;
   access_type?: "view" | "download";
   expires_at?: string; // ISO date string
 }

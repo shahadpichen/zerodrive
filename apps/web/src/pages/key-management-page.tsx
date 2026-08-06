@@ -12,12 +12,12 @@ import {
   ShieldCheck,
   Upload,
 } from "lucide-react";
-import {
-  deriveKeyFromMnemonic,
-  generateMnemonic,
-  storeKey,
-} from "../utils/cryptoUtils";
+import { generateMnemonic, storeKey } from "../utils/cryptoUtils";
 import { setMnemonic } from "../utils/mnemonicManager";
+import {
+  normalizeVaultRecoveryPhrase,
+  validateVaultRecoveryPhrase,
+} from "../utils/capsuleAdapter";
 import { testEncryptionKey } from "../utils/keyTest";
 import { recoverRsaKeysIfNeeded } from "../utils/rsaKeyRecovery";
 import { getUserEmail, hasGoogleTokensInStorage } from "../utils/authService";
@@ -134,9 +134,7 @@ export const KeyManagementPage: React.FC = () => {
 
     try {
       const mnemonic = generateMnemonic();
-      const key = await deriveKeyFromMnemonic(mnemonic);
       setMnemonic(mnemonic);
-      await storeKey(key);
       clearCachedHomeDashboard();
       setGeneratedMnemonic(mnemonic);
       setKeyStatusVersion((version) => version + 1);
@@ -151,15 +149,16 @@ export const KeyManagementPage: React.FC = () => {
   };
 
   const handleRecoverKey = async () => {
-    const mnemonic = inputMnemonic.trim();
+    const mnemonic = normalizeVaultRecoveryPhrase(inputMnemonic);
     if (!mnemonic || isRecovering) return;
 
     setIsRecovering(true);
     setError("");
     try {
-      const key = await deriveKeyFromMnemonic(mnemonic);
+      if (!validateVaultRecoveryPhrase(mnemonic)) {
+        throw new Error("Invalid recovery phrase");
+      }
       setMnemonic(mnemonic);
-      await storeKey(key);
       clearCachedHomeDashboard();
       setKeyStatusVersion((version) => version + 1);
       await recoverSharingKeys();

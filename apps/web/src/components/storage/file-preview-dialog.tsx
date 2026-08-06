@@ -31,6 +31,8 @@ interface FilePreviewDialogProps {
   fileId: string;
   fileName: string;
   mimeType: string;
+  objectId?: string;
+  revision?: number;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onDownload: () => void;
@@ -40,6 +42,8 @@ export const FilePreviewDialog: React.FC<FilePreviewDialogProps> = ({
   fileId,
   fileName,
   mimeType,
+  objectId,
+  revision,
   open,
   onOpenChange,
   onDownload,
@@ -60,7 +64,13 @@ export const FilePreviewDialog: React.FC<FilePreviewDialogProps> = ({
     setError(null);
 
     try {
-      const result = await decryptFileForPreview(fileId, fileName, mimeType);
+      const result = await decryptFileForPreview(
+        fileId,
+        fileName,
+        mimeType,
+        objectId,
+        revision,
+      );
       setBlobUrl(result.blobUrl);
       setBlob(result.blob);
 

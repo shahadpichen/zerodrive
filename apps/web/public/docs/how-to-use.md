@@ -16,7 +16,7 @@ Use Storage for your own private files. Uploading means “lock this file and pu
 
 The app tries to hide the technical encryption work. You do not need to choose algorithms, manage key files manually, or understand every storage detail. The habit that matters is to use ZeroDrive to manage ZeroDrive files instead of editing encrypted files directly from Google Drive.
 
-When you upload, choose or drag a file into Storage. ZeroDrive encrypts it locally, uploads the encrypted version, and updates the app’s file list. When you download, ZeroDrive fetches the encrypted file, decrypts it locally, and gives you the readable file.
+When you upload, choose or drag a file into Storage. ZeroDrive creates a Capsule v1 encrypted object locally, uploads it with an opaque `.zd` name, and updates the encrypted app file list. When you download, ZeroDrive fetches the Capsule, verifies and decrypts it locally, and gives you the readable file with its original name and type.
 
 If decryption fails, the app is not refusing arbitrarily. It usually means the current browser does not have the right key, the recovery phrase is wrong, or the encrypted file was changed outside ZeroDrive.
 

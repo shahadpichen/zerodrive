@@ -18,7 +18,7 @@
     "typecheck:web": "pnpm -r --filter './packages/*' build && pnpm --filter @zerodrive/web typecheck",
     "typecheck:api": "pnpm --filter @zerodrive/api typecheck",
     "test": "pnpm --filter @zerodrive/api test:ci && pnpm run test:web",
-    "test:web": "pnpm -r --filter './packages/*' build && pnpm --filter @zerodrive/web exec react-scripts test --watchAll=false --runTestsByPath src/__tests__/utils/sharedFileEnvelope.test.ts src/__tests__/utils/sharedKeyEnvelope.test.ts",
+    "test:web": "pnpm -r --filter './packages/*' build && pnpm --filter @zerodrive/web exec react-scripts test --watchAll=false --runInBand --runTestsByPath src/__tests__/utils/capsuleAdapter.test.ts src/__tests__/utils/encryptFile.test.ts src/__tests__/utils/decryptFile.test.ts src/__tests__/utils/metadataEncryption.test.ts src/__tests__/utils/sharedMetadataEncryption.test.ts src/__tests__/utils/fileSharingCapsule.test.ts src/__tests__/utils/recipientKeyPins.test.ts src/__tests__/utils/rsaKeyRecoveryVersion.test.ts src/__tests__/pages/share-files.test.tsx src/__tests__/pages/shared-with-me.test.tsx",
     "test:web:all": "pnpm -r --filter './packages/*' build && pnpm --filter @zerodrive/web test",
     "test:api": "pnpm --filter @zerodrive/api test:ci",
     "test:studio": "pnpm --filter @zerodrive/studio test",

@@ -3,7 +3,6 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { KeyManagementPage } from "../../pages/key-management-page";
 import {
-  deriveKeyFromMnemonic,
   generateMnemonic,
   getStoredKey,
   storeKey,
@@ -19,7 +18,6 @@ jest.mock("react-router-dom", () => ({
 }));
 
 jest.mock("../../utils/cryptoUtils", () => ({
-  deriveKeyFromMnemonic: jest.fn(),
   generateMnemonic: jest.fn(),
   getStoredKey: jest.fn(),
   storeKey: jest.fn(),
@@ -62,9 +60,6 @@ jest.mock("sonner", () => ({
   },
 }));
 
-const mockDeriveKey = deriveKeyFromMnemonic as jest.MockedFunction<
-  typeof deriveKeyFromMnemonic
->;
 const mockGenerateMnemonic = generateMnemonic as jest.MockedFunction<
   typeof generateMnemonic
 >;
@@ -78,7 +73,7 @@ const mockInitializeGapi = initializeGapi as jest.MockedFunction<
 >;
 
 const mnemonic =
-  "abandon ability able about above absent absorb abstract absurd abuse access accident";
+  "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
 
 async function renderPage(initialEntry = "/recovery-access") {
   const view = render(
@@ -111,7 +106,6 @@ describe("KeyManagementPage", () => {
     jest.clearAllMocks();
     mockNavigate.mockReset();
     mockGenerateMnemonic.mockReturnValue(mnemonic);
-    mockDeriveKey.mockResolvedValue({} as CryptoKey);
     mockGetStoredKey.mockResolvedValue(null);
     mockGetMnemonic.mockReturnValue(null);
     mockStoreKey.mockResolvedValue(undefined);
@@ -162,9 +156,8 @@ describe("KeyManagementPage", () => {
     await renderPage();
     await generateNewKey();
 
-    mnemonic.split(" ").forEach((word) => {
-      expect(screen.getByText(word)).toBeInTheDocument();
-    });
+    expect(screen.getAllByText("abandon")).toHaveLength(11);
+    expect(screen.getByText("about")).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: /copy phrase/i }),
     ).toBeInTheDocument();
@@ -186,8 +179,7 @@ describe("KeyManagementPage", () => {
     );
 
     await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith("/home"));
-    expect(mockDeriveKey).toHaveBeenCalledWith(mnemonic);
-    expect(mockStoreKey).toHaveBeenCalled();
+    expect(mockStoreKey).not.toHaveBeenCalled();
   });
 
   it("returns to storage when Recovery & Access was opened from /storage", async () => {
@@ -234,7 +226,6 @@ describe("KeyManagementPage", () => {
 
   it("shows an inline error for an invalid recovery phrase", async () => {
     const consoleError = jest.spyOn(console, "error").mockImplementation();
-    mockDeriveKey.mockRejectedValue(new Error("Invalid mnemonic phrase"));
 
     try {
       await renderPage();

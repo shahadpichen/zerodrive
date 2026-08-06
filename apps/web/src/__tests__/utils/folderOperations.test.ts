@@ -10,6 +10,10 @@ import {
 } from '../../utils/folderOperations';
 import { toast } from 'sonner';
 import { rememberVaultMetadataStatus } from '../../utils/vaultMetadataWriteGuard';
+import {
+  clearMnemonic,
+  setMnemonic,
+} from '../../utils/mnemonicManager';
 
 // Mock all dependencies
 jest.mock('../../utils/dexieDB');
@@ -58,6 +62,9 @@ describe('FolderOperations', () => {
 
   beforeEach(() => {
     sessionStorage.clear();
+    setMnemonic(
+      "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
+    );
     jest.clearAllMocks();
     rememberVaultMetadataStatus(testUser, "ready");
     mockGetGoogleAccessToken.mockResolvedValue(mockToken);
@@ -65,6 +72,10 @@ describe('FolderOperations', () => {
     mockGetFoldersForUser.mockResolvedValue([]);
     mockSendToGoogleDrive.mockResolvedValue(undefined);
     (global.fetch as jest.Mock).mockClear();
+  });
+
+  afterEach(() => {
+    clearMnemonic();
   });
 
   describe('createFolder', () => {

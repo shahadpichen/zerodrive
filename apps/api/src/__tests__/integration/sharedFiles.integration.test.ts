@@ -95,6 +95,20 @@ describe("Shared Files Routes Integration", () => {
       encrypted_size: 1024028,
       access_type: "view",
     };
+    const validCapsuleShareRequest = {
+      management_capability_hash: "b".repeat(64),
+      recipient_email: testRecipientEmail,
+      content_format: "capsule_v1",
+      recipient_key_version: 4,
+      recipient_key_fingerprint: "c".repeat(64),
+      encrypted_file_key: null,
+      encrypted_metadata: Buffer.from("ZDCP-capsule-metadata").toString(
+        "base64",
+      ),
+      file_size: 1024000,
+      encrypted_size: 1024300,
+      access_type: "view",
+    };
 
     it("should create shared file with valid data", async () => {
       const token = generateToken(testUserEmail);
@@ -135,6 +149,112 @@ describe("Shared Files Routes Integration", () => {
         "SELECT id FROM shared_files WHERE management_capability_hash = $1",
         [validShareRequest.management_capability_hash],
       );
+    });
+
+    it("creates a Capsule v1 share without a separate wrapped file key", async () => {
+      const token = generateToken(testUserEmail);
+      mockQuery.mockResolvedValueOnce({
+        rows: [
+          {
+            key_version: 4,
+            fingerprint: "c".repeat(64),
+          },
+        ],
+      });
+      mockQuery.mockResolvedValueOnce({ rows: [] });
+      mockQuery.mockResolvedValueOnce({
+        rows: [
+          {
+            id: "share-capsule-123",
+            ...validCapsuleShareRequest,
+            status: "pending",
+          },
+        ],
+      });
+
+      const response = await request(app)
+        .post("/api/shared-files")
+        .set("Cookie", [
+          `zerodrive_token=${token}`,
+          `zerodrive_csrf=${csrfToken}`,
+        ])
+        .set("x-csrf-token", csrfToken)
+        .send(validCapsuleShareRequest);
+
+      expect(response.status).toBe(201);
+      expect(response.body.data).toEqual(
+        expect.objectContaining({
+          content_format: "capsule_v1",
+          recipient_key_version: 4,
+          recipient_key_fingerprint: "c".repeat(64),
+          encrypted_file_key: null,
+        }),
+      );
+      expect(mockQuery.mock.calls[2][1]).toEqual(
+        expect.arrayContaining([null, "capsule_v1", 4, "c".repeat(64)]),
+      );
+    });
+
+    it("rejects a Capsule share if the recipient directory key changed", async () => {
+      const token = generateToken(testUserEmail);
+      mockQuery.mockResolvedValueOnce({
+        rows: [
+          {
+            key_version: 5,
+            fingerprint: "d".repeat(64),
+          },
+        ],
+      });
+
+      const response = await request(app)
+        .post("/api/shared-files")
+        .set("Cookie", [
+          `zerodrive_token=${token}`,
+          `zerodrive_csrf=${csrfToken}`,
+        ])
+        .set("x-csrf-token", csrfToken)
+        .send(validCapsuleShareRequest);
+
+      expect(response.status).toBe(409);
+      expect(response.body.error.message).toContain("sharing identity changed");
+      expect(mockQuery).toHaveBeenCalledTimes(1);
+    });
+
+    it("rejects Capsule v1 without recipient key metadata", async () => {
+      const token = generateToken(testUserEmail);
+      const invalidRequest = { ...validCapsuleShareRequest };
+      delete (invalidRequest as any).recipient_key_fingerprint;
+
+      const response = await request(app)
+        .post("/api/shared-files")
+        .set("Cookie", [
+          `zerodrive_token=${token}`,
+          `zerodrive_csrf=${csrfToken}`,
+        ])
+        .set("x-csrf-token", csrfToken)
+        .send(invalidRequest);
+
+      expect(response.status).toBe(422);
+      expect(mockQuery).not.toHaveBeenCalled();
+    });
+
+    it("rejects a separate wrapped key for Capsule v1", async () => {
+      const token = generateToken(testUserEmail);
+
+      const response = await request(app)
+        .post("/api/shared-files")
+        .set("Cookie", [
+          `zerodrive_token=${token}`,
+          `zerodrive_csrf=${csrfToken}`,
+        ])
+        .set("x-csrf-token", csrfToken)
+        .send({
+          ...validCapsuleShareRequest,
+          encrypted_file_key: validWrappedFileKey,
+        });
+
+      expect(response.status).toBe(422);
+      expect(mockQuery).not.toHaveBeenCalled();
     });
 
     it("sends only a generic notification without plaintext metadata", async () => {

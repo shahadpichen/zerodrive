@@ -76,10 +76,6 @@ jest.mock("../../utils/keyStorage", () => ({
   storeUserKeyPair: jest.fn(),
 }));
 
-jest.mock("../../utils/rsaKeyManager", () => ({
-  encryptRsaPrivateKeyWithAesKey: jest.fn(),
-}));
-
 jest.mock("../../utils/gdriveKeyStorage", () => ({
   uploadEncryptedRsaKeyToDrive: jest.fn(),
 }));
@@ -186,9 +182,16 @@ describe("ShareFilesPage", () => {
     mockGetStoredKey.mockResolvedValue({} as CryptoKey);
     mockFetchStorageMetadata.mockResolvedValue(undefined);
     mockGetStoredFiles.mockResolvedValue([]);
-    mockDecryptFile.mockResolvedValue(
-      new Blob(["stored plaintext"], { type: "application/pdf" }),
-    );
+    mockDecryptFile.mockResolvedValue({
+      contentBlob: new Blob(["stored plaintext"], {
+        type: "application/pdf",
+      }),
+      fileName: "stored.pdf",
+      mimeType: "application/pdf",
+      contentFormat: "capsule_v1",
+      objectId: "22222222-2222-4222-8222-222222222222",
+      revision: 1,
+    });
     mockGetMnemonic.mockReturnValue(
       "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
     );
@@ -208,11 +211,12 @@ describe("ShareFilesPage", () => {
       recipientEmail: "recipient@example.com",
       fileName: "encrypted-file.bin",
       originalFileName: "roadmap.pdf",
-      encryptedFileKey: "wrapped-key",
+      encryptedFileKey: null,
       encryptedMetadata: "encrypted-metadata",
       fileId: "file-id",
       mimeType: "application/pdf",
       fileSize: 15,
+      contentFormat: "capsule_v1",
       recipientKeyVersion: 1,
       recipientKeyFingerprint: "a".repeat(64),
     });
@@ -275,7 +279,7 @@ describe("ShareFilesPage", () => {
   });
 
   it("routes missing vault access through Recovery & Access", async () => {
-    mockGetStoredKey.mockResolvedValue(null);
+    mockGetMnemonic.mockReturnValue(null);
     renderPage();
 
     expect(
@@ -304,7 +308,7 @@ describe("ShareFilesPage", () => {
   });
 
   it("blocks a changed recipient key until the sender confirms it", async () => {
-    pinRecipientKey("f".repeat(64), "recipient@example.com", "b".repeat(64), 1);
+    pinRecipientKey("recipient@example.com", "b".repeat(64), 1);
     mockFetchPublicKey.mockResolvedValue({
       public_key: JSON.stringify({ kty: "RSA", n: "new-key" }),
       key_version: 2,
@@ -365,12 +369,17 @@ describe("ShareFilesPage", () => {
       "https://www.googleapis.com/drive/v3/files/drive-file-123?alt=media",
       { headers: { Authorization: "Bearer google-token" } },
     );
-    expect(mockDecryptFile).toHaveBeenCalledWith(encryptedBlob);
-    expect(mockPrepareFile.mock.calls[0][0]).toEqual(
-      expect.objectContaining({
-        name: "stored-report.pdf",
-        type: "application/pdf",
-      }),
+    expect(mockDecryptFile).toHaveBeenCalledTimes(1);
+    expect(mockDecryptFile.mock.calls[0][0]).toBe(encryptedBlob);
+    expect(mockDecryptFile.mock.calls[0][1]?.name).toBe(
+      "stored-report.pdf",
+    );
+    expect(mockPrepareFile).toHaveBeenCalledTimes(1);
+    expect(mockPrepareFile.mock.calls[0][0].name).toBe(
+      "stored.pdf",
+    );
+    expect(mockPrepareFile.mock.calls[0][0].type).toBe(
+      "application/pdf",
     );
   });
 

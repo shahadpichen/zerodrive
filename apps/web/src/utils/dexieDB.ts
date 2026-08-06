@@ -1,13 +1,23 @@
 import Dexie from "dexie";
 import { gapi } from "gapi-script";
 import { toast } from "sonner";
+import type { JsonObject } from "@zerodrivehq/capsule";
 import { initializeGapi, refreshGapiToken } from "./gapiInit";
 import logger from "./logger";
 import { encryptMetadata, decryptMetadata } from "./metadataEncryption";
 import { assertCanWriteVaultMetadata } from "./vaultMetadataWriteGuard";
+import {
+  assertRecoveryPhraseGeneration,
+  assertRecoveryPhraseSessionCurrent,
+  captureActiveRecoveryPhraseSession,
+  getRecoveryPhraseGeneration,
+  type RecoveryPhraseSession,
+} from "./mnemonicManager";
 
 export interface FileMeta {
   id: string;
+  objectId?: string;
+  revision?: number;
   name: string;
   mimeType: string;
   userEmail: string;
@@ -22,6 +32,76 @@ export interface FolderMeta {
   userEmail: string; // Owner
   createdDate: Date; // Creation timestamp
 }
+
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+const assertValidFileBinding = (file: {
+  objectId?: unknown;
+  revision?: unknown;
+}): void => {
+  if (
+    file.objectId !== undefined &&
+    (typeof file.objectId !== "string" || !UUID_PATTERN.test(file.objectId))
+  ) {
+    throw new Error("Vault metadata contains an invalid file identifier.");
+  }
+  if (
+    file.revision !== undefined &&
+    (typeof file.revision !== "number" ||
+      !Number.isSafeInteger(file.revision) ||
+      file.revision < 1)
+  ) {
+    throw new Error("Vault metadata contains an invalid file revision.");
+  }
+};
+
+const serializeDate = (value: Date, fieldName: string): string => {
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    throw new Error(`Cannot sync vault metadata with an invalid ${fieldName}.`);
+  }
+  return date.toISOString();
+};
+
+/**
+ * Converts IndexedDB records into the strict JSON values accepted by Capsule.
+ * Dexie keeps timestamps as Date instances, which must not cross the encrypted
+ * vault-index boundary directly.
+ */
+export const serializeVaultIndex = (
+  files: FileMeta[],
+  folders: FolderMeta[],
+): JsonObject => ({
+  version: 2,
+  files: files.map((file): JsonObject => {
+    assertValidFileBinding(file);
+    const serialized: JsonObject = {
+      id: file.id,
+      name: file.name,
+      mimeType: file.mimeType,
+      userEmail: file.userEmail,
+      uploadedDate: serializeDate(file.uploadedDate, "file upload date"),
+      folderId: file.folderId ?? null,
+    };
+
+    if (typeof file.objectId === "string") {
+      serialized.objectId = file.objectId;
+    }
+    if (typeof file.revision === "number") {
+      serialized.revision = file.revision;
+    }
+
+    return serialized;
+  }),
+  folders: folders.map((folder): JsonObject => ({
+    id: folder.id,
+    name: folder.name,
+    parentId: folder.parentId ?? null,
+    userEmail: folder.userEmail,
+    createdDate: serializeDate(folder.createdDate, "folder creation date"),
+  })),
+});
 
 const db = new Dexie("ZeroDriveDB");
 
@@ -138,6 +218,7 @@ const sendToGoogleDrive = async (
   options: {
     userEmail?: string;
     allowMetadataReplacement?: boolean;
+    recoveryPhraseSession?: RecoveryPhraseSession;
   } = {},
 ) => {
   let driveUpdateToastId: string | number | undefined;
@@ -156,6 +237,9 @@ const sendToGoogleDrive = async (
         "Cannot safely sync vault metadata without an account identifier.",
       );
     }
+    const recoveryPhraseSession =
+      options.recoveryPhraseSession ?? captureActiveRecoveryPhraseSession();
+    assertRecoveryPhraseSessionCurrent(recoveryPhraseSession);
     assertCanWriteVaultMetadata(userEmail, {
       allowMetadataReplacement: options.allowMetadataReplacement,
     });
@@ -170,12 +254,11 @@ const sendToGoogleDrive = async (
 
     // Encrypt metadata before uploading (v2 format)
     logger.log("[Sync] Encrypting metadata...");
-    const metadataContent = {
-      version: 2,
-      files: filesToSync,
-      folders: foldersToSync,
-    };
-    const encryptedBlob = await encryptMetadata(metadataContent);
+    const metadataContent = serializeVaultIndex(filesToSync, foldersToSync);
+    const encryptedBlob = await encryptMetadata(
+      metadataContent,
+      recoveryPhraseSession.phrase,
+    );
 
     const metadata = {
       name: "db-list.json",
@@ -234,6 +317,10 @@ const sendToGoogleDrive = async (
 
     form.append("file", encryptedBlob);
 
+    // The verified metadata state and encrypted index must belong to the same
+    // recovery phrase. A phrase change cancels this write before Drive can be
+    // mutated, even if it happened during token lookup or encryption.
+    assertRecoveryPhraseSessionCurrent(recoveryPhraseSession);
     logger.log(`[Sync] Sending ${method} request to ${uploadUrl}`);
     const uploadResponse = await fetch(uploadUrl, {
       method: method,
@@ -241,8 +328,13 @@ const sendToGoogleDrive = async (
       body: form,
     });
 
+    // The request may already have reached Drive when access changes. Do not
+    // report the write as safe—or let callers promote the new phrase to a
+    // verified state—unless the same phrase session is still active.
+    assertRecoveryPhraseSessionCurrent(recoveryPhraseSession);
     logger.log(`[Sync] Response Status: ${uploadResponse.status}`);
     const responseBodyText = await uploadResponse.text(); // Read body once
+    assertRecoveryPhraseSessionCurrent(recoveryPhraseSession);
     logger.log(`[Sync] Response Body: ${responseBodyText}`);
 
     if (!uploadResponse.ok) {
@@ -283,6 +375,7 @@ const sendToGoogleDrive = async (
 
 const fetchAndStoreFileMetadata = async (
   retryCount: number = 0,
+  expectedRecoveryPhraseGeneration: number = getRecoveryPhraseGeneration(),
 ): Promise<void> => {
   const MAX_RETRIES = 1; // Only retry once to prevent infinite loops
 
@@ -328,7 +421,11 @@ const fetchAndStoreFileMetadata = async (
       let fileContent;
       try {
         fileContent = await decryptMetadata(encryptedBlob);
+        assertRecoveryPhraseGeneration(expectedRecoveryPhraseGeneration);
       } catch (e) {
+        if (e instanceof Error && e.name === "RecoveryPhraseChangedError") {
+          throw e;
+        }
         logger.error("Failed to decrypt db-list.json content", e);
         // Throw a specific error type so the calling code can handle it
         const decryptError = new Error("DECRYPTION_FAILED");
@@ -363,6 +460,12 @@ const fetchAndStoreFileMetadata = async (
         }));
       }
 
+      files.forEach((file) => assertValidFileBinding(file));
+
+      // Never replace the local snapshot with a result decrypted under an
+      // access state that changed while the Drive request was in flight.
+      assertRecoveryPhraseGeneration(expectedRecoveryPhraseGeneration);
+
       // Clear existing records before adding new ones
       await db.table("files").clear();
       await db.table("folders").clear();
@@ -389,6 +492,10 @@ const fetchAndStoreFileMetadata = async (
             try {
               await addFile({
                 id: file.id,
+                objectId:
+                  typeof file.objectId === "string" ? file.objectId : undefined,
+                revision:
+                  typeof file.revision === "number" ? file.revision : undefined,
                 name: file.name,
                 mimeType: file.mimeType,
                 userEmail: file.userEmail,
@@ -442,11 +549,13 @@ const fetchAndStoreFileMetadata = async (
       ) {
         logger.log("db-list.json file content is empty or invalid.");
       }
+      assertRecoveryPhraseGeneration(expectedRecoveryPhraseGeneration);
     } else {
       logger.log("No db-list.json file found in Google Drive.");
       // If no file exists on Drive, clear the local DB too?
       // Or maybe leave local DB as is if offline use is desired?
       // Current behavior: local DB is not cleared if Drive file doesn't exist.
+      assertRecoveryPhraseGeneration(expectedRecoveryPhraseGeneration);
     }
   } catch (error: any) {
     if (error?.status === 401) {
@@ -455,7 +564,7 @@ const fetchAndStoreFileMetadata = async (
           "Max retries reached for token refresh. Redirecting to login.",
         );
         window.location.href = "/";
-        return;
+        throw error;
       }
 
       try {
@@ -464,10 +573,14 @@ const fetchAndStoreFileMetadata = async (
         );
         await refreshGapiToken();
         // Retry the request after token refresh with incremented retry count
-        await fetchAndStoreFileMetadata(retryCount + 1);
+        await fetchAndStoreFileMetadata(
+          retryCount + 1,
+          expectedRecoveryPhraseGeneration,
+        );
       } catch (refreshError) {
         logger.error("Error after token refresh:", refreshError);
         window.location.href = "/";
+        throw refreshError;
       }
     } else {
       logger.error("Error fetching file metadata:", error);

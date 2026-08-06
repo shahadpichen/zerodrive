@@ -14,6 +14,10 @@ import {
 import { uploadAndSyncFile } from "../../utils/fileOperations";
 import { toast } from "sonner";
 import { useVaultData } from "../../contexts/vault-data-context";
+import {
+  clearMnemonic,
+  setMnemonic,
+} from "../../utils/mnemonicManager";
 
 jest.mock("../../contexts/app-context", () => ({
   useApp: jest.fn(),
@@ -119,6 +123,9 @@ describe("PrivateStorage metadata replacement warning", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     sessionStorage.clear();
+    setMnemonic(
+      "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
+    );
 
     jest
       .spyOn(global.crypto, "getRandomValues")
@@ -192,6 +199,7 @@ describe("PrivateStorage metadata replacement warning", () => {
   });
 
   afterEach(() => {
+    clearMnemonic();
     jest.restoreAllMocks();
   });
 

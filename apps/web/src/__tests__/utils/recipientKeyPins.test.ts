@@ -4,13 +4,12 @@ import {
 } from "../../utils/recipientKeyPins";
 
 describe("recipient key pins", () => {
-  const owner = "f".repeat(64);
   beforeEach(() => localStorage.clear());
 
   it("normalizes the recipient and stores only the fingerprint metadata", () => {
-    pinRecipientKey(owner, " Recipient@Example.com ", "a".repeat(64), 2);
+    pinRecipientKey(" Recipient@Example.com ", "a".repeat(64), 2);
 
-    expect(getRecipientKeyPin(owner, "recipient@example.com")).toEqual(
+    expect(getRecipientKeyPin("recipient@example.com")).toEqual(
       expect.objectContaining({
         fingerprint: "a".repeat(64),
         keyVersion: 2,
@@ -20,14 +19,30 @@ describe("recipient key pins", () => {
 
   it("rejects malformed fingerprints", () => {
     expect(() =>
-      pinRecipientKey(owner, "recipient@example.com", "bad", 1),
+      pinRecipientKey("recipient@example.com", "bad", 1),
     ).toThrow("invalid recipient key");
   });
 
-  it("does not share trust decisions between local accounts", () => {
-    pinRecipientKey(owner, "recipient@example.com", "a".repeat(64), 1);
+  it("does not let an API-controlled owner namespace reset an existing pin", () => {
+    localStorage.setItem(
+      `zerodrive-recipient-key-pins-v1:${"f".repeat(64)}`,
+      JSON.stringify({
+        "recipient@example.com": {
+          fingerprint: "a".repeat(64),
+          keyVersion: 1,
+          pinnedAt: 10,
+        },
+      }),
+    );
+
+    expect(getRecipientKeyPin("recipient@example.com")).toEqual(
+      expect.objectContaining({
+        fingerprint: "a".repeat(64),
+        keyVersion: 1,
+      }),
+    );
     expect(
-      getRecipientKeyPin("e".repeat(64), "recipient@example.com"),
-    ).toBeNull();
+      localStorage.getItem("zerodrive-recipient-key-pins-v2"),
+    ).not.toBeNull();
   });
 });

@@ -1,6 +1,5 @@
-import { getStoredKey } from "./cryptoUtils";
 import { userHasStoredKeys } from "./keyStorage";
-import { getMnemonic } from "./mnemonicManager";
+import { getMnemonic, hasMnemonic } from "./mnemonicManager";
 
 export const ONBOARDING_DISMISS_KEY = "zerodrive-onboarding-guidance-dismissed";
 
@@ -71,14 +70,11 @@ export async function readBrowserVaultSetupSnapshot(
     | "hasDecryptionError"
   >,
 ): Promise<VaultSetupSnapshot> {
-  const [primaryKey, hasSharingKeys] = await Promise.all([
-    getStoredKey(),
-    userHasStoredKeys(email),
-  ]);
+  const hasSharingKeys = await userHasStoredKeys(email);
 
   return {
     ...options,
-    hasPrimaryKey: !!primaryKey,
+    hasPrimaryKey: hasMnemonic(),
     hasRecoveryPhrase: !!getMnemonic(),
     hasSharingKeys,
     guidanceDismissed: isOnboardingGuidanceDismissed(),
