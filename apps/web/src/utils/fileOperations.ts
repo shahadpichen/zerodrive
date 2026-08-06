@@ -9,7 +9,10 @@ import {
   getFoldersForUser, // Get folders for sync
 } from "./dexieDB";
 import { encryptFile } from "./encryptFile";
-import { requireActiveRecoveryPhrase } from "./mnemonicManager";
+import {
+  assertRecoveryPhraseSessionCurrent,
+  captureActiveRecoveryPhraseSession,
+} from "./mnemonicManager";
 import logger from "./logger";
 import { trackFileAddedToDrive } from "./analyticsTracker";
 import { assertCanWriteVaultMetadata } from "./vaultMetadataWriteGuard";
@@ -35,7 +38,7 @@ export const uploadAndSyncFile = async (
   try {
     // Capsule v1 writes require the in-memory recovery phrase. The derived
     // legacy AES key is used only when opening historical ZeroDrive objects.
-    requireActiveRecoveryPhrase();
+    const recoveryPhraseSession = captureActiveRecoveryPhraseSession();
 
     assertCanWriteVaultMetadata(userEmail, {
       allowMetadataReplacement: options.allowMetadataReplacement,
@@ -60,7 +63,11 @@ export const uploadAndSyncFile = async (
     // 4. Encrypt
     toast.loading(`Encrypting ${file.name}...`, { id: uploadToastId });
     const objectId = crypto.randomUUID();
-    const encryptedBlob = await encryptFile(file, objectId);
+    const encryptedBlob = await encryptFile(
+      file,
+      objectId,
+      recoveryPhraseSession.phrase,
+    );
 
     // 5. Prepare metadata & form data
     const metadata = {
@@ -79,6 +86,7 @@ export const uploadAndSyncFile = async (
     toast.loading(`Uploading ${file.name} to Google Drive...`, {
       id: uploadToastId,
     });
+    assertRecoveryPhraseSessionCurrent(recoveryPhraseSession);
     const response = await fetch(
       "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id", // Only request ID
       {
@@ -121,6 +129,7 @@ export const uploadAndSyncFile = async (
     await sendToGoogleDrive(updatedList, updatedFolders, {
       userEmail,
       allowMetadataReplacement: options.allowMetadataReplacement,
+      recoveryPhraseSession,
     }); // This handles its own toasts
 
     toast.success(`Successfully uploaded and synced ${file.name}`, {
@@ -159,7 +168,7 @@ export const deleteAndSyncFile = async (
   const deleteToastId = toast.loading(`Deleting ${fileName}...`);
 
   try {
-    requireActiveRecoveryPhrase();
+    const recoveryPhraseSession = captureActiveRecoveryPhraseSession();
     assertCanWriteVaultMetadata(userEmail);
 
     // 1. Check auth and get token
@@ -173,6 +182,7 @@ export const deleteAndSyncFile = async (
     toast.loading(`Deleting ${fileName} from Google Drive...`, {
       id: deleteToastId,
     });
+    assertRecoveryPhraseSessionCurrent(recoveryPhraseSession);
     const response = await fetch(
       `https://www.googleapis.com/drive/v3/files/${fileId}`,
       {
@@ -207,7 +217,10 @@ export const deleteAndSyncFile = async (
     const updatedFolders = await getFoldersForUser(userEmail);
 
     // 5. Sync updated list to db-list.json on Google Drive
-    await sendToGoogleDrive(updatedList, updatedFolders, { userEmail }); // This handles its own success/error toast for sync
+    await sendToGoogleDrive(updatedList, updatedFolders, {
+      userEmail,
+      recoveryPhraseSession,
+    }); // This handles its own success/error toast for sync
 
     toast.success(`Successfully processed deletion for ${fileName}.`, {
       id: deleteToastId,
@@ -235,7 +248,7 @@ export const deleteAllAndSyncFiles = async (
   const deleteToastId = toast.loading(`Fetching file list to delete...`);
 
   try {
-    requireActiveRecoveryPhrase();
+    const recoveryPhraseSession = captureActiveRecoveryPhraseSession();
     assertCanWriteVaultMetadata(userEmail);
 
     // 1. Get all file IDs for the user
@@ -259,6 +272,7 @@ export const deleteAllAndSyncFiles = async (
 
     // 3. Delete each file from Google Drive (best effort, ignore 404s)
     let driveDeleteFailures = 0;
+    assertRecoveryPhraseSessionCurrent(recoveryPhraseSession);
     await Promise.all(
       fileIds.map(async (fileId) => {
         try {
@@ -301,7 +315,10 @@ export const deleteAllAndSyncFiles = async (
 
     // 5. Sync the (now empty) list to db-list.json on Google Drive
     const updatedFolders = await getFoldersForUser(userEmail);
-    await sendToGoogleDrive([], updatedFolders, { userEmail }); // Send empty file array
+    await sendToGoogleDrive([], updatedFolders, {
+      userEmail,
+      recoveryPhraseSession,
+    }); // Send empty file array
 
     toast.success(
       `Successfully deleted all ${fileIds.length} files and synced metadata.`,

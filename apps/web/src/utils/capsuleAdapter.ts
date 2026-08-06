@@ -162,6 +162,7 @@ export async function fingerprintSharingPublicKey(
 export async function createPersonalFileCapsule(
   file: File,
   objectId: string,
+  recoveryPhrase?: string,
 ): Promise<{
   encryptedBlob: Blob;
   contentFormat: CapsuleContentFormat;
@@ -184,7 +185,9 @@ export async function createPersonalFileCapsule(
         objectId,
         revision: 1,
       },
-      recoveryPhrase: requireRecoveryPhrase(),
+      recoveryPhrase: recoveryPhrase
+        ? normalizeRecoveryPhrase(recoveryPhrase)
+        : requireRecoveryPhrase(),
     });
     try {
       return {
@@ -236,14 +239,19 @@ export async function openPersonalFileCapsule(encryptedBlob: Blob): Promise<{
   }
 }
 
-export async function createVaultIndexCapsule(index: JsonValue): Promise<{
+export async function createVaultIndexCapsule(
+  index: JsonValue,
+  recoveryPhrase?: string,
+): Promise<{
   encryptedBlob: Blob;
   contentFormat: CapsuleContentFormat;
 }> {
   try {
     const bytes = await createZeroDriveVaultIndexCapsule({
       index,
-      recoveryPhrase: requireRecoveryPhrase(),
+      recoveryPhrase: recoveryPhrase
+        ? normalizeRecoveryPhrase(recoveryPhrase)
+        : requireRecoveryPhrase(),
     });
     try {
       return {

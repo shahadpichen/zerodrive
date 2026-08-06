@@ -480,6 +480,16 @@ const SharedWithMePage: React.FC = () => {
         const saved = await uploadAndSyncFile(fileForVault, userEmail);
         if (!saved) throw new Error("The file could not be saved to storage.");
 
+        // Keep the persistent vault snapshot in sync with the IndexedDB record
+        // that uploadAndSyncFile just committed. Storage reuses this snapshot
+        // across route navigation, so leaving it stale can make a successful
+        // save appear as an empty vault until a later refresh.
+        if (vaultData) {
+          await vaultData.refreshVaultFromLocal(userEmail, {
+            metadataStatus: "ready",
+          });
+        }
+
         setSavedFileIds((current) => new Set(current).add(file.id));
         toast.success(`${decrypted.fileName} saved to My Storage`);
       }

@@ -9,6 +9,7 @@ import {
 import { getAllFilesForUser, getFoldersForUser } from "../../utils/dexieDB";
 import { getStoredKey } from "../../utils/cryptoUtils";
 import { AUTH_SESSION_CLEARED_EVENT } from "../../utils/authEvents";
+import { RECOVERY_PHRASE_MEMORY_EVENT } from "../../utils/mnemonicManager";
 
 jest.mock("../../utils/dexieDB", () => ({
   getAllFilesForUser: jest.fn(),
@@ -36,7 +37,7 @@ const mockGetStoredKey = getStoredKey as jest.MockedFunction<
 
 function VaultHarness() {
   const { setUserInfo, userName, userImage } = useApp();
-  const { state } = useVaultData();
+  const { state, setVaultMetadataStatus } = useVaultData();
 
   return (
     <div>
@@ -60,12 +61,20 @@ function VaultHarness() {
       <button onClick={() => setUserInfo("second@example.com", "Second")}>
         second
       </button>
+      <button
+        onClick={() =>
+          setVaultMetadataStatus("first@example.com", "ready")
+        }
+      >
+        metadata ready
+      </button>
       <div data-testid="account">{state.userEmail}</div>
       <div data-testid="user-name">{userName}</div>
       <div data-testid="user-image">{userImage}</div>
       <div data-testid="status">
         {state.isHydrating ? "hydrating" : "ready"}
       </div>
+      <div data-testid="metadata-status">{state.metadataStatus}</div>
       <div data-testid="files">
         {state.files.map((file) => file.name).join(",")}
       </div>
@@ -224,5 +233,22 @@ describe("VaultDataProvider", () => {
 
     expect(screen.getByTestId("account")).toBeEmptyDOMElement();
     expect(screen.getByTestId("files")).toBeEmptyDOMElement();
+  });
+
+  it("invalidates metadata verification when the recovery phrase changes", async () => {
+    renderVaultHarness();
+    await userEvent.click(screen.getByRole("button", { name: "first" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: "metadata ready" }),
+    );
+    expect(screen.getByTestId("metadata-status")).toHaveTextContent("ready");
+
+    act(() => {
+      window.dispatchEvent(new Event(RECOVERY_PHRASE_MEMORY_EVENT));
+    });
+
+    expect(screen.getByTestId("metadata-status")).toHaveTextContent(
+      "unverified",
+    );
   });
 });

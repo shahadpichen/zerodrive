@@ -293,16 +293,26 @@ export function VaultDataProvider({ children }: { children: React.ReactNode }) {
       });
     };
 
-    window.addEventListener(RECOVERY_PHRASE_MEMORY_EVENT, refreshKeyStatus);
+    const handleRecoveryPhraseChange = () => {
+      // The in-memory snapshot may have been verified with a different phrase.
+      // Force the next write path to verify the encrypted Drive index again.
+      setVaultMetadataStatus(email, "unverified");
+      refreshKeyStatus();
+    };
+
+    window.addEventListener(
+      RECOVERY_PHRASE_MEMORY_EVENT,
+      handleRecoveryPhraseChange,
+    );
     window.addEventListener(VAULT_KEY_STORAGE_EVENT, refreshKeyStatus);
     return () => {
       window.removeEventListener(
         RECOVERY_PHRASE_MEMORY_EVENT,
-        refreshKeyStatus,
+        handleRecoveryPhraseChange,
       );
       window.removeEventListener(VAULT_KEY_STORAGE_EVENT, refreshKeyStatus);
     };
-  }, [setVaultKeyStatus, userEmail]);
+  }, [setVaultKeyStatus, setVaultMetadataStatus, userEmail]);
 
   const exposedState = useMemo<VaultDataState>(() => {
     const activeEmail = normalizeEmail(userEmail);

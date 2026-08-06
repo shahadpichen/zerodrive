@@ -15,10 +15,14 @@ import logger from "./logger";
  * @param metadata The metadata object to encrypt
  * @returns Promise<Blob> The Capsule v1 encrypted metadata.
  */
-export async function encryptMetadata(metadata: any): Promise<Blob> {
+export async function encryptMetadata(
+  metadata: JsonValue,
+  recoveryPhrase?: string,
+): Promise<Blob> {
   try {
     const { encryptedBlob } = await createVaultIndexCapsule(
-      metadata as JsonValue,
+      metadata,
+      recoveryPhrase,
     );
     return encryptedBlob;
   } catch (error) {

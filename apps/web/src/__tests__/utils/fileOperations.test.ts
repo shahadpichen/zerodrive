@@ -59,8 +59,14 @@ jest.mock('../../utils/cryptoUtils', () => ({
 }));
 
 const mockRequireActiveRecoveryPhrase = jest.fn();
+const mockAssertRecoveryPhraseSessionCurrent = jest.fn();
 jest.mock('../../utils/mnemonicManager', () => ({
-  requireActiveRecoveryPhrase: () => mockRequireActiveRecoveryPhrase(),
+  captureActiveRecoveryPhraseSession: () => ({
+    phrase: mockRequireActiveRecoveryPhrase(),
+    generation: 1,
+  }),
+  assertRecoveryPhraseSessionCurrent: (...args: any[]) =>
+    mockAssertRecoveryPhraseSessionCurrent(...args),
 }));
 
 const mockGetGoogleAccessToken = jest.fn();
@@ -116,6 +122,7 @@ describe('FileOperations', () => {
 
       expect(mockEncryptFile).toHaveBeenCalledWith(
         testFile,
+        expect.any(String),
         expect.any(String),
       );
       expect(mockAddFile).toHaveBeenCalledWith(
@@ -342,6 +349,11 @@ describe('FileOperations', () => {
       expect(mockClearUserFilesFromDB).toHaveBeenCalledWith(testUser);
       expect(mockSendToGoogleDrive).toHaveBeenCalledWith([], [], {
         userEmail: testUser,
+        recoveryPhraseSession: {
+          phrase:
+            "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
+          generation: 1,
+        },
       }); // Empty files and folders
       expect(toast.success).toHaveBeenCalled();
     });
