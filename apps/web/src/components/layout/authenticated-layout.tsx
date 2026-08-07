@@ -1,12 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { ArrowLeft, AlertTriangle } from "lucide-react";
-import { useApp } from "../../contexts/app-context";
-import {
-  RECOVERY_PHRASE_MEMORY_EVENT,
-} from "../../utils/mnemonicManager";
-import { VAULT_KEY_STORAGE_EVENT } from "../../utils/cryptoUtils";
-import { hasVaultReadAccess } from "../../utils/vaultAccess";
+import { useVaultData } from "../../contexts/vault-data-context";
 import {
   consumeVaultIndexMigrationNotice,
   VAULT_INDEX_MIGRATION_NOTICE_EVENT,
@@ -19,50 +14,12 @@ function AuthenticatedLayoutContent({
 }) {
   const navigate = useNavigate();
   const location = useLocation();
-  const { hasDecryptionError } = useApp();
+  const { state: vaultState } = useVaultData();
   const recoveryPath = `/recovery-access?returnTo=${encodeURIComponent(
     location.pathname,
   )}`;
-  const [hasBrowserVaultKey, setHasBrowserVaultKey] = useState<boolean | null>(
-    null,
-  );
   const [showVaultIndexMigrationNotice, setShowVaultIndexMigrationNotice] =
     useState(false);
-
-  useEffect(() => {
-    let isMounted = true;
-
-    const refreshBrowserVaultKey = async () => {
-      const hasAccess = await hasVaultReadAccess();
-      if (isMounted) setHasBrowserVaultKey(hasAccess);
-    };
-
-    if (!hasDecryptionError) {
-      setHasBrowserVaultKey(null);
-      return;
-    }
-
-    void refreshBrowserVaultKey();
-    window.addEventListener(
-      RECOVERY_PHRASE_MEMORY_EVENT,
-      refreshBrowserVaultKey,
-    );
-    window.addEventListener(VAULT_KEY_STORAGE_EVENT, refreshBrowserVaultKey);
-    window.addEventListener("focus", refreshBrowserVaultKey);
-
-    return () => {
-      isMounted = false;
-      window.removeEventListener(
-        RECOVERY_PHRASE_MEMORY_EVENT,
-        refreshBrowserVaultKey,
-      );
-      window.removeEventListener(
-        VAULT_KEY_STORAGE_EVENT,
-        refreshBrowserVaultKey,
-      );
-      window.removeEventListener("focus", refreshBrowserVaultKey);
-    };
-  }, [hasDecryptionError, location.pathname]);
 
   useEffect(() => {
     const refreshMigrationNotice = () => {
@@ -84,10 +41,11 @@ function AuthenticatedLayoutContent({
   }, [location.pathname]);
 
   const shouldShowDecryptionNotice =
-    hasDecryptionError && location.pathname !== "/recovery-access";
+    vaultState.metadataStatus === "decryption_error" &&
+    location.pathname !== "/recovery-access";
 
   const decryptionNotice =
-    hasBrowserVaultKey === false
+    vaultState.hasVaultKey === false
       ? {
           message:
             "Vault locked — this browser needs your recovery phrase before it can read encrypted vault metadata.",
@@ -129,8 +87,8 @@ function AuthenticatedLayoutContent({
         {showVaultIndexMigrationNotice && (
           <div className="mb-6 border border-border bg-card px-4 py-3 text-xs leading-relaxed text-muted-foreground">
             ZeroDrive moved your encrypted file list to hidden Google app
-            storage. The old visible <code>db-list.json</code> safety copy is
-            no longer used; keep it until your files look right.
+            storage. The old visible <code>db-list.json</code> safety copy is no
+            longer used; keep it until your files look right.
           </div>
         )}
 
