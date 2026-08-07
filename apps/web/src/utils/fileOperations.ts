@@ -4,7 +4,7 @@ import {
   addFile,
   deleteFileFromDB,
   getAllFilesForUser,
-  sendToGoogleDrive, // The function that updates db-list.json
+  sendToGoogleDrive, // Syncs the encrypted vault index to Google Drive.
   clearUserFilesFromDB, // Function to clear DB for a user
   getFoldersForUser, // Get folders for sync
 } from "./dexieDB";
@@ -125,7 +125,7 @@ export const uploadAndSyncFile = async (
     const updatedList = await getAllFilesForUser(userEmail);
     const updatedFolders = await getFoldersForUser(userEmail);
 
-    // 9. Sync updated list to db-list.json on Google Drive
+    // 9. Sync updated encrypted vault index to Google Drive
     await sendToGoogleDrive(updatedList, updatedFolders, {
       userEmail,
       allowMetadataReplacement: options.allowMetadataReplacement,
@@ -216,7 +216,7 @@ export const deleteAndSyncFile = async (
     const updatedList = await getAllFilesForUser(userEmail);
     const updatedFolders = await getFoldersForUser(userEmail);
 
-    // 5. Sync updated list to db-list.json on Google Drive
+    // 5. Sync updated encrypted vault index to Google Drive
     await sendToGoogleDrive(updatedList, updatedFolders, {
       userEmail,
       recoveryPhraseSession,
@@ -313,7 +313,7 @@ export const deleteAllAndSyncFiles = async (
     // 4. Clear all files for this user from IndexedDB
     await clearUserFilesFromDB(userEmail);
 
-    // 5. Sync the (now empty) list to db-list.json on Google Drive
+    // 5. Sync the (now empty) encrypted vault index to Google Drive
     const updatedFolders = await getFoldersForUser(userEmail);
     await sendToGoogleDrive([], updatedFolders, {
       userEmail,

@@ -1,7 +1,7 @@
 import { toast } from "sonner";
 import type { VaultMetadataStatus } from "../contexts/vault-data-context";
 
-const VAULT_METADATA_STATUS_KEY = "zerodrive:vault-metadata-status";
+const VAULT_METADATA_STATUS_KEY = "zerodrive:vault-metadata-status:v2";
 
 const normalizeEmail = (userEmail: string) => userEmail.trim().toLowerCase();
 

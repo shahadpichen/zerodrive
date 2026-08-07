@@ -745,9 +745,9 @@ function PrivateStorageContent() {
                     Existing vault index could not be opened
                   </DialogTitle>
                   <DialogDescription className="mt-2 leading-relaxed">
-                    ZeroDrive found an encrypted file list in Google Drive (
-                    <code>db-list.json</code>), but this browser could not open
-                    it with the current recovery phrase.
+                    ZeroDrive found your encrypted file list in Google Drive,
+                    but this browser could not open it with the current
+                    recovery phrase.
                   </DialogDescription>
                 </div>
               </div>
