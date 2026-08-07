@@ -7,21 +7,18 @@
  */
 
 // Mock Dexie before any imports
-import { toast } from 'sonner';
+import { toast } from "sonner";
 import {
   sendToGoogleDrive,
   fetchAndStoreFileMetadata,
   FileMeta,
   FolderMeta,
   db,
-} from '../../utils/dexieDB';
-import { rememberVaultMetadataStatus } from '../../utils/vaultMetadataWriteGuard';
-import {
-  clearMnemonic,
-  setMnemonic,
-} from '../../utils/mnemonicManager';
+} from "../../utils/dexieDB";
+import { rememberVaultMetadataStatus } from "../../utils/vaultMetadataWriteGuard";
+import { clearMnemonic, setMnemonic } from "../../utils/mnemonicManager";
 
-jest.mock('dexie', () => {
+jest.mock("dexie", () => {
   const mockTable = {
     add: jest.fn().mockResolvedValue(1),
     where: jest.fn().mockReturnValue({
@@ -58,11 +55,11 @@ jest.mock('dexie', () => {
 });
 
 // Mock modules
-jest.mock('../../utils/gapiInit');
-jest.mock('../../utils/metadataEncryption');
-jest.mock('sonner');
-jest.mock('../../utils/logger');
-jest.mock('gapi-script', () => ({
+jest.mock("../../utils/gapiInit");
+jest.mock("../../utils/metadataEncryption");
+jest.mock("sonner");
+jest.mock("../../utils/logger");
+jest.mock("gapi-script", () => ({
   gapi: {
     load: jest.fn(),
     client: {
@@ -78,7 +75,7 @@ jest.mock('gapi-script', () => ({
 global.fetch = jest.fn();
 
 const mockGetGoogleAccessToken = jest.fn();
-jest.mock('../../utils/gapiInit', () => ({
+jest.mock("../../utils/gapiInit", () => ({
   getGoogleAccessToken: (...args: any[]) => mockGetGoogleAccessToken(...args),
   initializeGapi: jest.fn(),
   refreshGapiToken: jest.fn(),
@@ -86,30 +83,59 @@ jest.mock('../../utils/gapiInit', () => ({
 
 const mockEncryptMetadata = jest.fn();
 const mockDecryptMetadata = jest.fn();
-jest.mock('../../utils/metadataEncryption', () => ({
+const mockDecryptMetadataWithRecoveryPhrase = jest.fn();
+jest.mock("../../utils/metadataEncryption", () => ({
   encryptMetadata: (...args: any[]) => mockEncryptMetadata(...args),
   decryptMetadata: (...args: any[]) => mockDecryptMetadata(...args),
+  decryptMetadataWithRecoveryPhrase: (...args: any[]) =>
+    mockDecryptMetadataWithRecoveryPhrase(...args),
 }));
 
-jest.mock('sonner', () => ({
+jest.mock("sonner", () => ({
   toast: {
-    loading: jest.fn(() => 'toast-id'),
+    loading: jest.fn(() => "toast-id"),
     success: jest.fn(),
     error: jest.fn(),
   },
 }));
 
-describe('DexieDB - Google Drive Sync', () => {
-  const testUser = 'test@example.com';
+describe("DexieDB - Google Drive Sync", () => {
+  const testUser = "test@example.com";
   const testFile: FileMeta = {
-    id: 'file-123',
-    name: 'test.txt',
-    mimeType: 'text/plain',
+    id: "file-123",
+    name: "test.txt",
+    mimeType: "text/plain",
     userEmail: testUser,
-    uploadedDate: new Date('2024-01-01'),
+    uploadedDate: new Date("2024-01-01"),
     folderId: null,
   };
-  const testObjectId = '22222222-2222-4222-8222-222222222222';
+  const testObjectId = "22222222-2222-4222-8222-222222222222";
+
+  const expectHiddenVaultIndexSearch = (callIndex: number) => {
+    const [url, options] = (global.fetch as jest.Mock).mock.calls[callIndex];
+    const parsedUrl = new URL(url as string);
+
+    expect(parsedUrl.searchParams.get("spaces")).toBe("appDataFolder");
+    expect(parsedUrl.searchParams.get("q")).toContain(
+      "zerodrive-vault-index.zd",
+    );
+    expect(options.method).toBe("GET");
+  };
+
+  const expectLegacyVaultIndexSearch = (callIndex: number) => {
+    const [url, options] = (global.fetch as jest.Mock).mock.calls[callIndex];
+    const parsedUrl = new URL(url as string);
+
+    expect(parsedUrl.searchParams.get("spaces")).toBe("drive");
+    expect(parsedUrl.searchParams.get("q")).toContain("db-list.json");
+    expect(options.method).toBe("GET");
+  };
+
+  const readFormMetadata = async (form: FormData) => {
+    const metadata = form.get("metadata");
+    expect(metadata).toBeInstanceOf(Blob);
+    return JSON.parse(await (metadata as Blob).text());
+  };
 
   beforeEach(() => {
     sessionStorage.clear();
@@ -124,14 +150,14 @@ describe('DexieDB - Google Drive Sync', () => {
     clearMnemonic();
   });
 
-  describe('sendToGoogleDrive', () => {
+  describe("sendToGoogleDrive", () => {
     beforeEach(() => {
-      mockGetGoogleAccessToken.mockResolvedValue('mock-token');
-      mockEncryptMetadata.mockResolvedValue(new Blob(['encrypted-data']));
+      mockGetGoogleAccessToken.mockResolvedValue("mock-token");
+      mockEncryptMetadata.mockResolvedValue(new Blob(["encrypted-data"]));
       (global.fetch as jest.Mock).mockClear();
     });
 
-    it('should create new db-list.json when none exists', async () => {
+    it("should create a hidden appDataFolder vault index when none exists", async () => {
       const files: FileMeta[] = [
         {
           ...testFile,
@@ -141,11 +167,11 @@ describe('DexieDB - Google Drive Sync', () => {
       ];
       const folders: FolderMeta[] = [
         {
-          id: 'folder-123',
-          name: 'Documents',
+          id: "folder-123",
+          name: "Documents",
           parentId: null,
           userEmail: testUser,
-          createdDate: new Date('2024-01-02T03:04:05.000Z'),
+          createdDate: new Date("2024-01-02T03:04:05.000Z"),
         },
       ];
 
@@ -159,85 +185,100 @@ describe('DexieDB - Google Drive Sync', () => {
       (global.fetch as jest.Mock).mockResolvedValueOnce({
         ok: true,
         status: 200,
-        text: async () => JSON.stringify({ id: 'new-file-id' }),
+        text: async () => JSON.stringify({ id: "new-file-id" }),
+      });
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          files: [{ id: "new-file-id", name: "zerodrive-vault-index.zd" }],
+        }),
       });
 
       await sendToGoogleDrive(files, folders);
 
-      expect(mockEncryptMetadata).toHaveBeenCalledWith({
-        version: 2,
-        files: [
-          {
-            id: 'file-123',
-            objectId: testObjectId,
-            revision: 1,
-            name: 'test.txt',
-            mimeType: 'text/plain',
-            userEmail: testUser,
-            uploadedDate: '2024-01-01T00:00:00.000Z',
-            folderId: null,
-          },
-        ],
-        folders: [
-          {
-            id: 'folder-123',
-            name: 'Documents',
-            parentId: null,
-            userEmail: testUser,
-            createdDate: '2024-01-02T03:04:05.000Z',
-          },
-        ],
-      }, expect.any(String));
-      expect(global.fetch).toHaveBeenCalledTimes(2);
+      expect(mockEncryptMetadata).toHaveBeenCalledWith(
+        {
+          version: 2,
+          files: [
+            {
+              id: "file-123",
+              objectId: testObjectId,
+              revision: 1,
+              name: "test.txt",
+              mimeType: "text/plain",
+              userEmail: testUser,
+              uploadedDate: "2024-01-01T00:00:00.000Z",
+              folderId: null,
+            },
+          ],
+          folders: [
+            {
+              id: "folder-123",
+              name: "Documents",
+              parentId: null,
+              userEmail: testUser,
+              createdDate: "2024-01-02T03:04:05.000Z",
+            },
+          ],
+        },
+        expect.any(String),
+      );
+      expect(global.fetch).toHaveBeenCalledTimes(3);
+      expectHiddenVaultIndexSearch(0);
 
-      // Verify POST request for creating new file
       const uploadCall = (global.fetch as jest.Mock).mock.calls[1];
-      expect(uploadCall[0]).toContain('uploadType=multipart');
-      expect(uploadCall[1].method).toBe('POST');
+      expect(uploadCall[0]).toContain("uploadType=multipart");
+      expect(uploadCall[1].method).toBe("POST");
+      const metadata = await readFormMetadata(uploadCall[1].body);
+      expect(metadata).toEqual({
+        name: "zerodrive-vault-index.zd",
+        mimeType: "application/octet-stream",
+        parents: ["appDataFolder"],
+      });
     });
 
-    it('rejects malformed Capsule file bindings instead of omitting them', async () => {
+    it("rejects malformed Capsule file bindings instead of omitting them", async () => {
       const malformedFile = {
         ...testFile,
-        objectId: 'not-a-uuid',
+        objectId: "not-a-uuid",
         revision: 0,
       } as FileMeta;
 
       await expect(sendToGoogleDrive([malformedFile])).rejects.toThrow(
-        'Vault metadata contains an invalid file identifier.'
+        "Vault metadata contains an invalid file identifier.",
       );
       expect(mockEncryptMetadata).not.toHaveBeenCalled();
       expect(global.fetch).not.toHaveBeenCalled();
     });
 
-    it('should update existing db-list.json', async () => {
+    it("should update an existing hidden appDataFolder vault index", async () => {
       const files = [testFile];
 
-      // Mock search response: existing file found
       (global.fetch as jest.Mock).mockResolvedValueOnce({
         ok: true,
-        json: async () => ({ files: [{ id: 'existing-file-id' }] }),
+        json: async () => ({ files: [{ id: "existing-file-id" }] }),
       });
 
       // Mock update response
       (global.fetch as jest.Mock).mockResolvedValueOnce({
         ok: true,
         status: 200,
-        text: async () => JSON.stringify({ id: 'existing-file-id' }),
+        text: async () => JSON.stringify({ id: "existing-file-id" }),
       });
 
       await sendToGoogleDrive(files);
 
-      // Verify PATCH request for updating existing file
+      expectHiddenVaultIndexSearch(0);
       const uploadCall = (global.fetch as jest.Mock).mock.calls[1];
-      expect(uploadCall[0]).toContain('existing-file-id');
-      expect(uploadCall[1].method).toBe('PATCH');
+      expect(uploadCall[0]).toContain("existing-file-id");
+      expect(uploadCall[1].method).toBe("PATCH");
+      await expect(readFormMetadata(uploadCall[1].body)).resolves.toEqual({});
     });
 
-    it('cancels the Drive update if recovery access changes in flight', async () => {
+    it("cancels the Drive update if recovery access changes in flight", async () => {
       (global.fetch as jest.Mock).mockImplementationOnce(async () => {
         setMnemonic(
-          'legal winner thank year wave sausage worth useful legal winner thank yellow',
+          "legal winner thank year wave sausage worth useful legal winner thank yellow",
         );
         return {
           ok: true,
@@ -246,43 +287,86 @@ describe('DexieDB - Google Drive Sync', () => {
       });
 
       await expect(sendToGoogleDrive([testFile])).rejects.toMatchObject({
-        name: 'RecoveryPhraseChangedError',
+        name: "RecoveryPhraseChangedError",
       });
       expect(global.fetch).toHaveBeenCalledTimes(1);
     });
 
-    it('does not report an in-flight Drive write as safe after recovery access changes', async () => {
+    it("does not report an in-flight Drive write as safe after recovery access changes", async () => {
       (global.fetch as jest.Mock).mockResolvedValueOnce({
         ok: true,
         json: async () => ({ files: [] }),
       });
       (global.fetch as jest.Mock).mockImplementationOnce(async () => {
         setMnemonic(
-          'legal winner thank year wave sausage worth useful legal winner thank yellow',
+          "legal winner thank year wave sausage worth useful legal winner thank yellow",
         );
         return {
           ok: true,
           status: 200,
-          text: async () => JSON.stringify({ id: 'new-file-id' }),
+          text: async () => JSON.stringify({ id: "new-file-id" }),
         };
+      });
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          files: [{ id: "new-file-id", name: "zerodrive-vault-index.zd" }],
+        }),
       });
 
       await expect(sendToGoogleDrive([testFile])).rejects.toMatchObject({
-        name: 'RecoveryPhraseChangedError',
+        name: "RecoveryPhraseChangedError",
       });
-      expect(global.fetch).toHaveBeenCalledTimes(2);
+      expect(global.fetch).toHaveBeenCalledTimes(3);
       expect(toast.success).not.toHaveBeenCalled();
     });
 
-    it('should throw error when no access token available', async () => {
+    it("cleans up and fails if a first hidden write races another tab", async () => {
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ files: [] }),
+      });
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        text: async () => JSON.stringify({ id: "new-file-id" }),
+      });
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          files: [
+            { id: "new-file-id", name: "zerodrive-vault-index.zd" },
+            { id: "other-tab-file-id", name: "zerodrive-vault-index.zd" },
+          ],
+        }),
+      });
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+      });
+
+      await expect(sendToGoogleDrive([testFile])).rejects.toThrow(
+        "Another browser tab created the hidden vault index at the same time.",
+      );
+
+      expect(global.fetch).toHaveBeenCalledTimes(4);
+      expectHiddenVaultIndexSearch(0);
+      const uploadCall = (global.fetch as jest.Mock).mock.calls[1];
+      expect(uploadCall[1].method).toBe("POST");
+      expectHiddenVaultIndexSearch(2);
+      const deleteCall = (global.fetch as jest.Mock).mock.calls[3];
+      expect(deleteCall[0]).toContain("/new-file-id");
+      expect(deleteCall[1].method).toBe("DELETE");
+      expect(toast.success).not.toHaveBeenCalled();
+    });
+
+    it("should throw error when no access token available", async () => {
       mockGetGoogleAccessToken.mockResolvedValue(null);
 
       await expect(sendToGoogleDrive([testFile])).rejects.toThrow(
-        'User not authenticated for Google Drive update.'
+        "User not authenticated for Google Drive update.",
       );
     });
 
-    it('should fail closed before syncing when metadata is not verified', async () => {
+    it("should fail closed before syncing when metadata is not verified", async () => {
       sessionStorage.clear();
 
       await expect(sendToGoogleDrive([testFile])).rejects.toThrow(
@@ -292,18 +376,18 @@ describe('DexieDB - Google Drive Sync', () => {
       expect(global.fetch).not.toHaveBeenCalled();
     });
 
-    it('should throw error when search request fails', async () => {
+    it("should throw error when search request fails", async () => {
       (global.fetch as jest.Mock).mockResolvedValueOnce({
         ok: false,
         status: 401,
-        statusText: 'Unauthorized',
+        statusText: "Unauthorized",
       });
 
       await expect(sendToGoogleDrive([testFile])).rejects.toThrow();
       expect(toast.error).toHaveBeenCalled();
     });
 
-    it('should throw error when upload fails', async () => {
+    it("should throw error when upload fails", async () => {
       // Mock successful search
       (global.fetch as jest.Mock).mockResolvedValueOnce({
         ok: true,
@@ -314,14 +398,14 @@ describe('DexieDB - Google Drive Sync', () => {
       (global.fetch as jest.Mock).mockResolvedValueOnce({
         ok: false,
         status: 500,
-        statusText: 'Internal Server Error',
-        text: async () => 'Error details',
+        statusText: "Internal Server Error",
+        text: async () => "Error details",
       });
 
       await expect(sendToGoogleDrive([testFile])).rejects.toThrow();
     });
 
-    it('should show success toast on successful sync', async () => {
+    it("should show success toast on successful sync", async () => {
       // Mock successful search
       (global.fetch as jest.Mock).mockResolvedValueOnce({
         ok: true,
@@ -331,22 +415,41 @@ describe('DexieDB - Google Drive Sync', () => {
       // Mock successful upload
       (global.fetch as jest.Mock).mockResolvedValueOnce({
         ok: true,
-        text: async () => JSON.stringify({ id: 'file-id' }),
+        text: async () => JSON.stringify({ id: "file-id" }),
+      });
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          files: [{ id: "file-id", name: "zerodrive-vault-index.zd" }],
+        }),
       });
 
       await sendToGoogleDrive([testFile]);
 
       expect(toast.success).toHaveBeenCalledWith(
-        'Metadata successfully synchronized.',
-        expect.any(Object)
+        "Metadata successfully synchronized.",
+        expect.any(Object),
       );
     });
   });
 
-  describe('fetchAndStoreFileMetadata', () => {
+  describe("fetchAndStoreFileMetadata", () => {
     beforeEach(() => {
-      mockGetGoogleAccessToken.mockResolvedValue('mock-token');
+      mockGetGoogleAccessToken.mockResolvedValue("mock-token");
+      mockEncryptMetadata.mockResolvedValue(new Blob(["migrated-index"]));
       mockDecryptMetadata.mockResolvedValue({
+        version: 2,
+        files: [
+          {
+            ...testFile,
+            objectId: testObjectId,
+            revision: 1,
+            uploadedDate: testFile.uploadedDate.toISOString(),
+          },
+        ],
+        folders: [],
+      });
+      mockDecryptMetadataWithRecoveryPhrase.mockResolvedValue({
         version: 2,
         files: [
           {
@@ -361,52 +464,51 @@ describe('DexieDB - Google Drive Sync', () => {
       (global.fetch as jest.Mock).mockClear();
     });
 
-    it('should fetch and decrypt metadata from Google Drive', async () => {
-      const { gapi } = require('gapi-script');
-
-      // Mock gapi response
-      gapi.client.request = jest.fn().mockResolvedValue({
-        result: {
-          files: [{ id: 'db-list-id', name: 'db-list.json' }],
-        },
-      });
-
-      // Mock fetch response for downloading file
+    it("should fetch and decrypt metadata from hidden appDataFolder", async () => {
       (global.fetch as jest.Mock).mockResolvedValueOnce({
         ok: true,
-        blob: async () => new Blob(['encrypted-metadata']),
+        json: async () => ({
+          files: [{ id: "hidden-index-id", name: "zerodrive-vault-index.zd" }],
+        }),
+      });
+
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        blob: async () => new Blob(["encrypted-metadata"]),
       });
 
       await fetchAndStoreFileMetadata();
 
-      // Verify decryption was called
       expect(mockDecryptMetadata).toHaveBeenCalled();
-      // Verify gapi was called to fetch the file list
-      expect(gapi.client.request).toHaveBeenCalled();
-      expect(db.table('files').add).toHaveBeenCalledWith(
+      expect(global.fetch).toHaveBeenCalledTimes(2);
+      expectHiddenVaultIndexSearch(0);
+      expect((global.fetch as jest.Mock).mock.calls[1][0]).toContain(
+        "/hidden-index-id?alt=media",
+      );
+      expect(db.table("files").add).toHaveBeenCalledWith(
         expect.objectContaining({
           id: testFile.id,
           objectId: testObjectId,
           revision: 1,
           uploadedDate: testFile.uploadedDate,
-        })
+        }),
       );
     });
 
-    it('rejects verification results if recovery access changes in flight', async () => {
-      const { gapi } = require('gapi-script');
-      gapi.client.request = jest.fn().mockResolvedValue({
-        result: {
-          files: [{ id: 'db-list-id', name: 'db-list.json' }],
-        },
+    it("rejects verification results if recovery access changes in flight", async () => {
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          files: [{ id: "hidden-index-id", name: "zerodrive-vault-index.zd" }],
+        }),
       });
       (global.fetch as jest.Mock).mockResolvedValueOnce({
         ok: true,
-        blob: async () => new Blob(['encrypted-metadata']),
+        blob: async () => new Blob(["encrypted-metadata"]),
       });
       mockDecryptMetadata.mockImplementationOnce(async () => {
         setMnemonic(
-          'legal winner thank year wave sausage worth useful legal winner thank yellow',
+          "legal winner thank year wave sausage worth useful legal winner thank yellow",
         );
         return {
           version: 2,
@@ -416,59 +518,469 @@ describe('DexieDB - Google Drive Sync', () => {
       });
 
       await expect(fetchAndStoreFileMetadata()).rejects.toMatchObject({
-        name: 'RecoveryPhraseChangedError',
+        name: "RecoveryPhraseChangedError",
       });
     });
 
-    it('propagates a recovery access change from a token-refresh retry', async () => {
-      const { gapi } = require('gapi-script');
-      const recoveryAccessChanged = Object.assign(
-        new Error('Recovery access changed while metadata was being verified.'),
-        { name: 'RecoveryPhraseChangedError' },
-      );
-      gapi.client.request = jest
-        .fn()
-        .mockRejectedValueOnce({ status: 401 })
-        .mockRejectedValueOnce(recoveryAccessChanged);
+    it("propagates a recovery access change from a token-refresh retry", async () => {
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: false,
+        status: 401,
+        statusText: "Unauthorized",
+      });
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          files: [{ id: "hidden-index-id", name: "zerodrive-vault-index.zd" }],
+        }),
+      });
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        blob: async () => new Blob(["encrypted-metadata"]),
+      });
+      mockDecryptMetadata.mockImplementationOnce(async () => {
+        setMnemonic(
+          "legal winner thank year wave sausage worth useful legal winner thank yellow",
+        );
+        return {
+          version: 2,
+          files: [],
+          folders: [],
+        };
+      });
 
-      await expect(fetchAndStoreFileMetadata()).rejects.toBe(
-        recoveryAccessChanged,
-      );
+      await expect(fetchAndStoreFileMetadata()).rejects.toMatchObject({
+        name: "RecoveryPhraseChangedError",
+      });
     });
 
-    it('should handle case when no db-list.json exists', async () => {
-      const { gapi } = require('gapi-script');
-
-      gapi.client.request = jest.fn().mockResolvedValue({
-        result: { files: [] },
+    it("should handle case when no vault index exists", async () => {
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ files: [] }),
+      });
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ files: [] }),
       });
 
       await fetchAndStoreFileMetadata();
 
-      // Should not throw error
-      expect(global.fetch).not.toHaveBeenCalled();
+      expect(global.fetch).toHaveBeenCalledTimes(2);
+      expectHiddenVaultIndexSearch(0);
+      expectLegacyVaultIndexSearch(1);
     });
 
-    it('should throw a decryption error when metadata cannot be opened', async () => {
-      const { gapi } = require('gapi-script');
-
-      gapi.client.request = jest.fn().mockResolvedValue({
-        result: {
-          files: [{ id: 'db-list-id' }],
-        },
+    it("should throw a decryption error when metadata cannot be opened", async () => {
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          files: [{ id: "hidden-index-id", name: "zerodrive-vault-index.zd" }],
+        }),
       });
 
       (global.fetch as jest.Mock).mockResolvedValueOnce({
         ok: true,
-        blob: async () => new Blob(['encrypted']),
+        blob: async () => new Blob(["encrypted"]),
       });
 
-      mockDecryptMetadata.mockRejectedValue(new Error('Decryption failed'));
+      mockDecryptMetadata.mockRejectedValue(new Error("Decryption failed"));
 
       await expect(fetchAndStoreFileMetadata()).rejects.toMatchObject({
-        name: 'DecryptionError',
-        message: 'DECRYPTION_FAILED',
+        name: "DecryptionError",
+        message: "DECRYPTION_FAILED",
       });
+      expect(global.fetch).toHaveBeenCalledTimes(2);
+      expectHiddenVaultIndexSearch(0);
+    });
+
+    it("migrates a legacy visible db-list.json into hidden appDataFolder", async () => {
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ files: [] }),
+      });
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          files: [{ id: "legacy-index-id", name: "db-list.json" }],
+        }),
+      });
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        blob: async () => new Blob(["legacy-encrypted-metadata"]),
+      });
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ files: [] }),
+      });
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        text: async () => JSON.stringify({ id: "hidden-index-id" }),
+      });
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          files: [
+            {
+              id: "hidden-index-id",
+              name: "zerodrive-vault-index.zd",
+            },
+          ],
+        }),
+      });
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        blob: async () => new Blob(["hidden-encrypted-metadata"]),
+      });
+
+      await fetchAndStoreFileMetadata();
+
+      expect(global.fetch).toHaveBeenCalledTimes(7);
+      expectHiddenVaultIndexSearch(0);
+      expectLegacyVaultIndexSearch(1);
+      expect((global.fetch as jest.Mock).mock.calls[2][0]).toContain(
+        "/legacy-index-id?alt=media",
+      );
+      expectHiddenVaultIndexSearch(3);
+
+      const uploadCall = (global.fetch as jest.Mock).mock.calls[4];
+      expect(uploadCall[0]).toContain("uploadType=multipart");
+      expect(uploadCall[1].method).toBe("POST");
+      await expect(readFormMetadata(uploadCall[1].body)).resolves.toEqual({
+        name: "zerodrive-vault-index.zd",
+        mimeType: "application/octet-stream",
+        parents: ["appDataFolder"],
+      });
+      expectHiddenVaultIndexSearch(5);
+      expect((global.fetch as jest.Mock).mock.calls[6][0]).toContain(
+        "/hidden-index-id?alt=media",
+      );
+      expect(mockEncryptMetadata).toHaveBeenCalledWith(
+        expect.objectContaining({ version: 2 }),
+        expect.any(String),
+      );
+      expect(mockDecryptMetadataWithRecoveryPhrase).toHaveBeenCalledWith(
+        expect.any(Blob),
+        expect.any(String),
+      );
+      expect(toast.success).toHaveBeenCalledWith(
+        "Vault index moved to hidden app storage.",
+      );
+    });
+
+    it("loads a legacy visible db-list.json without migrating when only a legacy JSON key is active", async () => {
+      clearMnemonic();
+      mockEncryptMetadata.mockClear();
+
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ files: [] }),
+      });
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          files: [{ id: "legacy-index-id", name: "db-list.json" }],
+        }),
+      });
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        blob: async () => new Blob(["legacy-encrypted-metadata"]),
+      });
+
+      await fetchAndStoreFileMetadata();
+
+      expect(global.fetch).toHaveBeenCalledTimes(3);
+      expectHiddenVaultIndexSearch(0);
+      expectLegacyVaultIndexSearch(1);
+      expect((global.fetch as jest.Mock).mock.calls[2][0]).toContain(
+        "/legacy-index-id?alt=media",
+      );
+      expect(mockDecryptMetadata).toHaveBeenCalled();
+      expect(mockDecryptMetadataWithRecoveryPhrase).not.toHaveBeenCalled();
+      expect(mockEncryptMetadata).not.toHaveBeenCalled();
+      expect(db.table("files").add).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: testFile.id,
+          objectId: testObjectId,
+          revision: 1,
+          uploadedDate: testFile.uploadedDate,
+        }),
+      );
+      expect(toast.success).not.toHaveBeenCalledWith(
+        "Vault index moved to hidden app storage.",
+      );
+    });
+
+    it("loads a legacy visible db-list.json without migrating when the active phrase cannot open it", async () => {
+      mockEncryptMetadata.mockClear();
+      mockDecryptMetadataWithRecoveryPhrase.mockRejectedValueOnce(
+        new Error("Wrong recovery phrase"),
+      );
+
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ files: [] }),
+      });
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          files: [{ id: "legacy-index-id", name: "db-list.json" }],
+        }),
+      });
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        blob: async () => new Blob(["legacy-encrypted-metadata"]),
+      });
+
+      await fetchAndStoreFileMetadata();
+
+      expect(global.fetch).toHaveBeenCalledTimes(3);
+      expectHiddenVaultIndexSearch(0);
+      expectLegacyVaultIndexSearch(1);
+      expect((global.fetch as jest.Mock).mock.calls[2][0]).toContain(
+        "/legacy-index-id?alt=media",
+      );
+      expect(mockDecryptMetadata).toHaveBeenCalled();
+      expect(mockDecryptMetadataWithRecoveryPhrase).toHaveBeenCalledWith(
+        expect.any(Blob),
+        expect.any(String),
+      );
+      expect(mockEncryptMetadata).not.toHaveBeenCalled();
+      expect(db.table("files").add).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: testFile.id,
+          objectId: testObjectId,
+          revision: 1,
+          uploadedDate: testFile.uploadedDate,
+        }),
+      );
+      expect(toast.success).not.toHaveBeenCalledWith(
+        "Vault index moved to hidden app storage.",
+      );
+    });
+
+    it("rejects legacy migration if recovery access changes during phrase-only proof", async () => {
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ files: [] }),
+      });
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          files: [{ id: "legacy-index-id", name: "db-list.json" }],
+        }),
+      });
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        blob: async () => new Blob(["legacy-encrypted-metadata"]),
+      });
+      mockDecryptMetadataWithRecoveryPhrase.mockImplementationOnce(async () => {
+        setMnemonic(
+          "legal winner thank year wave sausage worth useful legal winner thank yellow",
+        );
+        return {
+          version: 2,
+          files: [
+            {
+              ...testFile,
+              objectId: testObjectId,
+              revision: 1,
+              uploadedDate: testFile.uploadedDate.toISOString(),
+            },
+          ],
+          folders: [],
+        };
+      });
+
+      await expect(fetchAndStoreFileMetadata()).rejects.toMatchObject({
+        name: "RecoveryPhraseChangedError",
+      });
+
+      expect(global.fetch).toHaveBeenCalledTimes(3);
+      expect(mockEncryptMetadata).not.toHaveBeenCalled();
+      expect(db.table("files").clear).not.toHaveBeenCalled();
+      expect(db.table("folders").clear).not.toHaveBeenCalled();
+    });
+
+    it("does not overwrite a hidden index that appears during legacy migration", async () => {
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ files: [] }),
+      });
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          files: [{ id: "legacy-index-id", name: "db-list.json" }],
+        }),
+      });
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        blob: async () => new Blob(["legacy-encrypted-metadata"]),
+      });
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          files: [
+            {
+              id: "hidden-race-index-id",
+              name: "zerodrive-vault-index.zd",
+            },
+          ],
+        }),
+      });
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        blob: async () => new Blob(["hidden-encrypted-metadata"]),
+      });
+
+      await fetchAndStoreFileMetadata();
+
+      expect(global.fetch).toHaveBeenCalledTimes(5);
+      expectHiddenVaultIndexSearch(0);
+      expectLegacyVaultIndexSearch(1);
+      expect((global.fetch as jest.Mock).mock.calls[2][0]).toContain(
+        "/legacy-index-id?alt=media",
+      );
+      expectHiddenVaultIndexSearch(3);
+      expect((global.fetch as jest.Mock).mock.calls[4][0]).toContain(
+        "/hidden-race-index-id?alt=media",
+      );
+      expect(
+        (global.fetch as jest.Mock).mock.calls.some(
+          ([url, options]) =>
+            typeof url === "string" &&
+            url.includes("upload/drive/v3/files") &&
+            options?.method === "PATCH",
+        ),
+      ).toBe(false);
+      expect(
+        (global.fetch as jest.Mock).mock.calls.some(
+          ([url, options]) =>
+            typeof url === "string" &&
+            url.includes("upload/drive/v3/files") &&
+            options?.method === "POST",
+        ),
+      ).toBe(false);
+      expect(toast.success).not.toHaveBeenCalledWith(
+        "Vault index moved to hidden app storage.",
+      );
+    });
+
+    it("cleans up a migration duplicate if a hidden index is created during upload", async () => {
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ files: [] }),
+      });
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          files: [{ id: "legacy-index-id", name: "db-list.json" }],
+        }),
+      });
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        blob: async () => new Blob(["legacy-encrypted-metadata"]),
+      });
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ files: [] }),
+      });
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        text: async () => JSON.stringify({ id: "stale-migration-index-id" }),
+      });
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          files: [
+            {
+              id: "stale-migration-index-id",
+              name: "zerodrive-vault-index.zd",
+            },
+            {
+              id: "newer-hidden-index-id",
+              name: "zerodrive-vault-index.zd",
+            },
+          ],
+        }),
+      });
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+      });
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        blob: async () => new Blob(["newer-hidden-encrypted-metadata"]),
+      });
+
+      await fetchAndStoreFileMetadata();
+
+      expect(global.fetch).toHaveBeenCalledTimes(8);
+      expectHiddenVaultIndexSearch(0);
+      expectLegacyVaultIndexSearch(1);
+      expectHiddenVaultIndexSearch(3);
+
+      const uploadCall = (global.fetch as jest.Mock).mock.calls[4];
+      expect(uploadCall[0]).toContain("uploadType=multipart");
+      expect(uploadCall[1].method).toBe("POST");
+      expectHiddenVaultIndexSearch(5);
+
+      const deleteCall = (global.fetch as jest.Mock).mock.calls[6];
+      expect(deleteCall[0]).toContain("/stale-migration-index-id");
+      expect(deleteCall[1].method).toBe("DELETE");
+
+      expect((global.fetch as jest.Mock).mock.calls[7][0]).toContain(
+        "/newer-hidden-index-id?alt=media",
+      );
+      expect(toast.success).not.toHaveBeenCalledWith(
+        "Vault index moved to hidden app storage.",
+      );
+    });
+
+    it("fails closed when multiple hidden vault indexes already exist", async () => {
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          files: [
+            {
+              id: "hidden-index-id-1",
+              name: "zerodrive-vault-index.zd",
+            },
+            {
+              id: "hidden-index-id-2",
+              name: "zerodrive-vault-index.zd",
+            },
+          ],
+        }),
+      });
+
+      await expect(fetchAndStoreFileMetadata()).rejects.toThrow(
+        "Multiple hidden vault indexes were found.",
+      );
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+      expectHiddenVaultIndexSearch(0);
+      expect(mockDecryptMetadata).not.toHaveBeenCalled();
+    });
+
+    it("uses hidden appDataFolder when both hidden and legacy indexes exist", async () => {
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          files: [{ id: "hidden-index-id", name: "zerodrive-vault-index.zd" }],
+        }),
+      });
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        blob: async () => new Blob(["encrypted-metadata"]),
+      });
+
+      await fetchAndStoreFileMetadata();
+
+      expect(global.fetch).toHaveBeenCalledTimes(2);
+      expectHiddenVaultIndexSearch(0);
+      expect((global.fetch as jest.Mock).mock.calls[1][0]).toContain(
+        "/hidden-index-id?alt=media",
+      );
+      expect(mockEncryptMetadata).not.toHaveBeenCalled();
     });
   });
 });

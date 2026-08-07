@@ -52,8 +52,7 @@ const CAPSULE_ERROR_MESSAGES: Record<CapsuleApplicationErrorCode, string> = {
     "The encrypted data could not be verified. It may be incomplete or damaged.",
   UNSUPPORTED_ENCRYPTED_FORMAT:
     "This encrypted format is not supported by this version of ZeroDrive.",
-  ENCRYPTION_FAILED:
-    "ZeroDrive could not complete the encryption operation.",
+  ENCRYPTION_FAILED: "ZeroDrive could not complete the encryption operation.",
 };
 
 export class CapsuleApplicationError extends Error {
@@ -266,9 +265,7 @@ export async function createVaultIndexCapsule(
   }
 }
 
-export async function openVaultIndexCapsule(
-  encryptedBlob: Blob,
-): Promise<{
+export async function openVaultIndexCapsule(encryptedBlob: Blob): Promise<{
   index: JsonValue;
   contentFormat: CapsuleContentFormat;
 }> {
@@ -281,6 +278,27 @@ export async function openVaultIndexCapsule(
       encryptedBytes,
       recoveryPhrase: getMnemonic() ?? undefined,
       legacyAesKey: (await getStoredKey()) ?? undefined,
+    });
+    return { index: opened.index, contentFormat: opened.format };
+  } catch (error) {
+    throw mapCapsuleError(error);
+  } finally {
+    encryptedBytes.fill(0);
+  }
+}
+
+export async function openVaultIndexCapsuleWithRecoveryPhraseOnly(
+  encryptedBlob: Blob,
+  recoveryPhrase: string,
+): Promise<{
+  index: JsonValue;
+  contentFormat: CapsuleContentFormat;
+}> {
+  const encryptedBytes = await blobToBytes(encryptedBlob);
+  try {
+    const opened = await openZeroDriveVaultIndex({
+      encryptedBytes,
+      recoveryPhrase: normalizeRecoveryPhrase(recoveryPhrase),
     });
     return { index: opened.index, contentFormat: opened.format };
   } catch (error) {

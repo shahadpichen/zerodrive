@@ -7,6 +7,10 @@ import {
 } from "../../utils/mnemonicManager";
 import { VAULT_KEY_STORAGE_EVENT } from "../../utils/cryptoUtils";
 import { hasVaultReadAccess } from "../../utils/vaultAccess";
+import {
+  consumeVaultIndexMigrationNotice,
+  VAULT_INDEX_MIGRATION_NOTICE_EVENT,
+} from "../../utils/vaultIndexDriveStorage";
 
 function AuthenticatedLayoutContent({
   children,
@@ -22,6 +26,8 @@ function AuthenticatedLayoutContent({
   const [hasBrowserVaultKey, setHasBrowserVaultKey] = useState<boolean | null>(
     null,
   );
+  const [showVaultIndexMigrationNotice, setShowVaultIndexMigrationNotice] =
+    useState(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -57,6 +63,25 @@ function AuthenticatedLayoutContent({
       window.removeEventListener("focus", refreshBrowserVaultKey);
     };
   }, [hasDecryptionError, location.pathname]);
+
+  useEffect(() => {
+    const refreshMigrationNotice = () => {
+      setShowVaultIndexMigrationNotice(consumeVaultIndexMigrationNotice());
+    };
+
+    refreshMigrationNotice();
+    window.addEventListener(
+      VAULT_INDEX_MIGRATION_NOTICE_EVENT,
+      refreshMigrationNotice,
+    );
+
+    return () => {
+      window.removeEventListener(
+        VAULT_INDEX_MIGRATION_NOTICE_EVENT,
+        refreshMigrationNotice,
+      );
+    };
+  }, [location.pathname]);
 
   const shouldShowDecryptionNotice =
     hasDecryptionError && location.pathname !== "/recovery-access";
@@ -98,6 +123,14 @@ function AuthenticatedLayoutContent({
                 {decryptionNotice.action}
               </button>
             </span>
+          </div>
+        )}
+
+        {showVaultIndexMigrationNotice && (
+          <div className="mb-6 border border-border bg-card px-4 py-3 text-xs leading-relaxed text-muted-foreground">
+            ZeroDrive moved your encrypted file list to hidden Google app
+            storage. The old visible <code>db-list.json</code> safety copy is
+            no longer used; keep it until your files look right.
           </div>
         )}
 

@@ -1,16 +1,27 @@
 import Dexie from "dexie";
-import { gapi } from "gapi-script";
 import { toast } from "sonner";
 import type { JsonObject } from "@zerodrivehq/capsule";
 import { initializeGapi, refreshGapiToken } from "./gapiInit";
 import logger from "./logger";
-import { encryptMetadata, decryptMetadata } from "./metadataEncryption";
+import {
+  decryptMetadata,
+  decryptMetadataWithRecoveryPhrase,
+  encryptMetadata,
+} from "./metadataEncryption";
 import { assertCanWriteVaultMetadata } from "./vaultMetadataWriteGuard";
+import {
+  createHiddenVaultIndexBlobIfAbsent,
+  downloadVaultIndexBlob,
+  findVaultIndexReadTarget,
+  recordVaultIndexMigrationNotice,
+  writeVaultIndexBlob,
+} from "./vaultIndexDriveStorage";
 import {
   assertRecoveryPhraseGeneration,
   assertRecoveryPhraseSessionCurrent,
   captureActiveRecoveryPhraseSession,
   getRecoveryPhraseGeneration,
+  hasMnemonic,
   type RecoveryPhraseSession,
 } from "./mnemonicManager";
 
@@ -102,6 +113,40 @@ export const serializeVaultIndex = (
     createdDate: serializeDate(folder.createdDate, "folder creation date"),
   })),
 });
+
+const parseVaultIndexContent = (
+  fileContent: any,
+): { files: any[]; folders: any[] } => {
+  let files: any[] = [];
+  let folders: any[] = [];
+
+  if (fileContent.version === 2) {
+    logger.log("[Sync] Detected v2 metadata format");
+    files = Array.isArray(fileContent.files) ? fileContent.files : [];
+    folders = Array.isArray(fileContent.folders) ? fileContent.folders : [];
+  } else {
+    logger.log("[Sync] Detected v1 metadata format, applying migration");
+    if (fileContent.files && Array.isArray(fileContent.files)) {
+      files = fileContent.files;
+    } else if (Array.isArray(fileContent)) {
+      files = fileContent;
+    }
+    folders = [];
+  }
+
+  files = files.map((file) =>
+    file && typeof file === "object"
+      ? {
+          ...file,
+          folderId: file.folderId !== undefined ? file.folderId : null,
+        }
+      : file,
+  );
+
+  files.forEach((file) => assertValidFileBinding(file));
+
+  return { files, folders };
+};
 
 const db = new Dexie("ZeroDriveDB");
 
@@ -260,105 +305,25 @@ const sendToGoogleDrive = async (
       recoveryPhraseSession.phrase,
     );
 
-    const metadata = {
-      name: "db-list.json",
-      mimeType: "application/octet-stream", // Changed to binary since it's encrypted
-    };
-
-    logger.log("[Sync] Searching for existing db-list.json...");
-    const findResponse = await fetch(
-      "https://www.googleapis.com/drive/v3/files?q=name='db-list.json' and trashed=false&fields=files(id)",
-      {
-        method: "GET",
-        headers: { Authorization: `Bearer ${token}` },
-      },
-    );
-
-    if (!findResponse.ok) {
-      throw new Error(
-        `[Sync Error] Failed to search for existing metadata file: ${findResponse.status} ${findResponse.statusText}`,
-      );
-    }
-
-    const existingFiles = await findResponse.json();
-    let fileIdToUpdate: string | null = null;
-
-    if (existingFiles.files && existingFiles.files.length > 0) {
-      fileIdToUpdate = existingFiles.files[0].id;
-      logger.log(
-        `[Sync] Found existing db-list.json with ID: ${fileIdToUpdate}`,
-      );
-    } else {
-      logger.log("[Sync] No existing db-list.json found. Will create new.");
-    }
-
-    // Use encrypted blob instead of plaintext
-    const form = new FormData();
-
-    let uploadUrl =
-      "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart";
-    let method = "POST";
-
-    if (fileIdToUpdate) {
-      logger.log("[Sync] Preparing PATCH request to update existing file.");
-      uploadUrl = `https://www.googleapis.com/upload/drive/v3/files/${fileIdToUpdate}?uploadType=multipart`;
-      method = "PATCH";
-      form.append(
-        "metadata",
-        new Blob([JSON.stringify({})], { type: "application/json" }),
-      );
-    } else {
-      logger.log("[Sync] Preparing POST request to create new file.");
-      form.append(
-        "metadata",
-        new Blob([JSON.stringify(metadata)], { type: "application/json" }),
-      );
-    }
-
-    form.append("file", encryptedBlob);
-
     // The verified metadata state and encrypted index must belong to the same
     // recovery phrase. A phrase change cancels this write before Drive can be
     // mutated, even if it happened during token lookup or encryption.
     assertRecoveryPhraseSessionCurrent(recoveryPhraseSession);
-    logger.log(`[Sync] Sending ${method} request to ${uploadUrl}`);
-    const uploadResponse = await fetch(uploadUrl, {
-      method: method,
-      headers: { Authorization: `Bearer ${token}` },
-      body: form,
+    logger.log("[Sync] Writing vault index to hidden Google app storage.");
+    const fileId = await writeVaultIndexBlob(token, encryptedBlob, {
+      beforeUpload: () =>
+        assertRecoveryPhraseSessionCurrent(recoveryPhraseSession),
     });
 
     // The request may already have reached Drive when access changes. Do not
     // report the write as safe—or let callers promote the new phrase to a
     // verified state—unless the same phrase session is still active.
     assertRecoveryPhraseSessionCurrent(recoveryPhraseSession);
-    logger.log(`[Sync] Response Status: ${uploadResponse.status}`);
-    const responseBodyText = await uploadResponse.text(); // Read body once
-    assertRecoveryPhraseSessionCurrent(recoveryPhraseSession);
-    logger.log(`[Sync] Response Body: ${responseBodyText}`);
-
-    if (!uploadResponse.ok) {
-      throw new Error(
-        `[Sync Error] Error ${
-          method === "POST" ? "uploading" : "updating"
-        } metadata file: ${uploadResponse.status} ${
-          uploadResponse.statusText
-        } - ${responseBodyText}`,
-      );
-    }
-
-    // Try parsing the response body as JSON for logging, but handle if it's not JSON
-    let result = {};
-    try {
-      result = JSON.parse(responseBodyText);
-    } catch (e) {
-      logger.warn("[Sync] Response body was not valid JSON.");
-    }
 
     toast.success("Metadata successfully synchronized.", {
       id: driveUpdateToastId,
     });
-    logger.log("[Sync] Metadata sync successful. Result:", result);
+    logger.log("[Sync] Metadata sync successful. File ID:", fileId);
   } catch (error: any) {
     logger.error(
       "[Sync Error] Error synchronizing metadata with Google Drive:",
@@ -382,43 +347,22 @@ const fetchAndStoreFileMetadata = async (
   try {
     await initializeGapi();
 
-    const response = await gapi.client.request({
-      path: "https://www.googleapis.com/drive/v3/files",
-      params: {
-        q: "name='db-list.json' and trashed=false",
-        fields: "files(id, name, modifiedTime)",
-      },
-    });
+    const { getGoogleAccessToken } = await import("./gapiInit");
+    const token = await getGoogleAccessToken();
+    if (!token) {
+      throw new Error("Failed to get access token");
+    }
 
-    const existingFiles = response.result.files;
+    const readTarget = await findVaultIndexReadTarget(token);
 
-    if (existingFiles && existingFiles.length > 0) {
-      const fileId = existingFiles[0].id;
-
-      // Download the encrypted blob
-      const { getGoogleAccessToken } = await import("./gapiInit");
-      const token = await getGoogleAccessToken();
-      if (!token) {
-        throw new Error("Failed to get access token");
-      }
-
-      const fetchResponse = await fetch(
-        `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`,
-        {
-          method: "GET",
-          headers: { Authorization: `Bearer ${token}` },
-        },
-      );
-
-      if (!fetchResponse.ok) {
-        throw new Error("Failed to download metadata from Google Drive");
-      }
-
-      const encryptedBlob = await fetchResponse.blob();
+    const loadVaultIndexFile = async (
+      file: NonNullable<typeof readTarget.file>,
+    ): Promise<{ encryptedBlob: Blob; files: any[]; folders: any[] }> => {
+      const encryptedBlob = await downloadVaultIndexBlob(token, file);
 
       // Decrypt the metadata
       logger.log("[Sync] Decrypting metadata...");
-      let fileContent;
+      let fileContent: any;
       try {
         fileContent = await decryptMetadata(encryptedBlob);
         assertRecoveryPhraseGeneration(expectedRecoveryPhraseGeneration);
@@ -426,47 +370,134 @@ const fetchAndStoreFileMetadata = async (
         if (e instanceof Error && e.name === "RecoveryPhraseChangedError") {
           throw e;
         }
-        logger.error("Failed to decrypt db-list.json content", e);
+        logger.error("Failed to decrypt vault index content", e);
         // Throw a specific error type so the calling code can handle it
         const decryptError = new Error("DECRYPTION_FAILED");
         decryptError.name = "DecryptionError";
         throw decryptError;
       }
 
-      // Handle both old (v1) and new (v2) formats
-      let files: FileMeta[] = [];
-      let folders: FolderMeta[] = [];
-
-      if (fileContent.version === 2) {
-        // New format with folders
-        logger.log("[Sync] Detected v2 metadata format");
-        files = fileContent.files || [];
-        folders = fileContent.folders || [];
-      } else {
-        // Old format (v1) - backward compatibility
-        logger.log("[Sync] Detected v1 metadata format, applying migration");
-        if (fileContent.files && Array.isArray(fileContent.files)) {
-          files = fileContent.files;
-        } else if (Array.isArray(fileContent)) {
-          // Very old format - array directly
-          files = fileContent;
-        }
-        folders = [];
-
-        // Add folderId: null to old files
-        files = files.map((f) => ({
-          ...f,
-          folderId: f.folderId !== undefined ? f.folderId : null,
-        }));
-      }
-
-      files.forEach((file) => assertValidFileBinding(file));
+      const { files, folders } = parseVaultIndexContent(fileContent);
 
       // Never replace the local snapshot with a result decrypted under an
       // access state that changed while the Drive request was in flight.
       assertRecoveryPhraseGeneration(expectedRecoveryPhraseGeneration);
 
+      return { encryptedBlob, files, folders };
+    };
+
+    const canMigrateLegacyWithActiveRecoveryPhrase = async (
+      encryptedBlob: Blob,
+      recoveryPhraseSession: RecoveryPhraseSession,
+      files: FileMeta[],
+      folders: FolderMeta[],
+    ): Promise<boolean> => {
+      try {
+        const phraseOnlyContent = await decryptMetadataWithRecoveryPhrase(
+          encryptedBlob,
+          recoveryPhraseSession.phrase,
+        );
+        assertRecoveryPhraseSessionCurrent(recoveryPhraseSession);
+
+        const phraseOnlyIndex = parseVaultIndexContent(phraseOnlyContent);
+        const phraseOnlyMetadata = serializeVaultIndex(
+          phraseOnlyIndex.files as FileMeta[],
+          phraseOnlyIndex.folders as FolderMeta[],
+        );
+        const loadedMetadata = serializeVaultIndex(files, folders);
+        return (
+          JSON.stringify(phraseOnlyMetadata) === JSON.stringify(loadedMetadata)
+        );
+      } catch (error) {
+        if (
+          error instanceof Error &&
+          error.name === "RecoveryPhraseChangedError"
+        ) {
+          throw error;
+        }
+        logger.log(
+          "[Sync] Legacy vault index opened without the active recovery phrase; appDataFolder migration deferred.",
+          error,
+        );
+        return false;
+      }
+    };
+
+    if (readTarget.file) {
+      let { encryptedBlob, files, folders } = await loadVaultIndexFile(
+        readTarget.file,
+      );
+
+      if (readTarget.shouldMigrateLegacy && hasMnemonic()) {
+        const recoveryPhraseSession = captureActiveRecoveryPhraseSession();
+        assertRecoveryPhraseGeneration(expectedRecoveryPhraseGeneration);
+        assertRecoveryPhraseSessionCurrent(recoveryPhraseSession);
+
+        const canMigrate = await canMigrateLegacyWithActiveRecoveryPhrase(
+          encryptedBlob,
+          recoveryPhraseSession,
+          files as FileMeta[],
+          folders as FolderMeta[],
+        );
+        if (!canMigrate) {
+          logger.log(
+            "[Sync] Legacy vault index migration skipped until the matching recovery phrase is active.",
+          );
+        } else {
+          const migratedMetadata = serializeVaultIndex(
+            files as FileMeta[],
+            folders as FolderMeta[],
+          );
+          const migratedBlob = await encryptMetadata(
+            migratedMetadata,
+            recoveryPhraseSession.phrase,
+          );
+          assertRecoveryPhraseSessionCurrent(recoveryPhraseSession);
+
+          const migrationResult = await createHiddenVaultIndexBlobIfAbsent(
+            token,
+            migratedBlob,
+            {
+              beforeUpload: () =>
+                assertRecoveryPhraseSessionCurrent(recoveryPhraseSession),
+            },
+          );
+          assertRecoveryPhraseSessionCurrent(recoveryPhraseSession);
+
+          if (!migrationResult.created) {
+            logger.warn(
+              "[Sync] Hidden vault index appeared during legacy migration; loading hidden index instead.",
+            );
+            ({ files, folders } = await loadVaultIndexFile(
+              migrationResult.file,
+            ));
+          } else {
+            const verifiedIndex = await loadVaultIndexFile(
+              migrationResult.file,
+            );
+            const verifiedMetadata = serializeVaultIndex(
+              verifiedIndex.files as FileMeta[],
+              verifiedIndex.folders as FolderMeta[],
+            );
+            if (
+              JSON.stringify(verifiedMetadata) !==
+              JSON.stringify(migratedMetadata)
+            ) {
+              throw new Error("Hidden vault index verification failed.");
+            }
+
+            recordVaultIndexMigrationNotice();
+            toast.success("Vault index moved to hidden app storage.");
+          }
+        }
+      } else if (readTarget.shouldMigrateLegacy) {
+        logger.log(
+          "[Sync] Legacy vault index opened with read-only access; appDataFolder migration deferred until recovery phrase is active.",
+        );
+      }
+
       // Clear existing records before adding new ones
+      assertRecoveryPhraseGeneration(expectedRecoveryPhraseGeneration);
       await db.table("files").clear();
       await db.table("folders").clear();
 
@@ -484,7 +515,7 @@ const fetchAndStoreFileMetadata = async (
               !file.uploadedDate
             ) {
               logger.warn(
-                "Skipping invalid file entry from db-list.json:",
+                "Skipping invalid file entry from vault index:",
                 file,
               );
               return;
@@ -521,7 +552,7 @@ const fetchAndStoreFileMetadata = async (
               !folder.createdDate
             ) {
               logger.warn(
-                "Skipping invalid folder entry from db-list.json:",
+                "Skipping invalid folder entry from vault index:",
                 folder,
               );
               return;
@@ -547,11 +578,11 @@ const fetchAndStoreFileMetadata = async (
         (!files || files.length === 0) &&
         (!folders || folders.length === 0)
       ) {
-        logger.log("db-list.json file content is empty or invalid.");
+        logger.log("Vault index file content is empty or invalid.");
       }
       assertRecoveryPhraseGeneration(expectedRecoveryPhraseGeneration);
     } else {
-      logger.log("No db-list.json file found in Google Drive.");
+      logger.log("No vault index file found in Google Drive.");
       // If no file exists on Drive, clear the local DB too?
       // Or maybe leave local DB as is if offline use is desired?
       // Current behavior: local DB is not cleared if Drive file doesn't exist.
