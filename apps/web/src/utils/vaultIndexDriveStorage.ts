@@ -12,8 +12,7 @@ const MIGRATION_NOTICE_SESSION_KEY =
   "zerodrive:vault-index-appdata-migration-notice-shown";
 
 export type VaultIndexStorageLocation =
-  | "hidden_app_data"
-  | "legacy_visible_drive";
+  "hidden_app_data" | "legacy_visible_drive";
 
 export interface VaultIndexDriveFile {
   id: string;
@@ -116,7 +115,9 @@ async function listVaultIndexFiles(
       location === "hidden_app_data"
         ? "refusing to choose automatically"
         : "using the most recently modified one";
-    logger.warn(`[VaultIndex] Found ${files.length} ${fileName} files; ${action}.`);
+    logger.warn(
+      `[VaultIndex] Found ${files.length} ${fileName} files; ${action}.`,
+    );
   }
 
   return files;
@@ -170,7 +171,10 @@ export async function downloadVaultIndexBlob(
   return response.blob();
 }
 
-async function deleteVaultIndexFile(token: string, fileId: string): Promise<void> {
+async function deleteVaultIndexFile(
+  token: string,
+  fileId: string,
+): Promise<void> {
   const response = await fetch(
     `${DRIVE_FILES_URL}/${encodeURIComponent(fileId)}`,
     {
@@ -212,8 +216,8 @@ async function uploadHiddenVaultIndexBlob(
     existingFile !== null
       ? `${DRIVE_UPLOAD_URL}/${encodeURIComponent(
           existingFile.id,
-        )}?uploadType=multipart`
-      : `${DRIVE_UPLOAD_URL}?uploadType=multipart`;
+        )}?uploadType=multipart&fields=id`
+      : `${DRIVE_UPLOAD_URL}?uploadType=multipart&fields=id`;
   const method = existingFile !== null ? "PATCH" : "POST";
 
   const response = await fetch(uploadUrl, {
@@ -243,11 +247,32 @@ async function uploadHiddenVaultIndexBlob(
     // Fall through to searching by name.
   }
 
-  const [createdFile] = await listVaultIndexFiles(token, "hidden_app_data");
+  const createdFiles = await listVaultIndexFiles(token, "hidden_app_data");
+  assertSingleHiddenVaultIndexFile(createdFiles);
+  const [createdFile] = createdFiles;
   if (!createdFile) {
     throw new Error("Hidden vault index was written but could not be found.");
   }
   return createdFile.id;
+}
+
+async function deleteCreatedIndexAndAssertSingleConflict(
+  token: string,
+  createdFileId: string,
+  conflictingFiles: VaultIndexDriveFile[],
+): Promise<VaultIndexDriveFile> {
+  try {
+    await deleteVaultIndexFile(token, createdFileId);
+  } catch (error) {
+    logger.error(
+      "[VaultIndex] Failed to clean up conflicting hidden vault index.",
+      error,
+    );
+    throw error;
+  }
+
+  assertSingleHiddenVaultIndexFile(conflictingFiles);
+  return conflictingFiles[0];
 }
 
 export async function writeVaultIndexBlob(
@@ -259,7 +284,30 @@ export async function writeVaultIndexBlob(
   assertSingleHiddenVaultIndexFile(hiddenFiles);
   const [existingFile] = hiddenFiles;
   options.beforeUpload?.();
-  return uploadHiddenVaultIndexBlob(token, encryptedBlob, existingFile ?? null);
+  if (existingFile) {
+    return uploadHiddenVaultIndexBlob(token, encryptedBlob, existingFile);
+  }
+
+  const id = await uploadHiddenVaultIndexBlob(token, encryptedBlob, null);
+  const hiddenFilesAfterCreate = await listVaultIndexFiles(
+    token,
+    "hidden_app_data",
+  );
+  const conflictingFiles = hiddenFilesAfterCreate.filter(
+    (file) => file.id !== id,
+  );
+  if (conflictingFiles.length > 0) {
+    await deleteCreatedIndexAndAssertSingleConflict(
+      token,
+      id,
+      conflictingFiles,
+    );
+    throw new Error(
+      "Another browser tab created the hidden vault index at the same time. Refresh Storage and try again.",
+    );
+  }
+
+  return id;
 }
 
 export async function writeHiddenVaultIndexBlob(
@@ -301,19 +349,13 @@ export async function createHiddenVaultIndexBlobIfAbsent(
   );
 
   if (conflictingFiles.length > 0) {
-    try {
-      await deleteVaultIndexFile(token, id);
-    } catch (error) {
-      logger.error(
-        "[VaultIndex] Failed to clean up stale hidden vault index created during migration.",
-        error,
-      );
-      throw error;
-    }
-
-    assertSingleHiddenVaultIndexFile(conflictingFiles);
+    const survivingFile = await deleteCreatedIndexAndAssertSingleConflict(
+      token,
+      id,
+      conflictingFiles,
+    );
     return {
-      file: conflictingFiles[0],
+      file: survivingFile,
       created: false,
     };
   }
@@ -346,7 +388,9 @@ export function recordVaultIndexMigrationNotice(): void {
 
 export function consumeVaultIndexMigrationNotice(): boolean {
   try {
-    if (window.sessionStorage.getItem(MIGRATION_NOTICE_SESSION_KEY) === "true") {
+    if (
+      window.sessionStorage.getItem(MIGRATION_NOTICE_SESSION_KEY) === "true"
+    ) {
       return false;
     }
 

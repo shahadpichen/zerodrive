@@ -3,7 +3,11 @@ import { toast } from "sonner";
 import type { JsonObject } from "@zerodrivehq/capsule";
 import { initializeGapi, refreshGapiToken } from "./gapiInit";
 import logger from "./logger";
-import { encryptMetadata, decryptMetadata } from "./metadataEncryption";
+import {
+  decryptMetadata,
+  decryptMetadataWithRecoveryPhrase,
+  encryptMetadata,
+} from "./metadataEncryption";
 import { assertCanWriteVaultMetadata } from "./vaultMetadataWriteGuard";
 import {
   createHiddenVaultIndexBlobIfAbsent,
@@ -17,6 +21,7 @@ import {
   assertRecoveryPhraseSessionCurrent,
   captureActiveRecoveryPhraseSession,
   getRecoveryPhraseGeneration,
+  hasMnemonic,
   type RecoveryPhraseSession,
 } from "./mnemonicManager";
 
@@ -352,11 +357,8 @@ const fetchAndStoreFileMetadata = async (
 
     const loadVaultIndexFile = async (
       file: NonNullable<typeof readTarget.file>,
-    ): Promise<{ files: any[]; folders: any[] }> => {
-      const encryptedBlob = await downloadVaultIndexBlob(
-        token,
-        file,
-      );
+    ): Promise<{ encryptedBlob: Blob; files: any[]; folders: any[] }> => {
+      const encryptedBlob = await downloadVaultIndexBlob(token, file);
 
       // Decrypt the metadata
       logger.log("[Sync] Decrypting metadata...");
@@ -381,60 +383,121 @@ const fetchAndStoreFileMetadata = async (
       // access state that changed while the Drive request was in flight.
       assertRecoveryPhraseGeneration(expectedRecoveryPhraseGeneration);
 
-      return { files, folders };
+      return { encryptedBlob, files, folders };
     };
 
-    if (readTarget.file) {
-      let { files, folders } = await loadVaultIndexFile(readTarget.file);
-
-      if (readTarget.shouldMigrateLegacy) {
-        const recoveryPhraseSession = captureActiveRecoveryPhraseSession();
-        assertRecoveryPhraseGeneration(expectedRecoveryPhraseGeneration);
-        assertRecoveryPhraseSessionCurrent(recoveryPhraseSession);
-
-        const migratedMetadata = serializeVaultIndex(
-          files as FileMeta[],
-          folders as FolderMeta[],
-        );
-        const migratedBlob = await encryptMetadata(
-          migratedMetadata,
+    const canMigrateLegacyWithActiveRecoveryPhrase = async (
+      encryptedBlob: Blob,
+      recoveryPhraseSession: RecoveryPhraseSession,
+      files: FileMeta[],
+      folders: FolderMeta[],
+    ): Promise<boolean> => {
+      try {
+        const phraseOnlyContent = await decryptMetadataWithRecoveryPhrase(
+          encryptedBlob,
           recoveryPhraseSession.phrase,
         );
         assertRecoveryPhraseSessionCurrent(recoveryPhraseSession);
 
-        const migrationResult = await createHiddenVaultIndexBlobIfAbsent(
-          token,
-          migratedBlob,
-          {
-            beforeUpload: () =>
-              assertRecoveryPhraseSessionCurrent(recoveryPhraseSession),
-          },
+        const phraseOnlyIndex = parseVaultIndexContent(phraseOnlyContent);
+        const phraseOnlyMetadata = serializeVaultIndex(
+          phraseOnlyIndex.files as FileMeta[],
+          phraseOnlyIndex.folders as FolderMeta[],
         );
+        const loadedMetadata = serializeVaultIndex(files, folders);
+        return (
+          JSON.stringify(phraseOnlyMetadata) === JSON.stringify(loadedMetadata)
+        );
+      } catch (error) {
+        if (
+          error instanceof Error &&
+          error.name === "RecoveryPhraseChangedError"
+        ) {
+          throw error;
+        }
+        logger.log(
+          "[Sync] Legacy vault index opened without the active recovery phrase; appDataFolder migration deferred.",
+          error,
+        );
+        return false;
+      }
+    };
+
+    if (readTarget.file) {
+      let { encryptedBlob, files, folders } = await loadVaultIndexFile(
+        readTarget.file,
+      );
+
+      if (readTarget.shouldMigrateLegacy && hasMnemonic()) {
+        const recoveryPhraseSession = captureActiveRecoveryPhraseSession();
+        assertRecoveryPhraseGeneration(expectedRecoveryPhraseGeneration);
         assertRecoveryPhraseSessionCurrent(recoveryPhraseSession);
 
-        if (!migrationResult.created) {
-          logger.warn(
-            "[Sync] Hidden vault index appeared during legacy migration; loading hidden index instead.",
+        const canMigrate = await canMigrateLegacyWithActiveRecoveryPhrase(
+          encryptedBlob,
+          recoveryPhraseSession,
+          files as FileMeta[],
+          folders as FolderMeta[],
+        );
+        if (!canMigrate) {
+          logger.log(
+            "[Sync] Legacy vault index migration skipped until the matching recovery phrase is active.",
           );
-          ({ files, folders } = await loadVaultIndexFile(migrationResult.file));
         } else {
-          const verifiedIndex = await loadVaultIndexFile(migrationResult.file);
-          const verifiedMetadata = serializeVaultIndex(
-            verifiedIndex.files as FileMeta[],
-            verifiedIndex.folders as FolderMeta[],
+          const migratedMetadata = serializeVaultIndex(
+            files as FileMeta[],
+            folders as FolderMeta[],
           );
-          if (
-            JSON.stringify(verifiedMetadata) !== JSON.stringify(migratedMetadata)
-          ) {
-            throw new Error("Hidden vault index verification failed.");
-          }
+          const migratedBlob = await encryptMetadata(
+            migratedMetadata,
+            recoveryPhraseSession.phrase,
+          );
+          assertRecoveryPhraseSessionCurrent(recoveryPhraseSession);
 
-          recordVaultIndexMigrationNotice();
-          toast.success("Vault index moved to hidden app storage.");
+          const migrationResult = await createHiddenVaultIndexBlobIfAbsent(
+            token,
+            migratedBlob,
+            {
+              beforeUpload: () =>
+                assertRecoveryPhraseSessionCurrent(recoveryPhraseSession),
+            },
+          );
+          assertRecoveryPhraseSessionCurrent(recoveryPhraseSession);
+
+          if (!migrationResult.created) {
+            logger.warn(
+              "[Sync] Hidden vault index appeared during legacy migration; loading hidden index instead.",
+            );
+            ({ files, folders } = await loadVaultIndexFile(
+              migrationResult.file,
+            ));
+          } else {
+            const verifiedIndex = await loadVaultIndexFile(
+              migrationResult.file,
+            );
+            const verifiedMetadata = serializeVaultIndex(
+              verifiedIndex.files as FileMeta[],
+              verifiedIndex.folders as FolderMeta[],
+            );
+            if (
+              JSON.stringify(verifiedMetadata) !==
+              JSON.stringify(migratedMetadata)
+            ) {
+              throw new Error("Hidden vault index verification failed.");
+            }
+
+            recordVaultIndexMigrationNotice();
+            toast.success("Vault index moved to hidden app storage.");
+          }
         }
+      } else if (readTarget.shouldMigrateLegacy) {
+        logger.log(
+          "[Sync] Legacy vault index opened with read-only access; appDataFolder migration deferred until recovery phrase is active.",
+        );
       }
 
       // Clear existing records before adding new ones
+      assertRecoveryPhraseGeneration(expectedRecoveryPhraseGeneration);
       await db.table("files").clear();
       await db.table("folders").clear();
 
@@ -451,7 +514,10 @@ const fetchAndStoreFileMetadata = async (
               !file.userEmail ||
               !file.uploadedDate
             ) {
-              logger.warn("Skipping invalid file entry from vault index:", file);
+              logger.warn(
+                "Skipping invalid file entry from vault index:",
+                file,
+              );
               return;
             }
             try {

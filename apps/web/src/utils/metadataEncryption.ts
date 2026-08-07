@@ -7,6 +7,7 @@ import type { JsonValue } from "@zerodrivehq/capsule";
 import {
   createVaultIndexCapsule,
   openVaultIndexCapsule,
+  openVaultIndexCapsuleWithRecoveryPhraseOnly,
 } from "./capsuleAdapter";
 import logger from "./logger";
 
@@ -42,6 +43,22 @@ export async function decryptMetadata(encryptedBlob: Blob): Promise<any> {
     return index;
   } catch (error: unknown) {
     logger.error("Error decrypting metadata:", error);
+    throw error;
+  }
+}
+
+export async function decryptMetadataWithRecoveryPhrase(
+  encryptedBlob: Blob,
+  recoveryPhrase: string,
+): Promise<any> {
+  try {
+    const { index } = await openVaultIndexCapsuleWithRecoveryPhraseOnly(
+      encryptedBlob,
+      recoveryPhrase,
+    );
+    return index;
+  } catch (error: unknown) {
+    logger.error("Error decrypting metadata with recovery phrase:", error);
     throw error;
   }
 }
