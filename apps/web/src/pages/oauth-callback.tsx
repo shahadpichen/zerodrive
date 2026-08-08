@@ -9,8 +9,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
-import { getUserProfile, storeGoogleTokens } from "../utils/authService";
-import { getUserEmail } from "../utils/authService";
+import { getUserEmail, storeGoogleTokens } from "../utils/authService";
 import apiClient from "../utils/apiClient";
 import logger from "../utils/logger";
 import { queueHomeLoginWelcome } from "../utils/homeWelcome";
@@ -117,16 +116,7 @@ const OAuthCallback: React.FC = () => {
             !!storedData,
           );
 
-          try {
-            const profile = await getUserProfile();
-            if (profile) {
-              setUserInfo(profile.email, profile.name, profile.picture);
-            } else {
-              setUserInfo(userEmail, userEmail.split("@")[0]);
-            }
-          } catch {
-            setUserInfo(userEmail, userEmail.split("@")[0]);
-          }
+          setUserInfo(userEmail, userEmail.split("@")[0]);
 
           queueHomeLoginWelcome();
 

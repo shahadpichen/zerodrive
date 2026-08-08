@@ -71,7 +71,7 @@ describe("GoogleOAuthService", () => {
         expect(options.scope).toContain(
           "https://www.googleapis.com/auth/userinfo.email",
         );
-        expect(options.scope).toContain(
+        expect(options.scope).not.toContain(
           "https://www.googleapis.com/auth/userinfo.profile",
         );
         expect(options.scope).toContain(
@@ -110,9 +110,9 @@ describe("GoogleOAuthService", () => {
       expect(mockGenerateAuthUrl).toHaveBeenCalled();
     });
 
-    it("should request exactly 4 scopes", () => {
+    it("should request exactly 3 scopes", () => {
       mockGenerateAuthUrl.mockImplementation((options) => {
-        expect(options.scope).toHaveLength(4);
+        expect(options.scope).toHaveLength(3);
         return "https://accounts.google.com/o/oauth2/auth?...";
       });
 
@@ -143,7 +143,7 @@ describe("GoogleOAuthService", () => {
 
     it("should return false when Drive scope is missing", () => {
       const scopes =
-        "https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile";
+        "https://www.googleapis.com/auth/userinfo.email";
 
       const result = hasFullDriveScope(scopes);
 

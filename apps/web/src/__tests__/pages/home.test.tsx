@@ -38,11 +38,6 @@ jest.mock("../../utils/authService", () => ({
     email: "owner@example.com",
     capabilities: { analyticsRead: false },
   }),
-  getUserProfile: jest.fn().mockResolvedValue({
-    email: "owner@example.com",
-    name: "Owner",
-    picture: "",
-  }),
   getOrFetchGoogleToken: jest.fn().mockResolvedValue("google-token"),
   hasGoogleTokensInStorage: jest.fn().mockReturnValue(true),
   logout: jest.fn(),

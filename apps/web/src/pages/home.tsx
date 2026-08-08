@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 import { useApp } from "../contexts/app-context";
 import { ModeToggle } from "../components/mode-toggle";
-import { Avatar, AvatarFallback, AvatarImage } from "../components/ui/avatar";
+import { Avatar, AvatarFallback } from "../components/ui/avatar";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -41,7 +41,6 @@ import { recoverRsaKeysIfNeeded } from "../utils/rsaKeyRecovery";
 import { toast } from "sonner";
 import {
   getAuthenticatedUser,
-  getUserProfile,
   hasGoogleTokensInStorage,
   logout,
 } from "../utils/authService";
@@ -84,7 +83,6 @@ function HomeContent() {
   const {
     userEmail,
     userName,
-    userImage,
     storageInfo,
     setUserInfo,
     setDecryptionError,
@@ -187,15 +185,6 @@ function HomeContent() {
           await logout();
           window.location.href = "/";
           return;
-        }
-
-        try {
-          const profile = await getUserProfile();
-          if (profile) {
-            setUserInfo(profile.email, profile.name, profile.picture);
-          }
-        } catch {
-          // Keep the existing/cached fallback profile if Google userinfo fails.
         }
 
         if (!showLoginWelcome && isMounted) {
@@ -471,11 +460,6 @@ function HomeContent() {
               <DropdownMenuTrigger asChild>
                 <button aria-label="Account menu" className="rounded-full">
                   <Avatar className="h-9 w-9">
-                    <AvatarImage
-                      src={userImage}
-                      alt={userName}
-                      referrerPolicy="no-referrer"
-                    />
                     <AvatarFallback>
                       {initials(userName, userEmail)}
                     </AvatarFallback>

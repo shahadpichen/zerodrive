@@ -7,7 +7,7 @@ export const privacyPolicy = [
   {
     heading: "Data Collection",
     content:
-      "ZeroDrive does not use third-party analytics, advertising trackers, user profiles, or raw activity logs. Files are encrypted on your device before being stored in Google Drive. A deployment may enable first-party daily aggregate counters to understand whether core features work. These counters contain no emails, account identifiers, IP addresses, sessions, filenames, file IDs, or browser fingerprints.",
+      "ZeroDrive does not use third-party analytics, advertising trackers, Google profile photos, user profiles, or raw activity logs. Files are encrypted on your device before being stored in Google Drive. A deployment may enable first-party daily aggregate counters to understand whether core features work. These counters contain no emails, account identifiers, IP addresses, sessions, filenames, file IDs, or browser fingerprints.",
   },
   {
     heading: "Local Data Storage",
@@ -17,7 +17,7 @@ export const privacyPolicy = [
   {
     heading: "Google Drive Integration",
     content:
-      "ZeroDrive acts as an intermediary to store encrypted files in your Google Drive account. While your files are encrypted, Google Drive’s privacy policy governs the storage of these files. Please review Google’s policies for more details on how they handle your data.",
+      "ZeroDrive adds an encryption layer on top of your Google Drive. It asks Google for your account email for sign-in, limited Drive access for encrypted files, and app data access for hidden ZeroDrive metadata such as your vault index and key backups. Google may send an account-access email after you approve these permissions. While your files are encrypted before upload, Google Drive’s privacy policy governs the storage of the encrypted copies.",
   },
   {
     heading: "No Third-Party Access",

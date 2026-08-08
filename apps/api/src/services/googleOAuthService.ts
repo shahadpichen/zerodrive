@@ -28,7 +28,6 @@ const oauth2Client = new google.auth.OAuth2(
 export function getAuthUrl(state: string): string {
   const scopes = [
     "https://www.googleapis.com/auth/userinfo.email",
-    "https://www.googleapis.com/auth/userinfo.profile",
     "https://www.googleapis.com/auth/drive.file", // ZeroDrive file access
     "https://www.googleapis.com/auth/drive.appdata", // RSA key backup to appDataFolder
   ];
@@ -87,8 +86,6 @@ export async function getTokensFromCode(code: string): Promise<{
 export async function getUserInfo(accessToken: string): Promise<{
   email: string;
   verified: boolean;
-  picture?: string;
-  name?: string;
 }> {
   try {
     // Set credentials
@@ -110,8 +107,6 @@ export async function getUserInfo(accessToken: string): Promise<{
     return {
       email: data.email,
       verified: data.verified_email || false,
-      ...(data.picture && { picture: data.picture }),
-      ...(data.name && { name: data.name }),
     };
   } catch (error) {
     logger.error("[OAuth] Failed to get user info", error as Error);

@@ -115,7 +115,7 @@ function readCachedUserInfo(): UserInfoState {
     return {
       email: parsed.email || "",
       name: parsed.name || "",
-      image: parsed.image || "",
+      image: "",
     };
   } catch {
     return { email: "", name: "", image: "" };
@@ -207,7 +207,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [refreshStorage]);
 
   const setUserInfo = useCallback(
-    (email: string, name?: string, image?: string) => {
+    (email: string, name?: string, _image?: string) => {
       setUserInfoState((current) => {
         const normalizedCurrentEmail = normalizeEmail(current.email);
         const normalizedNextEmail = normalizeEmail(email);
@@ -221,11 +221,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             : sameUser && current.name
               ? current.name
               : name || fallbackName;
-        const nextImage = image || (sameUser ? current.image : "");
         const nextUserInfo = {
           email,
           name: nextName,
-          image: nextImage,
+          image: "",
         };
 
         if (

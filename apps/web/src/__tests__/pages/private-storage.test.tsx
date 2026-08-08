@@ -54,9 +54,6 @@ jest.mock("../../utils/rsaKeyRecovery", () => ({
 
 jest.mock("../../utils/authService", () => ({
   getUserEmail: jest.fn().mockResolvedValue("owner@example.com"),
-  getUserProfile: jest
-    .fn()
-    .mockResolvedValue({ email: "owner@example.com", name: "Owner" }),
   hasGoogleTokensInStorage: jest.fn().mockReturnValue(true),
   logout: jest.fn().mockResolvedValue(undefined),
 }));

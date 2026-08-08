@@ -36,6 +36,10 @@ const FAQS: { q: string; a: React.ReactNode }[] = [
     a: "Encrypted, in your own Google Drive. You keep full ownership and can revoke access at any time.",
   },
   {
+    q: "Why did Google email me about ZeroDrive access?",
+    a: "Google sends account-access emails when you authorize an app. ZeroDrive asks for your Google account email for sign-in and limited Drive access to store encrypted files and hidden app metadata in your own Google Drive. Your files are encrypted before upload, so ZeroDrive cannot read the original files.",
+  },
+  {
     q: "Is it open source?",
     a: "Entirely. You can audit every line, check the cryptography, or self-host it.",
   },

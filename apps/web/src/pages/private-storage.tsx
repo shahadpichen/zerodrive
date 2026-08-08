@@ -161,7 +161,7 @@ function PrivateStorageContent() {
         }
 
         // Make the verified account available to the persistent providers
-        // before Drive/profile work so local vault data can render at once.
+        // before Drive work so local vault data can render at once.
         setUserInfo(email, email.split("@")[0]);
 
         // Account switch detection
@@ -185,7 +185,6 @@ function PrivateStorageContent() {
         setHasVaultKey(hasVaultAccess);
         setVaultKeyStatus(email, hasVaultAccess);
 
-        // Initialize GAPI first so we can fetch profile info
         const { hasGoogleTokensInStorage, logout } =
           await import("../utils/authService");
         const tokensExist = hasGoogleTokensInStorage();
@@ -198,19 +197,6 @@ function PrivateStorageContent() {
           await logout();
           window.location.href = "/";
           return;
-        }
-
-        // Fetch the account profile before Drive initialization so the header
-        // can keep the user's name/avatar stable even if GAPI is slow.
-        try {
-          const { getUserProfile } = await import("../utils/authService");
-          const profile = await getUserProfile();
-          if (profile) {
-            setUserInfo(profile.email, profile.name, profile.picture);
-          }
-        } catch (error) {
-          console.error("Failed to fetch user profile:", error);
-          // Keep the existing/cached fallback profile if Google userinfo fails.
         }
 
         // Initialize Google API with backend tokens
