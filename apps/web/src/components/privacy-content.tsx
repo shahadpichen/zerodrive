@@ -2,46 +2,51 @@ export const privacyPolicy = [
   {
     heading: "Privacy Policy",
     content:
-      "At ZeroDrive, we are committed to ensuring your privacy. This policy explains how we protect your data and what we do with the limited information you provide.",
+      "ZeroDrive is built as an encryption layer on top of your own Google Drive. The product is designed so your files are encrypted before they leave your browser. That means ZeroDrive should not receive your original files, your recovery phrase, or the private keys needed to read your vault.",
   },
   {
-    heading: "Data Collection",
+    heading: "What ZeroDrive asks Google for",
     content:
-      "ZeroDrive does not use third-party analytics, advertising trackers, Google profile photos, user profiles, or raw activity logs. Files are encrypted on your device before being stored in Google Drive. A deployment may enable first-party daily aggregate counters to understand whether core features work. These counters contain no emails, account identifiers, IP addresses, sessions, filenames, file IDs, or browser fingerprints.",
+      "ZeroDrive uses Google sign-in so the app can connect the browser session to the correct Google Drive. We ask for your Google account email for sign-in, limited Drive access for files ZeroDrive creates or uses, and app data access for hidden ZeroDrive metadata such as the vault index and encrypted key backups. We do not request Google profile photo access. Google may send you an account-access email after you approve these permissions; that email is controlled by Google and summarizes the access you granted.",
   },
   {
-    heading: "Local Data Storage",
+    heading: "Files and vault metadata",
     content:
-      "Encryption keys are stored locally in your browser's storage. These keys are never shared or uploaded to any external servers. You are responsible for the management of these keys. If they are lost, your encrypted data will be inaccessible.",
+      "Your readable files are encrypted in the browser before upload. Google Drive stores the encrypted copies. ZeroDrive also stores encrypted vault metadata, such as the list of files and folders ZeroDrive needs to show your vault. This metadata is encrypted before it is saved. If your recovery phrase is missing or incorrect, ZeroDrive cannot open that encrypted metadata for you.",
   },
   {
-    heading: "Google Drive Integration",
+    heading: "Recovery phrase and local browser storage",
     content:
-      "ZeroDrive adds an encryption layer on top of your Google Drive. It asks Google for your account email for sign-in, limited Drive access for encrypted files, and app data access for hidden ZeroDrive metadata such as your vault index and key backups. Google may send an account-access email after you approve these permissions. While your files are encrypted before upload, Google Drive’s privacy policy governs the storage of the encrypted copies.",
+      "Your recovery phrase is used to recreate the keys needed to open your vault and restore encrypted key backups. The phrase is processed in your browser and is not sent to the ZeroDrive server. Some session data, encrypted key material, and cached UI state may be stored in browser storage so the app can work smoothly. Clearing browser data, using a new browser, or opening a new session may require you to enter your recovery phrase again.",
   },
   {
-    heading: "No Third-Party Access",
+    heading: "Sharing and recipient privacy",
     content:
-      "We do not share your data with third parties. Since all encryption happens locally on your device, even we cannot access or view your files.",
+      "When you share a file, your browser encrypts it for the chosen recipient before upload. The sharing database stores encrypted share data and privacy-safe lookup identifiers. Share records are designed not to store a sender user ID, sender email, plaintext recipient email, Google account ID, IP address, user agent, request ID, or session ID. Email delivery providers may still process recipient email addresses when notification or invitation emails are sent.",
   },
   {
-    heading: "Security",
+    heading: "Account and legal records",
     content:
-      "We use industry-standard encryption to secure your data. However, no method of encryption is completely foolproof, and we cannot guarantee absolute security. Always ensure you follow best practices for key management and account security.",
+      "ZeroDrive needs minimal account-level information to operate, such as the email address returned by Google sign-in and privacy-safe lookup identifiers derived from it. A future legal acceptance gate may store a minimal record showing that an account accepted the current Terms of Service and acknowledged this Privacy Policy. That legal record should remain separate from file sharing records.",
   },
   {
-    heading: "Your Rights",
+    heading: "Analytics, logs, and diagnostics",
     content:
-      "Since ZeroDrive does not collect personal data, there are no specific user rights regarding data access, correction, or deletion. However, you retain full control over your files stored in Google Drive.",
+      "ZeroDrive does not use third-party advertising trackers or personal analytics. A deployment may enable first-party daily aggregate counters to understand whether core features are working. These counters are designed not to include emails, account identifiers, IP addresses, sessions, filenames, file IDs, browser fingerprints, or exact file sizes. Operational logs should avoid request bodies, cookies, tokens, object keys, capabilities, and email addresses.",
   },
   {
-    heading: "Changes to this Policy",
+    heading: "What ZeroDrive cannot do",
     content:
-      "We may update this Privacy Policy from time to time. If we make significant changes, we will notify users accordingly.",
+      "ZeroDrive cannot read your plaintext files, recover a lost recovery phrase, reset your encryption keys, or guarantee that Google Drive itself will always be available. Because your encrypted files live in your Google Drive, Google's own privacy policy and account controls also apply to the encrypted copies stored there.",
   },
   {
-    heading: "Contact Us",
+    heading: "Your controls",
     content:
-      "For any questions or concerns regarding your privacy, please contact us. <br /><br /> Last updated: Thu 12 Sep",
+      "You can delete encrypted files from your ZeroDrive vault, revoke ZeroDrive's Google access from your Google Account settings, clear local browser storage, or self-host the open-source project. Revoking Google access may stop ZeroDrive from reading or writing encrypted files in your Drive until you sign in again.",
+  },
+  {
+    heading: "Changes and contact",
+    content:
+      "This policy may change as ZeroDrive evolves. Material privacy changes should be reflected in the product and documentation. If you have questions, open an issue in the ZeroDrive repository or contact the project maintainers. Last updated: August 2026.",
   },
 ];

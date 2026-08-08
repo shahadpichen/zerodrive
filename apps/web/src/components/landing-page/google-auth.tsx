@@ -3,6 +3,7 @@ import { Button } from "../ui/button";
 import googleLogo from "../../assets/google.png";
 import { login } from "../../utils/authService";
 import { Loader2 } from "lucide-react";
+import { Checkbox } from "../ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -20,12 +21,21 @@ interface GoogleAuthProps {
 export const GoogleAuth: React.FC<GoogleAuthProps> = ({ theme = "dark" }) => {
   const [isSigningIn, setIsSigningIn] = useState(false);
   const [isTrustDialogOpen, setIsTrustDialogOpen] = useState(false);
+  const [hasAcceptedLegal, setHasAcceptedLegal] = useState(false);
 
   const openTrustDialog = () => {
     setIsTrustDialogOpen(true);
   };
 
+  const handleTrustDialogOpenChange = (open: boolean) => {
+    setIsTrustDialogOpen(open);
+    if (!open && !isSigningIn) {
+      setHasAcceptedLegal(false);
+    }
+  };
+
   const continueWithGoogle = () => {
+    if (!hasAcceptedLegal) return;
     setIsSigningIn(true);
     // Redirect to backend OAuth endpoint
     login();
@@ -51,7 +61,10 @@ export const GoogleAuth: React.FC<GoogleAuthProps> = ({ theme = "dark" }) => {
         )}
       </Button>
 
-      <Dialog open={isTrustDialogOpen} onOpenChange={setIsTrustDialogOpen}>
+      <Dialog
+        open={isTrustDialogOpen}
+        onOpenChange={handleTrustDialogOpenChange}
+      >
         <DialogContent className="sm:max-w-[560px]">
           <DialogHeader>
             <DialogTitle>Before Google asks for access</DialogTitle>
@@ -74,6 +87,31 @@ export const GoogleAuth: React.FC<GoogleAuthProps> = ({ theme = "dark" }) => {
               ZeroDrive asks for your Google account email for sign-in, plus
               limited Drive access for encrypted files and hidden app metadata.
             </p>
+            <div className="flex items-start gap-3 border p-4 text-foreground">
+              <Checkbox
+                id="legal-acknowledgement"
+                checked={hasAcceptedLegal}
+                onCheckedChange={(checked) =>
+                  setHasAcceptedLegal(checked === true)
+                }
+                disabled={isSigningIn}
+                className="mt-1"
+              />
+              <label
+                htmlFor="legal-acknowledgement"
+                className="text-sm leading-relaxed"
+              >
+                I agree to the{" "}
+                <a href="/terms" className="underline underline-offset-4">
+                  Terms of Service
+                </a>{" "}
+                and acknowledge the{" "}
+                <a href="/privacy" className="underline underline-offset-4">
+                  Privacy Policy
+                </a>
+                .
+              </label>
+            </div>
           </div>
 
           <DialogFooter>
@@ -88,7 +126,7 @@ export const GoogleAuth: React.FC<GoogleAuthProps> = ({ theme = "dark" }) => {
             <Button
               type="button"
               onClick={continueWithGoogle}
-              disabled={isSigningIn}
+              disabled={isSigningIn || !hasAcceptedLegal}
             >
               {isSigningIn ? (
                 <>

@@ -2,46 +2,66 @@ export const termsOfService = [
   {
     heading: "Terms of Service",
     content:
-      "Thank you for choosing ZeroDrive! <br /><br /> When we say “company”, “we”, “our”, “us”, or “service” in this document, we are referring to ZeroDrive.",
+      "These Terms explain the rules for using ZeroDrive. When this document says “ZeroDrive”, “we”, “our”, “us”, or “the service”, it refers to the ZeroDrive project and the hosted ZeroDrive application where applicable. By using ZeroDrive, you agree to these Terms and acknowledge the Privacy Policy.",
   },
   {
-    heading: "Free, Open-Source Software",
+    heading: "What ZeroDrive is",
     content:
-      "ZeroDrive is a free and open-source service that encrypts your files locally on your device before storing them securely in your Google Drive account. We do not charge for this service, nor do we offer any paid plans. This service will remain free forever. By using ZeroDrive, now or in the future, you agree to the latest version of our Terms of Service. While we strive to keep things as transparent as possible, these terms may be updated over time. If there are significant changes, we will notify users accordingly.",
+      "ZeroDrive is a free and open-source tool that adds client-side encryption to files stored in your own Google Drive. ZeroDrive is not a replacement cloud storage provider. It uses your Google Account and Google Drive as the storage location, while the browser encrypts files before they are uploaded.",
   },
   {
-    heading: "Account Terms",
+    heading: "Google account and Drive access",
     content:
-      "You are responsible for maintaining the security of your Google Account used with ZeroDrive. We cannot be held liable for any loss or damage resulting from your failure to comply with this responsibility. You must use your Google Account to access and utilize ZeroDrive services. We do not provide alternative authentication methods. ZeroDrive is for lawful purposes only. You must not use the service in violation of any applicable laws.",
+      "You need a Google Account to use the hosted ZeroDrive app. ZeroDrive asks Google for your account email for sign-in and limited Drive permissions so it can save encrypted files and hidden app metadata in your Google Drive. You are responsible for keeping your Google Account secure. If you revoke Google access, delete Drive files, lose access to the Google Account, or Google Drive is unavailable, ZeroDrive may not be able to show or update your vault.",
   },
   {
-    heading: "Data Privacy and Encryption",
+    heading: "Your recovery phrase",
     content:
-      "Your files are encrypted locally using end-to-end encryption (E2E) before they are uploaded to Google Drive. Only you have access to the decryption key, and no one, including us, can decrypt or access your files. Additionally: We do not store any data on our servers. All encrypted files are stored directly in your Google Drive account, and the encryption keys are stored in your browser's local storage. You have full control over this data. We do not collect, track, or analyze your data. Your privacy is paramount.",
+      "Your recovery phrase protects your vault access. ZeroDrive cannot reset it, recover it, or use it to open your files for you. If you lose the phrase and no compatible key backup is available, your encrypted files may become unrecoverable. You are responsible for saving the recovery phrase somewhere safe before relying on ZeroDrive for important files.",
   },
   {
-    heading: "Content Ownership",
+    heading: "Encryption and zero-knowledge limits",
     content:
-      "You own the content you upload to ZeroDrive and Google Drive. We do not claim any ownership of your files. Your data remains yours, and you can choose to delete it at any time.",
+      "ZeroDrive is designed so files are encrypted in your browser before upload. The server should not receive plaintext files or the private keys needed to decrypt them. However, security also depends on your device, browser, extensions, Google Account, and the ZeroDrive code you run. If your device or browser is compromised, encryption cannot protect against everything.",
   },
   {
-    heading: "Security and Responsibility",
+    heading: "File sharing",
     content:
-      "ZeroDrive employs strong encryption methods to secure your files. However: You are responsible for safeguarding your encryption key. If you lose your key, your data will be unrecoverable. We are not liable for any loss of data or security breaches that may occur due to third-party services, such as Google Drive, or misuse of your encryption key.",
+      "ZeroDrive sharing is designed to encrypt a shared file for the selected recipient. Share records should not store a sender user ID, sender email, or plaintext recipient email. You are responsible for choosing the correct recipient and for understanding that email notifications or invitations may involve an email provider processing the recipient address.",
   },
   {
-    heading: "General Conditions",
+    heading: "Your content",
     content:
-      "ZeroDrive is provided on an 'as is' and 'as available' basis. While we make every effort to ensure the stability and security of the service, we cannot guarantee it will always meet your specific requirements or expectations. As with any software, occasional bugs may arise. We do our best to address issues promptly.",
+      "You keep ownership of the files you upload, encrypt, save, download, or share through ZeroDrive. You are responsible for your content and for making sure your use of ZeroDrive is lawful. Do not use ZeroDrive to store, share, or distribute content that violates laws, rights, or platform rules.",
   },
   {
-    heading: "Limitation of Liability",
+    heading: "Open-source software",
     content:
-      "ZeroDrive shall not be liable to you or any third party for any direct, indirect, incidental, special, or consequential damages, including but not limited to, loss of data or unauthorized access to your files. You agree to use ZeroDrive at your own risk.",
+      "ZeroDrive is open source, which means the code can be reviewed, self-hosted, modified, or improved by the community under the license provided in the repository. The hosted service may include operational configuration, deployment settings, or infrastructure that are separate from your own self-hosted use.",
   },
   {
-    heading: "Contact Us",
+    heading: "Availability and changes",
     content:
-      "If you have any questions about these Terms of Service, feel free to reach out to us. <br /><br /> Last updated: Thu 12 Sep",
+      "ZeroDrive is provided on an “as is” and “as available” basis. We may change, pause, remove, or discontinue hosted features as the project evolves. Bugs, outages, third-party service changes, Google API changes, browser changes, or infrastructure failures may affect the service. Keep your own backups and recovery phrase for important data.",
+  },
+  {
+    heading: "No warranty",
+    content:
+      "We work to make ZeroDrive safe and reliable, but we do not promise that it will be error-free, uninterrupted, secure against every threat, or suitable for every use case. You use ZeroDrive at your own risk, especially for sensitive or irreplaceable files.",
+  },
+  {
+    heading: "Limitation of liability",
+    content:
+      "To the maximum extent allowed by law, ZeroDrive and its maintainers are not liable for indirect, incidental, special, consequential, exemplary, or punitive damages, including loss of data, loss of access, account issues, third-party service failures, or inability to decrypt files. Some jurisdictions do not allow certain limitations, so parts of this section may not apply to you.",
+  },
+  {
+    heading: "Updates to these Terms",
+    content:
+      "These Terms may be updated as ZeroDrive changes. Material updates should be reflected in the product or documentation. Continuing to use ZeroDrive after updates means you accept the updated Terms.",
+  },
+  {
+    heading: "Contact",
+    content:
+      "If you have questions about these Terms, open an issue in the ZeroDrive repository or contact the project maintainers. Last updated: August 2026.",
   },
 ];

@@ -14,6 +14,18 @@ describe("GoogleAuth Component", () => {
     jest.clearAllMocks();
   });
 
+  const openTrustDialog = () => {
+    fireEvent.click(screen.getByRole("button", { name: /sign in with google/i }));
+  };
+
+  const acceptLegalTerms = () => {
+    fireEvent.click(
+      screen.getByRole("checkbox", {
+        name: /i agree to the terms of service/i,
+      }),
+    );
+  };
+
   it("should render sign-in button", () => {
     render(<GoogleAuth onAuthChange={mockOnAuthChange} />);
 
@@ -32,8 +44,7 @@ describe("GoogleAuth Component", () => {
   it("should explain Google access before redirecting", () => {
     render(<GoogleAuth onAuthChange={mockOnAuthChange} />);
 
-    const button = screen.getByRole("button", { name: /sign in with google/i });
-    fireEvent.click(button);
+    openTrustDialog();
 
     expect(
       screen.getByRole("heading", { name: /before google asks for access/i }),
@@ -44,10 +55,30 @@ describe("GoogleAuth Component", () => {
     expect(mockLogin).not.toHaveBeenCalled();
   });
 
+  it("should require Terms and Privacy acknowledgement before redirecting", () => {
+    render(<GoogleAuth onAuthChange={mockOnAuthChange} />);
+
+    openTrustDialog();
+    const continueButton = screen.getByRole("button", {
+      name: /continue with google/i,
+    });
+
+    expect(continueButton).toBeDisabled();
+    expect(screen.getByRole("link", { name: /terms of service/i })).toHaveAttribute(
+      "href",
+      "/terms",
+    );
+    expect(screen.getByRole("link", { name: /privacy policy/i })).toHaveAttribute(
+      "href",
+      "/privacy",
+    );
+  });
+
   it("should call login() when continuing with Google", () => {
     render(<GoogleAuth onAuthChange={mockOnAuthChange} />);
 
-    fireEvent.click(screen.getByRole("button", { name: /sign in with google/i }));
+    openTrustDialog();
+    acceptLegalTerms();
     fireEvent.click(
       screen.getByRole("button", { name: /continue with google/i }),
     );
@@ -58,7 +89,8 @@ describe("GoogleAuth Component", () => {
   it("should show loading state when signing in", () => {
     render(<GoogleAuth onAuthChange={mockOnAuthChange} />);
 
-    fireEvent.click(screen.getByRole("button", { name: /sign in with google/i }));
+    openTrustDialog();
+    acceptLegalTerms();
     fireEvent.click(
       screen.getByRole("button", { name: /continue with google/i }),
     );
@@ -73,6 +105,7 @@ describe("GoogleAuth Component", () => {
       name: /sign in with google/i,
     });
     fireEvent.click(signInButton);
+    acceptLegalTerms();
     const continueButton = screen.getByRole("button", {
       name: /continue with google/i,
     });
@@ -85,7 +118,8 @@ describe("GoogleAuth Component", () => {
   it("should show spinner icon when loading", () => {
     render(<GoogleAuth onAuthChange={mockOnAuthChange} />);
 
-    fireEvent.click(screen.getByRole("button", { name: /sign in with google/i }));
+    openTrustDialog();
+    acceptLegalTerms();
     const continueButton = screen.getByRole("button", {
       name: /continue with google/i,
     });
@@ -102,6 +136,7 @@ describe("GoogleAuth Component", () => {
       name: /sign in with google/i,
     });
     fireEvent.click(signInButton);
+    acceptLegalTerms();
     fireEvent.click(
       screen.getByRole("button", { name: /continue with google/i }),
     );
@@ -134,7 +169,8 @@ describe("GoogleAuth Component", () => {
   it("should only call login once on multiple rapid continue clicks", () => {
     render(<GoogleAuth onAuthChange={mockOnAuthChange} />);
 
-    fireEvent.click(screen.getByRole("button", { name: /sign in with google/i }));
+    openTrustDialog();
+    acceptLegalTerms();
     const continueButton = screen.getByRole("button", {
       name: /continue with google/i,
     });
