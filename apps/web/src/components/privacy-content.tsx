@@ -27,7 +27,7 @@ export const privacyPolicy = [
   {
     heading: "Account and legal records",
     content:
-      "ZeroDrive needs minimal account-level information to operate, such as the email address returned by Google sign-in and privacy-safe lookup identifiers derived from it. A future legal acceptance gate may store a minimal record showing that an account accepted the current Terms of Service and acknowledged this Privacy Policy. That legal record should remain separate from file sharing records.",
+      "ZeroDrive needs minimal account-level information to operate, such as the email address returned by Google sign-in and privacy-safe lookup identifiers derived from it. When you accept the current Terms of Service and acknowledge this Privacy Policy, ZeroDrive stores a minimal legal acceptance record with a non-reversible account lookup ID, the accepted document versions, and the acceptance time. That legal record is kept separate from file sharing records.",
   },
   {
     heading: "Analytics, logs, and diagnostics",

@@ -90,6 +90,25 @@ describe("database privacy invariants", () => {
     }
   });
 
+  it("stores legal acceptance without plaintext account identity", () => {
+    const legalSchema = initSql.match(
+      /CREATE TABLE IF NOT EXISTS legal_acceptances \(([\s\S]*?)\n\);/,
+    )?.[1];
+    expect(legalSchema).toBeDefined();
+    expect(legalSchema).toContain("account_lookup_id");
+    for (const forbidden of [
+      "email",
+      "user_id",
+      "google_account",
+      "ip_address",
+      "user_agent",
+      "session_id",
+      "request_id",
+    ]) {
+      expect(legalSchema!.toLowerCase()).not.toContain(forbidden);
+    }
+  });
+
   it("cannot derive recipient identities without the external secret", () => {
     const previousSecret = process.env.DIRECTORY_HMAC_SECRET;
     process.env.DIRECTORY_HMAC_SECRET = "first-independent-secret";

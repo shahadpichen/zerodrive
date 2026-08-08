@@ -2,7 +2,7 @@ export const termsOfService = [
   {
     heading: "Agreement to these terms",
     content:
-      "These Terms explain the rules for using ZeroDrive. When this document says “ZeroDrive”, “we”, “our”, “us”, or “the service”, it refers to the ZeroDrive project and the hosted ZeroDrive application where applicable. By using ZeroDrive, you agree to these Terms and acknowledge the Privacy Policy.",
+      "These Terms explain the rules for using ZeroDrive. When this document says “ZeroDrive”, “we”, “our”, “us”, or “the service”, it refers to the ZeroDrive project and the hosted ZeroDrive application where applicable. The hosted app may ask you to accept the current Terms of Service and acknowledge the Privacy Policy before Storage and private sharing are enabled for your account.",
   },
   {
     heading: "What ZeroDrive is",

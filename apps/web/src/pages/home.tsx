@@ -60,6 +60,7 @@ import {
   writeCachedHomeDashboard,
 } from "../utils/homeDashboardCache";
 import { useVaultData } from "../contexts/vault-data-context";
+import { LegalAcceptanceReminder } from "../components/legal-acceptance-gate";
 
 type LockedSharingDestination = "share" | "inbox";
 
@@ -454,6 +455,7 @@ function HomeContent() {
           >
             Star on GitHub
           </a>
+          <LegalAcceptanceReminder className="hidden sm:inline-flex" />
           <ModeToggle />
           {userEmail && (
             <DropdownMenu>

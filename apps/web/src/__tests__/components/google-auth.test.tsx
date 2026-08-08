@@ -18,14 +18,6 @@ describe("GoogleAuth Component", () => {
     fireEvent.click(screen.getByRole("button", { name: /sign in with google/i }));
   };
 
-  const acceptLegalTerms = () => {
-    fireEvent.click(
-      screen.getByRole("checkbox", {
-        name: /i agree to the terms of service/i,
-      }),
-    );
-  };
-
   it("should render sign-in button", () => {
     render(<GoogleAuth onAuthChange={mockOnAuthChange} />);
 
@@ -55,7 +47,7 @@ describe("GoogleAuth Component", () => {
     expect(mockLogin).not.toHaveBeenCalled();
   });
 
-  it("should require Terms and Privacy acknowledgement before redirecting", () => {
+  it("should link to Terms and Privacy from the trust explanation", () => {
     render(<GoogleAuth onAuthChange={mockOnAuthChange} />);
 
     openTrustDialog();
@@ -63,7 +55,7 @@ describe("GoogleAuth Component", () => {
       name: /continue with google/i,
     });
 
-    expect(continueButton).toBeDisabled();
+    expect(continueButton).not.toBeDisabled();
     expect(screen.getByRole("link", { name: /terms of service/i })).toHaveAttribute(
       "href",
       "/terms",
@@ -78,7 +70,6 @@ describe("GoogleAuth Component", () => {
     render(<GoogleAuth onAuthChange={mockOnAuthChange} />);
 
     openTrustDialog();
-    acceptLegalTerms();
     fireEvent.click(
       screen.getByRole("button", { name: /continue with google/i }),
     );
@@ -90,7 +81,6 @@ describe("GoogleAuth Component", () => {
     render(<GoogleAuth onAuthChange={mockOnAuthChange} />);
 
     openTrustDialog();
-    acceptLegalTerms();
     fireEvent.click(
       screen.getByRole("button", { name: /continue with google/i }),
     );
@@ -105,7 +95,6 @@ describe("GoogleAuth Component", () => {
       name: /sign in with google/i,
     });
     fireEvent.click(signInButton);
-    acceptLegalTerms();
     const continueButton = screen.getByRole("button", {
       name: /continue with google/i,
     });
@@ -119,7 +108,6 @@ describe("GoogleAuth Component", () => {
     render(<GoogleAuth onAuthChange={mockOnAuthChange} />);
 
     openTrustDialog();
-    acceptLegalTerms();
     const continueButton = screen.getByRole("button", {
       name: /continue with google/i,
     });
@@ -136,7 +124,6 @@ describe("GoogleAuth Component", () => {
       name: /sign in with google/i,
     });
     fireEvent.click(signInButton);
-    acceptLegalTerms();
     fireEvent.click(
       screen.getByRole("button", { name: /continue with google/i }),
     );
@@ -170,7 +157,6 @@ describe("GoogleAuth Component", () => {
     render(<GoogleAuth onAuthChange={mockOnAuthChange} />);
 
     openTrustDialog();
-    acceptLegalTerms();
     const continueButton = screen.getByRole("button", {
       name: /continue with google/i,
     });

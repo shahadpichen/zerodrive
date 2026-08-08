@@ -132,6 +132,10 @@ describeWithPostgres("database migrations against PostgreSQL", () => {
            IS NOT NULL AS analytics_dimensions_deployment_unique,
          to_regclass('public.idx_oauth_exchanges_deployment_code_hash_unique')
            IS NOT NULL AS oauth_deployment_unique,
+         to_regclass('public.legal_acceptances') IS NOT NULL
+           AS legal_acceptances,
+         to_regclass('public.idx_legal_acceptances_current_unique') IS NOT NULL
+           AS legal_acceptances_unique,
          to_regclass('public.idx_public_keys_deployment_user_id')
            IS NOT NULL AS public_keys_deployment_index,
          to_regclass('public.idx_shared_files_deployment_recipient')
@@ -166,6 +170,8 @@ describeWithPostgres("database migrations against PostgreSQL", () => {
       analytics_summary_deployment_unique: true,
       analytics_dimensions_deployment_unique: true,
       oauth_deployment_unique: true,
+      legal_acceptances: true,
+      legal_acceptances_unique: true,
       public_keys_deployment_index: true,
       shared_files_deployment_index: true,
       active_shared_files_deployment_id: true,

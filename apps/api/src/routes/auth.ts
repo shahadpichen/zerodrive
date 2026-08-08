@@ -38,6 +38,42 @@ const router = Router();
 
 const FRONTEND_URL = process.env.APP_URL || "http://localhost:5173";
 const NODE_ENV = process.env.NODE_ENV || "development";
+const CURRENT_TERMS_VERSION = process.env.LEGAL_TERMS_VERSION || "2026-08";
+const CURRENT_PRIVACY_VERSION =
+  process.env.LEGAL_PRIVACY_VERSION || "2026-08";
+
+interface LegalAcceptanceStatus {
+  accepted: boolean;
+  required: boolean;
+  termsVersion: string;
+  privacyVersion: string;
+  acceptedAt: string | null;
+}
+
+async function getLegalAcceptanceStatus(
+  accountLookupId: string,
+): Promise<LegalAcceptanceStatus> {
+  const result = await query(
+    `SELECT accepted_at
+       FROM legal_acceptances
+      WHERE deployment_id = zerodrive_default_deployment_id()
+        AND account_lookup_id = $1
+        AND terms_version = $2
+        AND privacy_version = $3
+      ORDER BY accepted_at DESC
+      LIMIT 1`,
+    [accountLookupId, CURRENT_TERMS_VERSION, CURRENT_PRIVACY_VERSION],
+  );
+  const acceptedAt = result.rows[0]?.accepted_at;
+
+  return {
+    accepted: Boolean(acceptedAt),
+    required: true,
+    termsVersion: CURRENT_TERMS_VERSION,
+    privacyVersion: CURRENT_PRIVACY_VERSION,
+    acceptedAt: acceptedAt ? new Date(acceptedAt).toISOString() : null,
+  };
+}
 /**
  * GET /api/auth/google
  * Initiate Google OAuth flow
@@ -300,6 +336,80 @@ router.get(
         },
       },
       "User info retrieved",
+    );
+  }),
+);
+
+/**
+ * GET /api/auth/legal-acceptance
+ * Return whether this authenticated account has accepted the current legal
+ * documents. Uses the account lookup hash, not plaintext email.
+ */
+router.get(
+  "/legal-acceptance",
+  requireAuth,
+  asyncHandler(async (req: Request, res: Response) => {
+    if (!req.user) {
+      throw ApiErrors.Unauthorized("Not authenticated");
+    }
+
+    res.setHeader("Cache-Control", "no-store");
+    res.apiSuccess(
+      await getLegalAcceptanceStatus(req.user.emailHash),
+      "Legal acceptance status retrieved",
+    );
+  }),
+);
+
+/**
+ * POST /api/auth/legal-acceptance
+ * Record acceptance for the current Terms and Privacy Policy versions.
+ */
+router.post(
+  "/legal-acceptance",
+  requireAuth,
+  asyncHandler(async (req: Request, res: Response) => {
+    if (!req.user) {
+      throw ApiErrors.Unauthorized("Not authenticated");
+    }
+
+    const result = await query(
+      `INSERT INTO legal_acceptances (
+         deployment_id,
+         account_lookup_id,
+         terms_version,
+         privacy_version
+       )
+       VALUES (
+         zerodrive_default_deployment_id(),
+         $1,
+         $2,
+         $3
+       )
+       ON CONFLICT (
+         deployment_id,
+         account_lookup_id,
+         terms_version,
+         privacy_version
+       )
+       DO UPDATE SET
+         accepted_at = CURRENT_TIMESTAMP,
+         updated_at = CURRENT_TIMESTAMP
+       RETURNING accepted_at`,
+      [req.user.emailHash, CURRENT_TERMS_VERSION, CURRENT_PRIVACY_VERSION],
+    );
+
+    const acceptedAt = result.rows[0]?.accepted_at;
+    res.setHeader("Cache-Control", "no-store");
+    res.apiSuccess(
+      {
+        accepted: true,
+        required: true,
+        termsVersion: CURRENT_TERMS_VERSION,
+        privacyVersion: CURRENT_PRIVACY_VERSION,
+        acceptedAt: acceptedAt ? new Date(acceptedAt).toISOString() : null,
+      },
+      "Legal acceptance recorded",
     );
   }),
 );

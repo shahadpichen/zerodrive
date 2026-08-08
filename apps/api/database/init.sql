@@ -234,6 +234,37 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_oauth_exchanges_deployment_code_hash_uniqu
 CREATE INDEX IF NOT EXISTS idx_oauth_exchanges_expiry
     ON oauth_exchanges(expires_at);
 
+-- Privacy-safe legal acceptance records.
+-- Stores only the authenticated account lookup ID and accepted document
+-- versions. It is intentionally separate from file, share, and analytics data.
+CREATE TABLE IF NOT EXISTS legal_acceptances (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    deployment_id UUID NOT NULL DEFAULT zerodrive_default_deployment_id()
+        REFERENCES deployments(id),
+    account_lookup_id CHAR(64) NOT NULL CHECK (account_lookup_id ~ '^[0-9a-f]{64}$'),
+    terms_version VARCHAR(32) NOT NULL,
+    privacy_version VARCHAR(32) NOT NULL,
+    accepted_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_legal_acceptances_current_unique
+    ON legal_acceptances(
+        deployment_id,
+        account_lookup_id,
+        terms_version,
+        privacy_version
+    );
+CREATE INDEX IF NOT EXISTS idx_legal_acceptances_account_lookup
+    ON legal_acceptances(deployment_id, account_lookup_id, accepted_at DESC);
+
+DROP TRIGGER IF EXISTS update_legal_acceptances_updated_at ON legal_acceptances;
+CREATE TRIGGER update_legal_acceptances_updated_at
+    BEFORE UPDATE ON legal_acceptances
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+
 -- TABLE REMOVED: user_google_tokens (Risk #35 - Zero-knowledge architecture)
 -- Google OAuth tokens are kept client-side in sessionStorage
 -- Backend never stores or has access to Google Drive tokens
