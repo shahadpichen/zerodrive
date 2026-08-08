@@ -1,6 +1,6 @@
 export const privacyPolicy = [
   {
-    heading: "Privacy Policy",
+    heading: "The simple privacy model",
     content:
       "ZeroDrive is built as an encryption layer on top of your own Google Drive. The product is designed so your files are encrypted before they leave your browser. That means ZeroDrive should not receive your original files, your recovery phrase, or the private keys needed to read your vault.",
   },
