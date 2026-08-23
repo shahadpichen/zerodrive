@@ -43,6 +43,7 @@ import {
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
 import { useVaultData } from "../contexts/vault-data-context";
+import { ensureGoogleDrivePermissionForAction } from "../utils/googleDrivePermissions";
 
 // Imports for sharing key functionality (kept for potential future use)
 import { recoverRsaKeysIfNeeded } from "../utils/rsaKeyRecovery";
@@ -161,7 +162,7 @@ function PrivateStorageContent() {
         }
 
         // Make the verified account available to the persistent providers
-        // before Drive/profile work so local vault data can render at once.
+        // before Drive work so local vault data can render at once.
         setUserInfo(email, email.split("@")[0]);
 
         // Account switch detection
@@ -185,7 +186,6 @@ function PrivateStorageContent() {
         setHasVaultKey(hasVaultAccess);
         setVaultKeyStatus(email, hasVaultAccess);
 
-        // Initialize GAPI first so we can fetch profile info
         const { hasGoogleTokensInStorage, logout } =
           await import("../utils/authService");
         const tokensExist = hasGoogleTokensInStorage();
@@ -198,19 +198,6 @@ function PrivateStorageContent() {
           await logout();
           window.location.href = "/";
           return;
-        }
-
-        // Fetch the account profile before Drive initialization so the header
-        // can keep the user's name/avatar stable even if GAPI is slow.
-        try {
-          const { getUserProfile } = await import("../utils/authService");
-          const profile = await getUserProfile();
-          if (profile) {
-            setUserInfo(profile.email, profile.name, profile.picture);
-          }
-        } catch (error) {
-          console.error("Failed to fetch user profile:", error);
-          // Keep the existing/cached fallback profile if Google userinfo fails.
         }
 
         // Initialize Google API with backend tokens
@@ -324,6 +311,8 @@ function PrivateStorageContent() {
   }, [userEmail]);
 
   const handleRefreshFiles = async () => {
+    if (!ensureGoogleDrivePermissionForAction("storage")) return;
+
     if (!userEmail) {
       toast.error("User information not available to refresh files.");
       return;
@@ -378,6 +367,8 @@ function PrivateStorageContent() {
   };
 
   const handleUploadTriggerInternal = useCallback(async () => {
+    if (!ensureGoogleDrivePermissionForAction("upload")) return;
+
     if (isVaultSafetyCheckPending) {
       toast.info("Checking vault metadata", {
         description:
@@ -429,6 +420,8 @@ function PrivateStorageContent() {
     options: { skipMetadataReplaceWarning?: boolean } = {},
   ) => {
     if (filesToUpload.length === 0 || !userEmail) return;
+
+    if (!ensureGoogleDrivePermissionForAction("upload")) return;
 
     if (isVaultSafetyCheckPending) {
       toast.info("Checking vault metadata", {
@@ -539,6 +532,11 @@ function PrivateStorageContent() {
   const performDeleteAllFiles = async () => {
     if (!userEmail) return;
 
+    if (!ensureGoogleDrivePermissionForAction("storage")) {
+      setShowDeleteConfirm(false);
+      return;
+    }
+
     if (!isVaultMetadataWriteSafe) {
       showVaultMetadataBlockedToast();
       setShowDeleteConfirm(false);
@@ -632,7 +630,10 @@ function PrivateStorageContent() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => setShowCreateFolder(true)}
+                onClick={() => {
+                  if (!ensureGoogleDrivePermissionForAction("folder")) return;
+                  setShowCreateFolder(true);
+                }}
                 disabled={isLoadingUserFiles || !isVaultMetadataWriteSafe}
               >
                 <FolderPlus className="h-4 w-4 mr-2" />

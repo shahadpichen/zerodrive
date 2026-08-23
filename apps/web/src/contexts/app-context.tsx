@@ -221,11 +221,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             : sameUser && current.name
               ? current.name
               : name || fallbackName;
-        const nextImage = image || (sameUser ? current.image : "");
         const nextUserInfo = {
           email,
           name: nextName,
-          image: nextImage,
+          image:
+            image !== undefined
+              ? image
+              : sameUser && current.image
+                ? current.image
+                : "",
         };
 
         if (

@@ -1,121 +1,172 @@
-/**
- * Unit Tests for Google Auth Component
- * Tests Google sign-in button functionality
- */
+import React from "react";
+import { fireEvent, render, screen } from "@testing-library/react";
+import { GoogleAuth } from "../../components/landing-page/google-auth";
+import { login } from "../../utils/authService";
 
-import React from 'react';
-import { render, screen, fireEvent } from '@testing-library/react';
-import { GoogleAuth } from '../../components/landing-page/google-auth';
-import { login } from '../../utils/authService';
-
-// Mock authService
-jest.mock('../../utils/authService');
+jest.mock("../../utils/authService");
 
 const mockLogin = login as jest.MockedFunction<typeof login>;
 
-describe('GoogleAuth Component', () => {
+describe("GoogleAuth Component", () => {
   const mockOnAuthChange = jest.fn();
 
   beforeEach(() => {
     jest.clearAllMocks();
   });
 
-  it('should render sign-in button', () => {
+  const openTrustDialog = () => {
+    fireEvent.click(screen.getByRole("button", { name: /sign in with google/i }));
+  };
+
+  it("should render sign-in button", () => {
     render(<GoogleAuth onAuthChange={mockOnAuthChange} />);
 
-    const button = screen.getByRole('button', { name: /sign in with google/i });
+    const button = screen.getByRole("button", { name: /sign in with google/i });
     expect(button).toBeInTheDocument();
   });
 
-  it('should display Google logo', () => {
+  it("should display Google logo", () => {
     render(<GoogleAuth onAuthChange={mockOnAuthChange} />);
 
-    const image = screen.getByAltText('Google Logo');
+    const image = screen.getByAltText("Google Logo");
     expect(image).toBeInTheDocument();
-    expect(image).toHaveAttribute('src');
+    expect(image).toHaveAttribute("src");
   });
 
-  it('should call login() when button is clicked', () => {
+  it("should explain Google access before redirecting", () => {
     render(<GoogleAuth onAuthChange={mockOnAuthChange} />);
 
-    const button = screen.getByRole('button', { name: /sign in with google/i });
-    fireEvent.click(button);
+    openTrustDialog();
+
+    expect(
+      screen.getByRole("heading", { name: /before google asks for access/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/google may show a permission screen/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/basic google profile for the account name\/avatar/i),
+    ).toBeInTheDocument();
+    expect(mockLogin).not.toHaveBeenCalled();
+  });
+
+  it("should link to Terms and Privacy from the trust explanation", () => {
+    render(<GoogleAuth onAuthChange={mockOnAuthChange} />);
+
+    openTrustDialog();
+    const continueButton = screen.getByRole("button", {
+      name: /continue with google/i,
+    });
+
+    expect(continueButton).not.toBeDisabled();
+    expect(screen.getByRole("link", { name: /terms of service/i })).toHaveAttribute(
+      "href",
+      "/terms",
+    );
+    expect(screen.getByRole("link", { name: /privacy policy/i })).toHaveAttribute(
+      "href",
+      "/privacy",
+    );
+  });
+
+  it("should call login() when continuing with Google", () => {
+    render(<GoogleAuth onAuthChange={mockOnAuthChange} />);
+
+    openTrustDialog();
+    fireEvent.click(
+      screen.getByRole("button", { name: /continue with google/i }),
+    );
 
     expect(mockLogin).toHaveBeenCalledTimes(1);
   });
 
-  it('should show loading state when signing in', () => {
+  it("should show loading state when signing in", () => {
     render(<GoogleAuth onAuthChange={mockOnAuthChange} />);
 
-    const button = screen.getByRole('button');
-    fireEvent.click(button);
+    openTrustDialog();
+    fireEvent.click(
+      screen.getByRole("button", { name: /continue with google/i }),
+    );
 
-    expect(screen.getByText(/redirecting to google/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/redirecting/i).length).toBeGreaterThan(0);
   });
 
-  it('should disable button when signing in', () => {
+  it("should disable buttons when signing in", () => {
     render(<GoogleAuth onAuthChange={mockOnAuthChange} />);
 
-    const button = screen.getByRole('button');
-    fireEvent.click(button);
+    const signInButton = screen.getByRole("button", {
+      name: /sign in with google/i,
+    });
+    fireEvent.click(signInButton);
+    const continueButton = screen.getByRole("button", {
+      name: /continue with google/i,
+    });
+    fireEvent.click(continueButton);
 
-    expect(button).toBeDisabled();
+    expect(signInButton).toBeDisabled();
+    expect(continueButton).toBeDisabled();
   });
 
-  it('should show spinner icon when loading', () => {
+  it("should show spinner icon when loading", () => {
     render(<GoogleAuth onAuthChange={mockOnAuthChange} />);
 
-    const button = screen.getByRole('button');
-    fireEvent.click(button);
+    openTrustDialog();
+    const continueButton = screen.getByRole("button", {
+      name: /continue with google/i,
+    });
+    fireEvent.click(continueButton);
 
-    // Loader2 component should be rendered (contains "animate-spin" class)
-    const spinner = button.querySelector('.animate-spin');
+    const spinner = continueButton.querySelector(".animate-spin");
     expect(spinner).toBeInTheDocument();
   });
 
-  it('should not show Google logo when loading', () => {
+  it("should not show Google logo in the main button when loading", () => {
     render(<GoogleAuth onAuthChange={mockOnAuthChange} />);
 
-    fireEvent.click(screen.getByRole('button'));
+    const signInButton = screen.getByRole("button", {
+      name: /sign in with google/i,
+    });
+    fireEvent.click(signInButton);
+    fireEvent.click(
+      screen.getByRole("button", { name: /continue with google/i }),
+    );
 
-    expect(screen.queryByAltText('Google Logo')).not.toBeInTheDocument();
+    expect(signInButton.querySelector('img[alt="Google Logo"]')).toBeNull();
   });
 
-  it('should accept theme prop', () => {
+  it("should accept theme prop", () => {
     const { rerender } = render(
-      <GoogleAuth onAuthChange={mockOnAuthChange} theme="dark" />
+      <GoogleAuth onAuthChange={mockOnAuthChange} theme="dark" />,
     );
-    expect(screen.getByRole('button')).toBeInTheDocument();
+    expect(screen.getByRole("button")).toBeInTheDocument();
 
     rerender(<GoogleAuth onAuthChange={mockOnAuthChange} theme="light" />);
-    expect(screen.getByRole('button')).toBeInTheDocument();
+    expect(screen.getByRole("button")).toBeInTheDocument();
   });
 
-  it('should use dark theme by default', () => {
+  it("should use dark theme by default", () => {
     render(<GoogleAuth onAuthChange={mockOnAuthChange} />);
-    expect(screen.getByRole('button')).toBeInTheDocument();
+    expect(screen.getByRole("button")).toBeInTheDocument();
   });
 
-  it('should have correct button styling classes', () => {
+  it("should have correct button styling classes", () => {
     render(<GoogleAuth onAuthChange={mockOnAuthChange} />);
 
-    const button = screen.getByRole('button');
-    expect(button).toHaveClass('shadow-md');
+    const button = screen.getByRole("button");
+    expect(button).toHaveClass("shadow-md");
   });
 
-  it('should only call login once on multiple rapid clicks', () => {
+  it("should only call login once on multiple rapid continue clicks", () => {
     render(<GoogleAuth onAuthChange={mockOnAuthChange} />);
 
-    const button = screen.getByRole('button');
+    openTrustDialog();
+    const continueButton = screen.getByRole("button", {
+      name: /continue with google/i,
+    });
+    fireEvent.click(continueButton);
+    fireEvent.click(continueButton);
+    fireEvent.click(continueButton);
 
-    // First click
-    fireEvent.click(button);
-
-    // Try to click again while loading (button is disabled)
-    fireEvent.click(button);
-    fireEvent.click(button);
-
-    // Should only call login once
     expect(mockLogin).toHaveBeenCalledTimes(1);
   });
 });

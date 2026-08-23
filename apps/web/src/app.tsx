@@ -24,6 +24,14 @@ import { AuthenticatedLayout } from "./components/layout/authenticated-layout";
 import AnalyticsDashboard from "./pages/analytics-dashboard";
 import { AppProvider } from "./contexts/app-context";
 import { VaultDataProvider } from "./contexts/vault-data-context";
+import {
+  LegalAcceptanceGate,
+  LegalAcceptanceProvider,
+} from "./components/legal-acceptance-gate";
+import {
+  GoogleDrivePermissionGate,
+  GoogleDrivePermissionProvider,
+} from "./components/google-drive-permission-gate";
 
 // Check environment variables on app startup
 const checkEnvironmentVariables = () => {
@@ -75,84 +83,104 @@ function App() {
     <AppProvider>
       <VaultDataProvider>
         <Router>
-          <Routes>
-            <Route path="/" element={<RootRoute />} />
-            <Route path="/oauth/callback" element={<OAuthCallback />} />
-            <Route
-              path="/home"
-              element={
-                <ProtectedRoute>
-                  <Home />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/storage"
-              element={
-                <ProtectedRoute>
-                  <AuthenticatedLayout>
-                    <PrivateStorage />
-                  </AuthenticatedLayout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/recovery-access"
-              element={
-                <ProtectedRoute>
-                  <AuthenticatedLayout>
-                    <KeyManagementPage />
-                  </AuthenticatedLayout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/key-management"
-              element={
-                <ProtectedRoute>
-                  <KeyManagementRedirect />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/share"
-              element={
-                <ProtectedRoute>
-                  <AuthenticatedLayout>
-                    <ShareFilesPage />
-                  </AuthenticatedLayout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/shared-with-me"
-              element={
-                <ProtectedRoute>
-                  <AuthenticatedLayout>
-                    <SharedWithMePage />
-                  </AuthenticatedLayout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/admin/analytics"
-              element={
-                <ProtectedRoute>
-                  <AuthenticatedLayout>
-                    <AnalyticsDashboard />
-                  </AuthenticatedLayout>
-                </ProtectedRoute>
-              }
-            />
-            <Route path="/privacy" element={<Privacy />} />
-            <Route path="/terms" element={<Terms />} />
-            <Route path="/docs" element={<Docs />} />
-            <Route path="/docs/:slug" element={<DocsDetail />} />
-            <Route
-              path="/how-it-works"
-              element={<Navigate to="/docs" replace />}
-            />
-          </Routes>
+          <LegalAcceptanceProvider>
+            <GoogleDrivePermissionProvider>
+              <Routes>
+                <Route path="/" element={<RootRoute />} />
+                <Route path="/oauth/callback" element={<OAuthCallback />} />
+                <Route
+                  path="/home"
+                  element={
+                    <ProtectedRoute>
+                      <GoogleDrivePermissionGate requirePermission={false}>
+                        <LegalAcceptanceGate requireAcceptance={false}>
+                          <Home />
+                        </LegalAcceptanceGate>
+                      </GoogleDrivePermissionGate>
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/storage"
+                  element={
+                    <ProtectedRoute>
+                      <AuthenticatedLayout>
+                        <GoogleDrivePermissionGate requirePermission>
+                          <LegalAcceptanceGate requireAcceptance>
+                            <PrivateStorage />
+                          </LegalAcceptanceGate>
+                        </GoogleDrivePermissionGate>
+                      </AuthenticatedLayout>
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/recovery-access"
+                  element={
+                    <ProtectedRoute>
+                      <AuthenticatedLayout>
+                        <KeyManagementPage />
+                      </AuthenticatedLayout>
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/key-management"
+                  element={
+                    <ProtectedRoute>
+                      <KeyManagementRedirect />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/share"
+                  element={
+                    <ProtectedRoute>
+                      <AuthenticatedLayout>
+                        <GoogleDrivePermissionGate requirePermission>
+                          <LegalAcceptanceGate requireAcceptance>
+                            <ShareFilesPage />
+                          </LegalAcceptanceGate>
+                        </GoogleDrivePermissionGate>
+                      </AuthenticatedLayout>
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/shared-with-me"
+                  element={
+                    <ProtectedRoute>
+                      <AuthenticatedLayout>
+                        <GoogleDrivePermissionGate requirePermission={false}>
+                          <LegalAcceptanceGate requireAcceptance>
+                            <SharedWithMePage />
+                          </LegalAcceptanceGate>
+                        </GoogleDrivePermissionGate>
+                      </AuthenticatedLayout>
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/admin/analytics"
+                  element={
+                    <ProtectedRoute>
+                      <AuthenticatedLayout>
+                        <AnalyticsDashboard />
+                      </AuthenticatedLayout>
+                    </ProtectedRoute>
+                  }
+                />
+                <Route path="/privacy" element={<Privacy />} />
+                <Route path="/terms" element={<Terms />} />
+                <Route path="/docs" element={<Docs />} />
+                <Route path="/docs/:slug" element={<DocsDetail />} />
+                <Route
+                  path="/how-it-works"
+                  element={<Navigate to="/docs" replace />}
+                />
+              </Routes>
+            </GoogleDrivePermissionProvider>
+          </LegalAcceptanceProvider>
         </Router>
       </VaultDataProvider>
     </AppProvider>

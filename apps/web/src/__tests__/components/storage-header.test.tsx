@@ -170,6 +170,15 @@ describe("Header Component", () => {
       expect(avatar).toBeInTheDocument();
     });
 
+    it("should display the Google profile image when available", () => {
+      renderWithRouter(<Header />);
+
+      expect(screen.getByAltText("Test User")).toHaveAttribute(
+        "src",
+        "https://example.com/avatar.jpg",
+      );
+    });
+
     it("should display user initials when no image", () => {
       mockUseApp.mockReturnValue({
         ...defaultAppContext,

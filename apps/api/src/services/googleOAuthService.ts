@@ -87,8 +87,6 @@ export async function getTokensFromCode(code: string): Promise<{
 export async function getUserInfo(accessToken: string): Promise<{
   email: string;
   verified: boolean;
-  picture?: string;
-  name?: string;
 }> {
   try {
     // Set credentials
@@ -96,7 +94,9 @@ export async function getUserInfo(accessToken: string): Promise<{
 
     // Get user info
     const oauth2 = google.oauth2({ version: "v2", auth: oauth2Client });
-    const { data } = await oauth2.userinfo.get();
+    const { data } = await oauth2.userinfo.get({
+      fields: "email,verified_email",
+    });
 
     if (!data.email) {
       throw new Error("No email returned from Google");
@@ -110,8 +110,6 @@ export async function getUserInfo(accessToken: string): Promise<{
     return {
       email: data.email,
       verified: data.verified_email || false,
-      ...(data.picture && { picture: data.picture }),
-      ...(data.name && { name: data.name }),
     };
   } catch (error) {
     logger.error("[OAuth] Failed to get user info", error as Error);
@@ -127,6 +125,22 @@ export function hasFullDriveScope(grantedScopes: string): boolean {
     grantedScopes.includes("https://www.googleapis.com/auth/drive.file") ||
     grantedScopes.includes("https://www.googleapis.com/auth/drive")
   );
+}
+
+/**
+ * Check if granted scopes include everything ZeroDrive needs for Drive-backed
+ * Storage: app-selected encrypted files plus hidden appDataFolder metadata.
+ */
+export function hasRequiredGoogleDriveScopes(grantedScopes: string): boolean {
+  const scopes = new Set(grantedScopes.split(/\s+/).filter(Boolean));
+  const hasFileScope =
+    scopes.has("https://www.googleapis.com/auth/drive.file") ||
+    scopes.has("https://www.googleapis.com/auth/drive");
+  const hasAppDataScope = scopes.has(
+    "https://www.googleapis.com/auth/drive.appdata",
+  );
+
+  return hasFileScope && hasAppDataScope;
 }
 
 /**

@@ -42,7 +42,9 @@ jest.mock("googleapis", () => ({
 // Import after mocks are set up
 import {
   getAuthUrl,
+  getUserInfo,
   hasFullDriveScope,
+  hasRequiredGoogleDriveScopes,
   refreshAccessToken,
 } from "../../../services/googleOAuthService";
 
@@ -143,7 +145,7 @@ describe("GoogleOAuthService", () => {
 
     it("should return false when Drive scope is missing", () => {
       const scopes =
-        "https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile";
+        "https://www.googleapis.com/auth/userinfo.email";
 
       const result = hasFullDriveScope(scopes);
 
@@ -154,6 +156,61 @@ describe("GoogleOAuthService", () => {
       const result = hasFullDriveScope("");
 
       expect(result).toBe(false);
+    });
+  });
+
+  describe("hasRequiredGoogleDriveScopes", () => {
+    it("returns true when drive.file and appDataFolder scopes are granted", () => {
+      const scopes =
+        "https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/drive.appdata";
+
+      expect(hasRequiredGoogleDriveScopes(scopes)).toBe(true);
+    });
+
+    it("returns true when broad Drive and appDataFolder scopes are granted", () => {
+      const scopes =
+        "https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/drive.appdata";
+
+      expect(hasRequiredGoogleDriveScopes(scopes)).toBe(true);
+    });
+
+    it("returns false when appDataFolder scope is missing", () => {
+      const scopes =
+        "https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/drive.file";
+
+      expect(hasRequiredGoogleDriveScopes(scopes)).toBe(false);
+    });
+
+    it("returns false when selected file scope is missing", () => {
+      const scopes =
+        "https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/drive.appdata";
+
+      expect(hasRequiredGoogleDriveScopes(scopes)).toBe(false);
+    });
+  });
+
+  describe("getUserInfo", () => {
+    it("verifies the token using only email fields", async () => {
+      mockUserinfoGet.mockResolvedValue({
+        data: {
+          email: "person@example.com",
+          verified_email: true,
+          name: "Ignored Name",
+          picture: "https://example.com/avatar.png",
+        },
+      });
+
+      await expect(getUserInfo("access-token")).resolves.toEqual({
+        email: "person@example.com",
+        verified: true,
+      });
+
+      expect(mockSetCredentials).toHaveBeenCalledWith({
+        access_token: "access-token",
+      });
+      expect(mockUserinfoGet).toHaveBeenCalledWith({
+        fields: "email,verified_email",
+      });
     });
   });
 

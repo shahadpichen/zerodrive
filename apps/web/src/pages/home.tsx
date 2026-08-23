@@ -12,7 +12,11 @@ import {
 } from "lucide-react";
 import { useApp } from "../contexts/app-context";
 import { ModeToggle } from "../components/mode-toggle";
-import { Avatar, AvatarFallback, AvatarImage } from "../components/ui/avatar";
+import {
+  Avatar,
+  AvatarFallback,
+  AvatarImage,
+} from "../components/ui/avatar";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -41,7 +45,6 @@ import { recoverRsaKeysIfNeeded } from "../utils/rsaKeyRecovery";
 import { toast } from "sonner";
 import {
   getAuthenticatedUser,
-  getUserProfile,
   hasGoogleTokensInStorage,
   logout,
 } from "../utils/authService";
@@ -61,6 +64,8 @@ import {
   writeCachedHomeDashboard,
 } from "../utils/homeDashboardCache";
 import { useVaultData } from "../contexts/vault-data-context";
+import { LegalAcceptanceReminder } from "../components/legal-acceptance-gate";
+import { GoogleDrivePermissionReminder } from "../components/google-drive-permission-gate";
 
 type LockedSharingDestination = "share" | "inbox";
 
@@ -187,15 +192,6 @@ function HomeContent() {
           await logout();
           window.location.href = "/";
           return;
-        }
-
-        try {
-          const profile = await getUserProfile();
-          if (profile) {
-            setUserInfo(profile.email, profile.name, profile.picture);
-          }
-        } catch {
-          // Keep the existing/cached fallback profile if Google userinfo fails.
         }
 
         if (!showLoginWelcome && isMounted) {
@@ -465,17 +461,20 @@ function HomeContent() {
           >
             Star on GitHub
           </a>
+          <GoogleDrivePermissionReminder className="hidden sm:inline-flex" />
+          <LegalAcceptanceReminder className="hidden sm:inline-flex" />
           <ModeToggle />
           {userEmail && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <button aria-label="Account menu" className="rounded-full">
                   <Avatar className="h-9 w-9">
-                    <AvatarImage
-                      src={userImage}
-                      alt={userName}
-                      referrerPolicy="no-referrer"
-                    />
+                    {userImage && (
+                      <AvatarImage
+                        src={userImage}
+                        alt={userName || userEmail}
+                      />
+                    )}
                     <AvatarFallback>
                       {initials(userName, userEmail)}
                     </AvatarFallback>

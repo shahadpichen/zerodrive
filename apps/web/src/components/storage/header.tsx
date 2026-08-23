@@ -23,13 +23,14 @@ function Header() {
   const { toggle } = useSidebar();
 
   const getUserInitials = (name: string, email: string) => {
+    const displayName = name.trim() || email;
     // If name has multiple words, take first letter of each word
-    const nameParts = name.trim().split(/\s+/);
+    const nameParts = displayName.trim().split(/\s+/);
     if (nameParts.length >= 2) {
       return (nameParts[0][0] + nameParts[1][0]).toUpperCase();
     }
     // For single word, just take first letter
-    return name.charAt(0).toUpperCase();
+    return (displayName.charAt(0) || "?").toUpperCase();
   };
 
   const formatBytes = (bytes: number) => {
@@ -117,13 +118,15 @@ function Header() {
                 <Button
                   variant="ghost"
                   className="relative h-10 w-10 rounded-0"
+                  aria-label={`Account menu for ${userName || userEmail}`}
                 >
                   <Avatar className="h-10 w-10">
-                    <AvatarImage
-                      src={userImage}
-                      alt={userName}
-                      referrerPolicy="no-referrer"
-                    />
+                    {userImage && (
+                      <AvatarImage
+                        src={userImage}
+                        alt={userName || userEmail}
+                      />
+                    )}
                     <AvatarFallback>
                       {getUserInitials(userName, userEmail)}
                     </AvatarFallback>

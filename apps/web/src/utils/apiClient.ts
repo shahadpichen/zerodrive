@@ -71,6 +71,14 @@ interface SharedFileData {
   updated_at?: string;
 }
 
+export interface LegalAcceptanceStatus {
+  accepted: boolean;
+  required: boolean;
+  termsVersion: string;
+  privacyVersion: string;
+  acceptedAt: string | null;
+}
+
 // Custom Error Classes
 export class ApiError extends Error {
   public code: string;
@@ -520,12 +528,30 @@ export const healthApi = {
   },
 };
 
+export const legalAcceptanceApi = {
+  async getStatus(): Promise<LegalAcceptanceStatus> {
+    const response = await httpClient.get<LegalAcceptanceStatus>(
+      "/auth/legal-acceptance",
+    );
+    return response.data!;
+  },
+
+  async accept(): Promise<LegalAcceptanceStatus> {
+    const response = await httpClient.post<LegalAcceptanceStatus>(
+      "/auth/legal-acceptance",
+      {},
+    );
+    return response.data!;
+  },
+};
+
 // Default export for compatibility
 const apiClient = {
   publicKeys: publicKeysApi,
   sharedFiles: sharedFilesApi,
   invitations: invitationsApi,
   health: healthApi,
+  legalAcceptance: legalAcceptanceApi,
   // Expose HTTP methods for custom endpoints (like pre-signed URLs)
   get: httpClient.get.bind(httpClient),
   post: httpClient.post.bind(httpClient),

@@ -24,14 +24,15 @@ jest.mock("../../config/database", () => ({
 const mockGetAuthUrl = jest.fn();
 const mockGetTokensFromCode = jest.fn();
 const mockGetUserInfo = jest.fn();
-const mockHasFullDriveScope = jest.fn();
+const mockHasRequiredGoogleDriveScopes = jest.fn();
 const mockRefreshAccessToken = jest.fn();
 
 jest.mock("../../services/googleOAuthService", () => ({
   getAuthUrl: (...args: any[]) => mockGetAuthUrl(...args),
   getTokensFromCode: (...args: any[]) => mockGetTokensFromCode(...args),
   getUserInfo: (...args: any[]) => mockGetUserInfo(...args),
-  hasFullDriveScope: (...args: any[]) => mockHasFullDriveScope(...args),
+  hasRequiredGoogleDriveScopes: (...args: any[]) =>
+    mockHasRequiredGoogleDriveScopes(...args),
   refreshAccessToken: (...args: any[]) => mockRefreshAccessToken(...args),
 }));
 
@@ -108,7 +109,7 @@ describe("Auth Routes Integration", () => {
         verified: true,
       });
 
-      mockHasFullDriveScope.mockReturnValue(true);
+      mockHasRequiredGoogleDriveScopes.mockReturnValue(true);
 
       // Mock database query - no existing public key (new user)
       mockQuery.mockResolvedValue({ rows: [] });
@@ -315,6 +316,78 @@ describe("Auth Routes Integration", () => {
         .set("Cookie", ["zerodrive_token=invalid.token.here"]);
 
       expect(response.status).toBe(401);
+    });
+  });
+
+  describe("Legal acceptance", () => {
+    const userEmail = "test@example.com";
+    const csrf = "legal-acceptance-csrf";
+
+    function authenticatedRequest(method: "get" | "post") {
+      const token = generateToken(userEmail);
+      const requestBuilder = request(app)[method](
+        "/api/auth/legal-acceptance",
+      ).set("Cookie", [
+        `zerodrive_token=${token}`,
+        `zerodrive_csrf=${csrf}`,
+      ]);
+
+      if (method === "post") {
+        requestBuilder.set("x-csrf-token", csrf).send({});
+      }
+
+      return requestBuilder;
+    }
+
+    it("returns current legal versions and unaccepted status", async () => {
+      mockQuery.mockResolvedValueOnce({ rows: [] });
+
+      const response = await authenticatedRequest("get");
+
+      expect(response.status).toBe(200);
+      expect(response.body.data).toMatchObject({
+        accepted: false,
+        required: true,
+        termsVersion: "2026-08",
+        privacyVersion: "2026-08",
+        acceptedAt: null,
+      });
+      expect(mockQuery).toHaveBeenCalledWith(
+        expect.stringContaining("FROM legal_acceptances"),
+        [expect.stringMatching(/^[0-9a-f]{64}$/), "2026-08", "2026-08"],
+      );
+    });
+
+    it("records acceptance for the authenticated account lookup", async () => {
+      mockQuery.mockResolvedValueOnce({
+        rows: [{ accepted_at: new Date("2026-08-08T00:00:00.000Z") }],
+      });
+
+      const response = await authenticatedRequest("post");
+
+      expect(response.status).toBe(200);
+      expect(response.body.data).toEqual({
+        accepted: true,
+        required: true,
+        termsVersion: "2026-08",
+        privacyVersion: "2026-08",
+        acceptedAt: "2026-08-08T00:00:00.000Z",
+      });
+      expect(mockQuery).toHaveBeenCalledWith(
+        expect.stringContaining("INSERT INTO legal_acceptances"),
+        [expect.stringMatching(/^[0-9a-f]{64}$/), "2026-08", "2026-08"],
+      );
+    });
+
+    it("requires CSRF protection when recording acceptance", async () => {
+      const token = generateToken(userEmail);
+      const response = await request(app)
+        .post("/api/auth/legal-acceptance")
+        .set("Cookie", [`zerodrive_token=${token}`])
+        .send({});
+
+      expect(response.status).toBe(403);
+      expect(mockQuery).not.toHaveBeenCalled();
     });
   });
 

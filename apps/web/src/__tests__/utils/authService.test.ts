@@ -7,6 +7,7 @@ import {
   isAuthenticated,
   getUserEmail,
   getAuthenticatedUser,
+  getGoogleUserProfile,
   logout,
   getCsrfToken,
   getGoogleTokenFromStorage,
@@ -165,6 +166,56 @@ describe("AuthService", () => {
     });
   });
 
+  describe("getGoogleUserProfile", () => {
+    it("returns the Google profile for frontend-only avatar display", async () => {
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          email: "person@example.com",
+          name: "Person Example",
+          picture: "https://example.com/person.png",
+        }),
+      });
+
+      await expect(getGoogleUserProfile("access-token")).resolves.toEqual({
+        email: "person@example.com",
+        name: "Person Example",
+        picture: "https://example.com/person.png",
+      });
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        "https://www.googleapis.com/oauth2/v2/userinfo",
+        expect.objectContaining({
+          headers: { Authorization: "Bearer access-token" },
+        }),
+      );
+    });
+
+    it("falls back to email-derived display name when Google omits a name", async () => {
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          email: "fallback@example.com",
+        }),
+      });
+
+      await expect(getGoogleUserProfile("access-token")).resolves.toEqual({
+        email: "fallback@example.com",
+        name: "fallback",
+        picture: "",
+      });
+    });
+
+    it("returns null when the profile request fails", async () => {
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: false,
+        status: 403,
+      });
+
+      await expect(getGoogleUserProfile("access-token")).resolves.toBeNull();
+    });
+  });
+
   describe("getCsrfToken", () => {
     it("should extract CSRF token from cookie", () => {
       document.cookie = "zerodrive_csrf=test-csrf-token";
@@ -307,8 +358,12 @@ describe("AuthService", () => {
       (global.fetch as jest.Mock).mockResolvedValue({
         ok: true,
         json: async () => ({
-          accessToken: "refreshed-access-token",
-          expiresAt: new Date(Date.now() + 60_000).toISOString(),
+          success: true,
+          data: {
+            accessToken: "refreshed-access-token",
+            expiresAt: new Date(Date.now() + 60_000).toISOString(),
+          },
+          message: "Google access token refreshed",
         }),
       });
 

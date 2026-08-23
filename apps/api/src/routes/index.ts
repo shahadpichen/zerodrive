@@ -38,6 +38,8 @@ router.get("/", (req, res) => {
         "GET /api/auth/google": "Initiate Google OAuth",
         "GET /api/auth/google/callback": "OAuth callback",
         "GET /api/auth/me": "Get current user",
+        "GET /api/auth/legal-acceptance": "Get legal acceptance status",
+        "POST /api/auth/legal-acceptance": "Record legal acceptance",
         "POST /api/auth/logout": "Logout",
         "POST /api/public-keys": "Store user public key",
         "GET /api/public-keys/:user_id": "Get user public key",

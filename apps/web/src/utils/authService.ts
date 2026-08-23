@@ -6,7 +6,10 @@
 import apiClient from "./apiClient";
 import logger from "./logger";
 import type { AuthenticatedUser } from "@zerodrive/shared-types";
-import { AUTH_SESSION_CLEARED_EVENT } from "./authEvents";
+import {
+  AUTH_SESSION_CLEARED_EVENT,
+  GOOGLE_DRIVE_PERMISSION_EVENT,
+} from "./authEvents";
 
 const API_URL = process.env.REACT_APP_API_URL || "http://localhost:3001/api";
 
@@ -139,43 +142,47 @@ export async function getAuthenticatedUser(): Promise<AuthenticatedUser | null> 
   }
 }
 
-/**
- * Get user profile info from Google (including profile picture)
- */
-export async function getUserProfile(): Promise<{
+export interface GoogleUserProfile {
   email: string;
   name: string;
   picture: string;
-} | null> {
-  try {
-    const token = await getOrFetchGoogleToken();
-    if (!token) {
-      logger.error("No Google token available to fetch user profile");
-      return null;
-    }
+}
 
+export async function getGoogleUserProfile(
+  accessToken: string,
+): Promise<GoogleUserProfile | null> {
+  try {
     const response = await fetch(
       "https://www.googleapis.com/oauth2/v2/userinfo",
       {
         headers: {
-          Authorization: `Bearer ${token}`,
+          Authorization: `Bearer ${accessToken}`,
         },
       },
     );
 
     if (!response.ok) {
-      logger.error("Failed to fetch user profile:", response.status);
+      logger.warn("[Auth] Failed to fetch Google profile", {
+        status: response.status,
+      });
       return null;
     }
 
-    const data = await response.json();
+    const data = (await response.json()) as {
+      email?: string;
+      name?: string;
+      picture?: string;
+    };
+
+    if (!data.email) return null;
+
     return {
       email: data.email,
       name: data.name || data.email.split("@")[0],
       picture: data.picture || "",
     };
   } catch (error) {
-    logger.error("Error fetching user profile:", error);
+    logger.warn("[Auth] Failed to fetch Google profile", error);
     return null;
   }
 }
@@ -248,8 +255,19 @@ async function refreshGoogleAccessToken(
       return null;
     }
 
-    const data = await response.json();
-    if (!data.accessToken || !data.expiresAt) {
+    const responseBody = (await response.json()) as {
+      success?: boolean;
+      data?: {
+        accessToken?: string;
+        expiresAt?: string;
+      };
+    };
+    const refreshedToken = responseBody.data;
+    if (
+      responseBody.success !== true ||
+      !refreshedToken?.accessToken ||
+      !refreshedToken.expiresAt
+    ) {
       logger.error("[Auth] Invalid refresh response");
       return null;
     }
@@ -257,15 +275,15 @@ async function refreshGoogleAccessToken(
     // Store new tokens
     await storeGoogleTokens(
       {
-        accessToken: data.accessToken,
-        expiresAt: new Date(data.expiresAt),
+        accessToken: refreshedToken.accessToken,
+        expiresAt: new Date(refreshedToken.expiresAt),
         scope: parsed.scope,
       },
       userEmail,
     );
 
     logger.log("[Auth] Google access token refreshed successfully");
-    return data.accessToken;
+    return refreshedToken.accessToken;
   } catch (error) {
     logger.error("[Auth] Error refreshing Google token:", error);
     return null;
@@ -392,6 +410,7 @@ export async function storeGoogleTokens(
       userEmail,
     };
     sessionStorage.setItem("google-tokens", JSON.stringify(stored));
+    window.dispatchEvent(new Event(GOOGLE_DRIVE_PERMISSION_EVENT));
     logger.log("[Auth] Stored Google tokens in sessionStorage", {
       expiresAt: tokens.expiresAt.toISOString(),
     });
@@ -407,6 +426,7 @@ export async function storeGoogleTokens(
 export function clearGoogleTokens(): void {
   googleTokenCache = null;
   sessionStorage.removeItem("google-tokens");
+  window.dispatchEvent(new Event(GOOGLE_DRIVE_PERMISSION_EVENT));
 }
 
 export async function clearSensitiveBrowserSession(): Promise<void> {
