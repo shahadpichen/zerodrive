@@ -358,8 +358,12 @@ describe("AuthService", () => {
       (global.fetch as jest.Mock).mockResolvedValue({
         ok: true,
         json: async () => ({
-          accessToken: "refreshed-access-token",
-          expiresAt: new Date(Date.now() + 60_000).toISOString(),
+          success: true,
+          data: {
+            accessToken: "refreshed-access-token",
+            expiresAt: new Date(Date.now() + 60_000).toISOString(),
+          },
+          message: "Google access token refreshed",
         }),
       });
 

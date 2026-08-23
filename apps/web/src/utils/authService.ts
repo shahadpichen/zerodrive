@@ -255,8 +255,19 @@ async function refreshGoogleAccessToken(
       return null;
     }
 
-    const data = await response.json();
-    if (!data.accessToken || !data.expiresAt) {
+    const responseBody = (await response.json()) as {
+      success?: boolean;
+      data?: {
+        accessToken?: string;
+        expiresAt?: string;
+      };
+    };
+    const refreshedToken = responseBody.data;
+    if (
+      responseBody.success !== true ||
+      !refreshedToken?.accessToken ||
+      !refreshedToken.expiresAt
+    ) {
       logger.error("[Auth] Invalid refresh response");
       return null;
     }
@@ -264,15 +275,15 @@ async function refreshGoogleAccessToken(
     // Store new tokens
     await storeGoogleTokens(
       {
-        accessToken: data.accessToken,
-        expiresAt: new Date(data.expiresAt),
+        accessToken: refreshedToken.accessToken,
+        expiresAt: new Date(refreshedToken.expiresAt),
         scope: parsed.scope,
       },
       userEmail,
     );
 
     logger.log("[Auth] Google access token refreshed successfully");
-    return data.accessToken;
+    return refreshedToken.accessToken;
   } catch (error) {
     logger.error("[Auth] Error refreshing Google token:", error);
     return null;
