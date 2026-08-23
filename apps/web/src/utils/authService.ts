@@ -6,7 +6,10 @@
 import apiClient from "./apiClient";
 import logger from "./logger";
 import type { AuthenticatedUser } from "@zerodrive/shared-types";
-import { AUTH_SESSION_CLEARED_EVENT } from "./authEvents";
+import {
+  AUTH_SESSION_CLEARED_EVENT,
+  GOOGLE_DRIVE_PERMISSION_EVENT,
+} from "./authEvents";
 
 const API_URL = process.env.REACT_APP_API_URL || "http://localhost:3001/api";
 
@@ -135,6 +138,51 @@ export async function getAuthenticatedUser(): Promise<AuthenticatedUser | null> 
     return response.success && response.data ? response.data : null;
   } catch (error) {
     logger.error("Failed to get authenticated user:", error);
+    return null;
+  }
+}
+
+export interface GoogleUserProfile {
+  email: string;
+  name: string;
+  picture: string;
+}
+
+export async function getGoogleUserProfile(
+  accessToken: string,
+): Promise<GoogleUserProfile | null> {
+  try {
+    const response = await fetch(
+      "https://www.googleapis.com/oauth2/v2/userinfo",
+      {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      },
+    );
+
+    if (!response.ok) {
+      logger.warn("[Auth] Failed to fetch Google profile", {
+        status: response.status,
+      });
+      return null;
+    }
+
+    const data = (await response.json()) as {
+      email?: string;
+      name?: string;
+      picture?: string;
+    };
+
+    if (!data.email) return null;
+
+    return {
+      email: data.email,
+      name: data.name || data.email.split("@")[0],
+      picture: data.picture || "",
+    };
+  } catch (error) {
+    logger.warn("[Auth] Failed to fetch Google profile", error);
     return null;
   }
 }
@@ -351,6 +399,7 @@ export async function storeGoogleTokens(
       userEmail,
     };
     sessionStorage.setItem("google-tokens", JSON.stringify(stored));
+    window.dispatchEvent(new Event(GOOGLE_DRIVE_PERMISSION_EVENT));
     logger.log("[Auth] Stored Google tokens in sessionStorage", {
       expiresAt: tokens.expiresAt.toISOString(),
     });
@@ -366,6 +415,7 @@ export async function storeGoogleTokens(
 export function clearGoogleTokens(): void {
   googleTokenCache = null;
   sessionStorage.removeItem("google-tokens");
+  window.dispatchEvent(new Event(GOOGLE_DRIVE_PERMISSION_EVENT));
 }
 
 export async function clearSensitiveBrowserSession(): Promise<void> {

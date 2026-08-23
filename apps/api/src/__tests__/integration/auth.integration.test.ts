@@ -24,14 +24,15 @@ jest.mock("../../config/database", () => ({
 const mockGetAuthUrl = jest.fn();
 const mockGetTokensFromCode = jest.fn();
 const mockGetUserInfo = jest.fn();
-const mockHasFullDriveScope = jest.fn();
+const mockHasRequiredGoogleDriveScopes = jest.fn();
 const mockRefreshAccessToken = jest.fn();
 
 jest.mock("../../services/googleOAuthService", () => ({
   getAuthUrl: (...args: any[]) => mockGetAuthUrl(...args),
   getTokensFromCode: (...args: any[]) => mockGetTokensFromCode(...args),
   getUserInfo: (...args: any[]) => mockGetUserInfo(...args),
-  hasFullDriveScope: (...args: any[]) => mockHasFullDriveScope(...args),
+  hasRequiredGoogleDriveScopes: (...args: any[]) =>
+    mockHasRequiredGoogleDriveScopes(...args),
   refreshAccessToken: (...args: any[]) => mockRefreshAccessToken(...args),
 }));
 
@@ -108,7 +109,7 @@ describe("Auth Routes Integration", () => {
         verified: true,
       });
 
-      mockHasFullDriveScope.mockReturnValue(true);
+      mockHasRequiredGoogleDriveScopes.mockReturnValue(true);
 
       // Mock database query - no existing public key (new user)
       mockQuery.mockResolvedValue({ rows: [] });

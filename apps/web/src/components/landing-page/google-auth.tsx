@@ -78,8 +78,9 @@ export const GoogleAuth: React.FC<GoogleAuthProps> = ({ theme = "dark" }) => {
               cannot read your original files or reset your recovery phrase.
             </p>
             <p>
-              ZeroDrive asks for your Google account email for sign-in, plus
-              limited Drive access for encrypted files and hidden app metadata.
+              ZeroDrive asks for your basic Google profile for the account
+              name/avatar, plus limited Drive access for encrypted files and
+              hidden app metadata.
             </p>
             <p>
               After sign-in, ZeroDrive will ask you to review the{" "}

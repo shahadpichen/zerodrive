@@ -7,7 +7,7 @@ export const privacyPolicy = [
   {
     heading: "What ZeroDrive asks Google for",
     content:
-      "ZeroDrive uses Google sign-in so the app can connect the browser session to the correct Google Drive. We ask for your Google account email for sign-in, limited Drive access for files ZeroDrive creates or uses, and app data access for hidden ZeroDrive metadata such as the vault index and encrypted key backups. We do not request Google profile photo access. Google may send you an account-access email after you approve these permissions; that email is controlled by Google and summarizes the access you granted.",
+      "ZeroDrive uses Google sign-in so the app can connect the browser session to the correct Google Drive. We ask for your basic Google profile, including name, email address, and profile picture, so the interface can show the correct account. We also ask for limited Drive access for files ZeroDrive creates or uses, and app data access for hidden ZeroDrive metadata such as the vault index and encrypted key backups. Google may send you an account-access email after you approve these permissions; that email is controlled by Google and summarizes the access you granted.",
   },
   {
     heading: "Files and vault metadata",

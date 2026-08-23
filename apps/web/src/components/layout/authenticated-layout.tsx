@@ -7,6 +7,7 @@ import {
   VAULT_INDEX_MIGRATION_NOTICE_EVENT,
 } from "../../utils/vaultIndexDriveStorage";
 import { LegalAcceptanceReminder } from "../legal-acceptance-gate";
+import { GoogleDrivePermissionReminder } from "../google-drive-permission-gate";
 
 function AuthenticatedLayoutContent({
   children,
@@ -70,7 +71,10 @@ function AuthenticatedLayoutContent({
             <ArrowLeft className="h-4 w-4" />
             Home
           </button>
-          <LegalAcceptanceReminder />
+          <div className="flex items-center gap-3">
+            <GoogleDrivePermissionReminder />
+            <LegalAcceptanceReminder />
+          </div>
         </div>
 
         {shouldShowDecryptionNotice && (

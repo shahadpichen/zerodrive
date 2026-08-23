@@ -12,7 +12,11 @@ import {
 } from "lucide-react";
 import { useApp } from "../contexts/app-context";
 import { ModeToggle } from "../components/mode-toggle";
-import { Avatar, AvatarFallback } from "../components/ui/avatar";
+import {
+  Avatar,
+  AvatarFallback,
+  AvatarImage,
+} from "../components/ui/avatar";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -61,6 +65,7 @@ import {
 } from "../utils/homeDashboardCache";
 import { useVaultData } from "../contexts/vault-data-context";
 import { LegalAcceptanceReminder } from "../components/legal-acceptance-gate";
+import { GoogleDrivePermissionReminder } from "../components/google-drive-permission-gate";
 
 type LockedSharingDestination = "share" | "inbox";
 
@@ -84,6 +89,7 @@ function HomeContent() {
   const {
     userEmail,
     userName,
+    userImage,
     storageInfo,
     setUserInfo,
     setDecryptionError,
@@ -455,6 +461,7 @@ function HomeContent() {
           >
             Star on GitHub
           </a>
+          <GoogleDrivePermissionReminder className="hidden sm:inline-flex" />
           <LegalAcceptanceReminder className="hidden sm:inline-flex" />
           <ModeToggle />
           {userEmail && (
@@ -462,6 +469,12 @@ function HomeContent() {
               <DropdownMenuTrigger asChild>
                 <button aria-label="Account menu" className="rounded-full">
                   <Avatar className="h-9 w-9">
+                    {userImage && (
+                      <AvatarImage
+                        src={userImage}
+                        alt={userName || userEmail}
+                      />
+                    )}
                     <AvatarFallback>
                       {initials(userName, userEmail)}
                     </AvatarFallback>

@@ -44,6 +44,7 @@ import { useOptionalVaultData } from "../contexts/vault-data-context";
 import { rememberVaultMetadataStatus } from "../utils/vaultMetadataWriteGuard";
 import { toast } from "sonner";
 import { inspectSharedMetadataCapsule } from "../utils/capsuleAdapter";
+import { ensureGoogleDrivePermissionForAction } from "../utils/googleDrivePermissions";
 import type { UserKeyPair } from "../utils/fileSharing";
 import type {
   JsonObject,
@@ -440,6 +441,10 @@ const SharedWithMePage: React.FC = () => {
   const handleFileAction = async (file: SharedFile, action: FileAction) => {
     if (!userEmail || !sharingPrivateKey || processing || !requireReadyKeys())
       return;
+
+    if (action === "save" && !ensureGoogleDrivePermissionForAction("save")) {
+      return;
+    }
 
     setProcessing({ fileId: file.id, action, stage: "downloading" });
     try {

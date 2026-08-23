@@ -28,6 +28,7 @@ const oauth2Client = new google.auth.OAuth2(
 export function getAuthUrl(state: string): string {
   const scopes = [
     "https://www.googleapis.com/auth/userinfo.email",
+    "https://www.googleapis.com/auth/userinfo.profile",
     "https://www.googleapis.com/auth/drive.file", // ZeroDrive file access
     "https://www.googleapis.com/auth/drive.appdata", // RSA key backup to appDataFolder
   ];
@@ -93,7 +94,9 @@ export async function getUserInfo(accessToken: string): Promise<{
 
     // Get user info
     const oauth2 = google.oauth2({ version: "v2", auth: oauth2Client });
-    const { data } = await oauth2.userinfo.get();
+    const { data } = await oauth2.userinfo.get({
+      fields: "email,verified_email",
+    });
 
     if (!data.email) {
       throw new Error("No email returned from Google");
@@ -122,6 +125,22 @@ export function hasFullDriveScope(grantedScopes: string): boolean {
     grantedScopes.includes("https://www.googleapis.com/auth/drive.file") ||
     grantedScopes.includes("https://www.googleapis.com/auth/drive")
   );
+}
+
+/**
+ * Check if granted scopes include everything ZeroDrive needs for Drive-backed
+ * Storage: app-selected encrypted files plus hidden appDataFolder metadata.
+ */
+export function hasRequiredGoogleDriveScopes(grantedScopes: string): boolean {
+  const scopes = new Set(grantedScopes.split(/\s+/).filter(Boolean));
+  const hasFileScope =
+    scopes.has("https://www.googleapis.com/auth/drive.file") ||
+    scopes.has("https://www.googleapis.com/auth/drive");
+  const hasAppDataScope = scopes.has(
+    "https://www.googleapis.com/auth/drive.appdata",
+  );
+
+  return hasFileScope && hasAppDataScope;
 }
 
 /**

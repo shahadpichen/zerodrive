@@ -14,11 +14,12 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "../ui/dropdown-menu";
-import { Avatar, AvatarFallback } from "../ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "../ui/avatar";
 
 function Header() {
   const navigate = useNavigate();
-  const { storageInfo, userEmail, userName, hasDecryptionError } = useApp();
+  const { storageInfo, userEmail, userName, userImage, hasDecryptionError } =
+    useApp();
   const { toggle } = useSidebar();
 
   const getUserInitials = (name: string, email: string) => {
@@ -120,6 +121,12 @@ function Header() {
                   aria-label={`Account menu for ${userName || userEmail}`}
                 >
                   <Avatar className="h-10 w-10">
+                    {userImage && (
+                      <AvatarImage
+                        src={userImage}
+                        alt={userName || userEmail}
+                      />
+                    )}
                     <AvatarFallback>
                       {getUserInitials(userName, userEmail)}
                     </AvatarFallback>

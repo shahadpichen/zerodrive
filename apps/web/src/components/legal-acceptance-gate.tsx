@@ -21,6 +21,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "./ui/dialog";
+import { useGoogleDrivePermissions } from "./google-drive-permission-gate";
 
 interface RefreshOptions {
   promptIfRequired?: boolean;
@@ -313,13 +314,15 @@ export function LegalAcceptanceGate({
   promptIfRequired?: boolean;
 }) {
   const legal = useLegalAcceptance();
+  const drivePermissions = useGoogleDrivePermissions();
+  const { refresh } = legal;
 
   useEffect(() => {
-    void legal.refresh({ promptIfRequired });
-    // This must run only when the gate mounts. The provider owns subsequent
-    // state changes and prevents the modal from reopening repeatedly.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    void refresh({
+      promptIfRequired:
+        promptIfRequired && !drivePermissions.hasMissingRequiredScopes,
+    });
+  }, [drivePermissions.hasMissingRequiredScopes, promptIfRequired, refresh]);
 
   if (!requireAcceptance) {
     return <>{children}</>;

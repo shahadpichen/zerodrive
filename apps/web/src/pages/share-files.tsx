@@ -50,6 +50,7 @@ import { uploadEncryptedRsaKeyToDrive } from "../utils/gdriveKeyStorage";
 import { getMnemonic } from "../utils/mnemonicManager";
 import { recoverRsaKeysIfNeeded } from "../utils/rsaKeyRecovery";
 import { createSharingKeyBackupCapsule } from "../utils/capsuleAdapter";
+import { ensureGoogleDrivePermissionForAction } from "../utils/googleDrivePermissions";
 
 type PageState =
   | "checking"
@@ -512,6 +513,8 @@ const ShareFilesPage: React.FC = () => {
   };
 
   const continueToReview = async () => {
+    if (!ensureGoogleDrivePermissionForAction("share")) return;
+
     if (!hasSelectedFile) {
       setShareError("Choose a file before continuing.");
       return;
@@ -579,6 +582,8 @@ const ShareFilesPage: React.FC = () => {
 
   const handleShareFile = async () => {
     if (!hasSelectedFile || !senderEmail || !recipientVerified) return;
+
+    if (!ensureGoogleDrivePermissionForAction("share")) return;
 
     if (!getMnemonic()) {
       setShareError("Set up vault access before sharing files.");

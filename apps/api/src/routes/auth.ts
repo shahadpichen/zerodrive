@@ -9,7 +9,7 @@ import {
   getAuthUrl,
   getTokensFromCode,
   getUserInfo,
-  hasFullDriveScope,
+  hasRequiredGoogleDriveScopes,
   refreshAccessToken,
 } from "../services/googleOAuthService";
 import {
@@ -172,8 +172,8 @@ router.get(
       );
       const isNewUser = publicKeyResult.rows.length === 0;
 
-      // Check if user granted full Drive scope
-      const hasLimitedScope = !hasFullDriveScope(scope);
+      // Check if user granted the Drive scopes ZeroDrive needs for Storage.
+      const hasLimitedScope = !hasRequiredGoogleDriveScopes(scope);
 
       // NO LONGER STORING TOKENS IN DATABASE - Zero-knowledge architecture!
       // Frontend stores tokens in sessionStorage (cleared on tab close)

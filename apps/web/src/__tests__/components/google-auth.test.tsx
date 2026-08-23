@@ -44,6 +44,9 @@ describe("GoogleAuth Component", () => {
     expect(
       screen.getByText(/google may show a permission screen/i),
     ).toBeInTheDocument();
+    expect(
+      screen.getByText(/basic google profile for the account name\/avatar/i),
+    ).toBeInTheDocument();
     expect(mockLogin).not.toHaveBeenCalled();
   });
 

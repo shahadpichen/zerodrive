@@ -43,6 +43,7 @@ import {
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
 import { useVaultData } from "../contexts/vault-data-context";
+import { ensureGoogleDrivePermissionForAction } from "../utils/googleDrivePermissions";
 
 // Imports for sharing key functionality (kept for potential future use)
 import { recoverRsaKeysIfNeeded } from "../utils/rsaKeyRecovery";
@@ -310,6 +311,8 @@ function PrivateStorageContent() {
   }, [userEmail]);
 
   const handleRefreshFiles = async () => {
+    if (!ensureGoogleDrivePermissionForAction("storage")) return;
+
     if (!userEmail) {
       toast.error("User information not available to refresh files.");
       return;
@@ -364,6 +367,8 @@ function PrivateStorageContent() {
   };
 
   const handleUploadTriggerInternal = useCallback(async () => {
+    if (!ensureGoogleDrivePermissionForAction("upload")) return;
+
     if (isVaultSafetyCheckPending) {
       toast.info("Checking vault metadata", {
         description:
@@ -415,6 +420,8 @@ function PrivateStorageContent() {
     options: { skipMetadataReplaceWarning?: boolean } = {},
   ) => {
     if (filesToUpload.length === 0 || !userEmail) return;
+
+    if (!ensureGoogleDrivePermissionForAction("upload")) return;
 
     if (isVaultSafetyCheckPending) {
       toast.info("Checking vault metadata", {
@@ -525,6 +532,11 @@ function PrivateStorageContent() {
   const performDeleteAllFiles = async () => {
     if (!userEmail) return;
 
+    if (!ensureGoogleDrivePermissionForAction("storage")) {
+      setShowDeleteConfirm(false);
+      return;
+    }
+
     if (!isVaultMetadataWriteSafe) {
       showVaultMetadataBlockedToast();
       setShowDeleteConfirm(false);
@@ -618,7 +630,10 @@ function PrivateStorageContent() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => setShowCreateFolder(true)}
+                onClick={() => {
+                  if (!ensureGoogleDrivePermissionForAction("folder")) return;
+                  setShowCreateFolder(true);
+                }}
                 disabled={isLoadingUserFiles || !isVaultMetadataWriteSafe}
               >
                 <FolderPlus className="h-4 w-4 mr-2" />

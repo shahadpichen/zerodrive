@@ -9,11 +9,16 @@ import React, { useEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
-import { getUserEmail, storeGoogleTokens } from "../utils/authService";
+import {
+  getGoogleUserProfile,
+  getUserEmail,
+  storeGoogleTokens,
+} from "../utils/authService";
 import apiClient from "../utils/apiClient";
 import logger from "../utils/logger";
 import { queueHomeLoginWelcome } from "../utils/homeWelcome";
 import { useApp } from "../contexts/app-context";
+import { hasRequiredGoogleDriveScopes } from "../utils/googleDrivePermissions";
 
 const OAuthCallback: React.FC = () => {
   const navigate = useNavigate();
@@ -116,7 +121,15 @@ const OAuthCallback: React.FC = () => {
             !!storedData,
           );
 
-          setUserInfo(userEmail, userEmail.split("@")[0]);
+          const profile = await getGoogleUserProfile(tokenData.accessToken);
+          if (
+            profile &&
+            profile.email.trim().toLowerCase() === userEmail.trim().toLowerCase()
+          ) {
+            setUserInfo(userEmail, profile.name, profile.picture);
+          } else {
+            setUserInfo(userEmail, userEmail.split("@")[0]);
+          }
 
           queueHomeLoginWelcome();
 
@@ -124,9 +137,11 @@ const OAuthCallback: React.FC = () => {
           const hasLimitedScope = tokenData.hasLimitedScope;
 
           if (hasLimitedScope) {
-            toast.warning("Limited permissions granted", {
+            toast.warning("Google Drive permission is incomplete", {
               description:
-                "Some features may not work without full Google Drive access",
+                hasRequiredGoogleDriveScopes(tokenData.scope)
+                  ? "Google reported limited access, but the required Drive permissions are present."
+                  : "Storage and sharing stay locked until Drive access is granted.",
             });
           } else if (isNewUser) {
             toast.success("Welcome to ZeroDrive!", {
