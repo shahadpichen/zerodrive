@@ -24,8 +24,9 @@ export async function ensureGoogleDriveConnected(
     minValidityMs: minTokenValidityMs,
   });
   if (!token) {
-    throw new Error(
+    throw new GoogleDriveRequestError(
       "Google Drive is not connected. Sign in again and retry.",
+      401,
     );
   }
 }
@@ -62,8 +63,9 @@ export async function googleDriveFetch(
     minValidityMs: minTokenValidityMs,
   });
   if (!token) {
-    throw new Error(
+    throw new GoogleDriveRequestError(
       "Google Drive is not connected. Sign in again and retry.",
+      401,
     );
   }
 
