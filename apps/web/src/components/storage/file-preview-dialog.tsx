@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   Dialog,
   DialogContent,
@@ -49,6 +49,7 @@ export const FilePreviewDialog: React.FC<FilePreviewDialogProps> = ({
   onDownload,
 }) => {
   const [isDecrypting, setIsDecrypting] = useState(false);
+  const [isTakingLong, setIsTakingLong] = useState(false);
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
   const [blob, setBlob] = useState<Blob | null>(null);
   const [textContent, setTextContent] = useState<string | null>(null);
@@ -57,10 +58,15 @@ export const FilePreviewDialog: React.FC<FilePreviewDialogProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [numPages, setNumPages] = useState<number>(0);
   const [pageNumber, setPageNumber] = useState<number>(1);
+  const previewAbortControllerRef = useRef<AbortController | null>(null);
   const previewType = getPreviewType(mimeType, fileName);
 
   const decryptAndPreview = async () => {
+    previewAbortControllerRef.current?.abort();
+    const abortController = new AbortController();
+    previewAbortControllerRef.current = abortController;
     setIsDecrypting(true);
+    setIsTakingLong(false);
     setError(null);
 
     try {
@@ -70,7 +76,12 @@ export const FilePreviewDialog: React.FC<FilePreviewDialogProps> = ({
         mimeType,
         objectId,
         revision,
+        abortController.signal,
       );
+      if (abortController.signal.aborted) {
+        URL.revokeObjectURL(result.blobUrl);
+        return;
+      }
       setBlobUrl(result.blobUrl);
       setBlob(result.blob);
 
@@ -96,6 +107,9 @@ export const FilePreviewDialog: React.FC<FilePreviewDialogProps> = ({
         setSpreadsheetHtml(html);
       }
     } catch (err: any) {
+      if (abortController.signal.aborted || err?.name === "AbortError") {
+        return;
+      }
       console.error("Preview error:", err);
 
       const errorMessage = err.message || "Unknown error";
@@ -125,7 +139,10 @@ export const FilePreviewDialog: React.FC<FilePreviewDialogProps> = ({
         setError(errorMessage);
       }
     } finally {
-      setIsDecrypting(false);
+      if (previewAbortControllerRef.current === abortController) {
+        previewAbortControllerRef.current = null;
+        setIsDecrypting(false);
+      }
     }
   };
 
@@ -137,7 +154,24 @@ export const FilePreviewDialog: React.FC<FilePreviewDialogProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, fileId]);
 
-  // Cleanup blob URL when dialog closes
+  useEffect(() => {
+    if (!isDecrypting) {
+      setIsTakingLong(false);
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setIsTakingLong(true);
+    }, 60_000);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [isDecrypting]);
+
+  useEffect(() => {
+    return () => previewAbortControllerRef.current?.abort();
+  }, []);
+
+  // Cleanup blob URL when it changes or the dialog unmounts.
   useEffect(() => {
     return () => {
       if (blobUrl) {
@@ -147,6 +181,8 @@ export const FilePreviewDialog: React.FC<FilePreviewDialogProps> = ({
   }, [blobUrl]);
 
   const handleClose = () => {
+    previewAbortControllerRef.current?.abort();
+    previewAbortControllerRef.current = null;
     if (blobUrl) {
       URL.revokeObjectURL(blobUrl);
     }
@@ -157,6 +193,7 @@ export const FilePreviewDialog: React.FC<FilePreviewDialogProps> = ({
     setSpreadsheetHtml(null);
     setError(null);
     setIsDecrypting(false);
+    setIsTakingLong(false);
     setNumPages(0);
     setPageNumber(1);
     onOpenChange(false);
@@ -173,6 +210,12 @@ export const FilePreviewDialog: React.FC<FilePreviewDialogProps> = ({
         <div className="flex flex-col items-center justify-center py-12 space-y-4">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
           <p className="text-sm text-muted-foreground">Decrypting file...</p>
+          {isTakingLong && (
+            <p className="max-w-md text-center text-sm leading-relaxed text-muted-foreground">
+              This file is taking longer than expected. You can keep waiting or
+              download it and open it on your device.
+            </p>
+          )}
         </div>
       );
     }
@@ -322,7 +365,11 @@ export const FilePreviewDialog: React.FC<FilePreviewDialogProps> = ({
       default:
         return (
           <div className="flex flex-col items-center justify-center py-12 space-y-4">
-            <img src={getFileIconPath(mimeType, fileName)} alt="" className="w-16 h-16" />
+            <img
+              src={getFileIconPath(mimeType, fileName)}
+              alt=""
+              className="w-16 h-16"
+            />
             <div className="text-center space-y-2">
               <p className="font-medium">
                 Preview not available for this file type
@@ -349,10 +396,10 @@ export const FilePreviewDialog: React.FC<FilePreviewDialogProps> = ({
           <Button
             onClick={handleDownload}
             variant="default"
-            disabled={isDecrypting}
+            disabled={isDecrypting && !isTakingLong}
           >
             <Download className="h-4 w-4 mr-2" />
-            Download
+            {isDecrypting && isTakingLong ? "Download instead" : "Download"}
           </Button>
         </DialogFooter>
       </DialogContent>

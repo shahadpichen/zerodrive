@@ -108,6 +108,7 @@ export async function decryptFileForPreview(
   mimeType: string,
   objectId?: string,
   revision?: number,
+  signal?: AbortSignal,
 ): Promise<{ blobUrl: string; blob: Blob; mimeType?: string }> {
   // Check for encryption key
   const key = await getStoredKey();
@@ -122,6 +123,7 @@ export async function decryptFileForPreview(
     `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`,
     {
       method: "GET",
+      signal,
     },
   );
 
@@ -132,6 +134,7 @@ export async function decryptFileForPreview(
   }
 
   const encryptedBlob = await response.blob();
+  signal?.throwIfAborted();
 
   // Decrypt the file
   const decrypted = await decryptFile(encryptedBlob, {
@@ -140,6 +143,7 @@ export async function decryptFileForPreview(
     objectId,
     revision,
   });
+  signal?.throwIfAborted();
   const typedBlob = decrypted.contentBlob;
   let previewBlob = typedBlob;
 
