@@ -77,6 +77,9 @@ export function UploadQueueTray() {
   const canClear = tasks.some(
     (task) => task.status === "complete" || task.status === "canceled",
   );
+  const canDismiss = tasks.every(
+    (task) => task.status === "complete" || task.status === "canceled",
+  );
   const isAuthenticatedPath = AUTHENTICATED_PATHS.some((path) =>
     path.endsWith("/")
       ? location.pathname.startsWith(path)
@@ -104,7 +107,7 @@ export function UploadQueueTray() {
           </div>
         </div>
         <div className="flex items-center gap-1">
-          {canClear && (
+          {canClear && !canDismiss && (
             <Button
               variant="ghost"
               size="sm"
@@ -112,6 +115,17 @@ export function UploadQueueTray() {
               className="h-7 px-2 text-[11px]"
             >
               Clear finished
+            </Button>
+          )}
+          {canDismiss && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7"
+              onClick={clearCompleted}
+              aria-label="Close finished uploads"
+            >
+              <X className="h-4 w-4" />
             </Button>
           )}
           <Button
