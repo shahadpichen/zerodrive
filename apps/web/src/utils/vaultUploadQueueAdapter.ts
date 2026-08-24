@@ -29,8 +29,6 @@ import {
 import { getSessionUser } from "./sessionManager";
 import { withVaultMetadataCommitLock } from "./vaultMetadataCommitCoordinator";
 
-export const MAX_UPLOAD_SIZE_BYTES = 100 * 1024 * 1024;
-
 export interface VaultUploadSource {
   sourceId: string;
 }
@@ -220,13 +218,10 @@ export function createVaultUploadQueueAdapter(
             "The selected file is no longer available. Choose it again.",
           );
         }
-        if (file.size > MAX_UPLOAD_SIZE_BYTES) {
-          throw new UploadQueueError(
-            "FILE_TOO_LARGE",
-            "The maximum file size is 100 MB.",
-          );
-        }
-
+        // Storage follows the user's Google Drive quota instead of imposing a
+        // separate ZeroDrive size cap. Encryption still buffers one file per
+        // active queue worker; streaming encryption and resumable Drive upload
+        // remain the path to reliably handling very large files.
         context.throwIfCanceled();
         const recoveryPhraseSession = captureActiveRecoveryPhraseSession();
         const objectId = crypto.randomUUID();

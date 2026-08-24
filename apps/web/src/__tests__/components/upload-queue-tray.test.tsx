@@ -99,4 +99,51 @@ describe("UploadQueueTray", () => {
       screen.queryByRole("complementary", { name: "Upload queue" }),
     ).not.toBeInTheDocument();
   });
+
+  it("keeps a large queue inside a bounded scroll region", () => {
+    mockUseUploadQueue.mockReturnValue({
+      snapshot: {
+        running: true,
+        activeCount: 2,
+        tasks: Array.from({ length: 100 }, (_, index) => ({
+          id: `upload-${index + 1}`,
+          source: { sourceId: `upload-${index + 1}` },
+          name: `file-${index + 1}.mov`,
+          size: 1,
+          mimeType: "video/quicktime",
+          metadata: {
+            userEmail: "owner@example.com",
+            folderId: null,
+            allowMetadataReplacement: false,
+          },
+          status: "waiting" as const,
+          progress: 0,
+          attempts: 0,
+          createdAt: index,
+          updatedAt: index,
+        })),
+      },
+      enqueueUploads: jest.fn(),
+      hasPendingUploads: jest.fn().mockReturnValue(true),
+      tryAcquireUploadExclusion: jest.fn().mockReturnValue(null),
+      waitForTask: jest.fn(),
+      retry,
+      cancel,
+      clearCompleted,
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/storage"]}>
+        <UploadQueueTray />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText("100 active · 100 total")).toBeInTheDocument();
+    expect(screen.getByText("file-1.mov")).toBeInTheDocument();
+    expect(screen.getByText("file-100.mov")).toBeInTheDocument();
+    expect(screen.getByTestId("upload-queue-scroll-region")).toHaveClass(
+      "max-h-80",
+      "overflow-y-auto",
+    );
+  });
 });

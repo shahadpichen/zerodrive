@@ -35,7 +35,6 @@ const ACTIVE_STATUSES = new Set<UploadQueueTaskStatus>([
 ]);
 
 const NON_RETRYABLE_ERROR_CODES = new Set([
-  "FILE_TOO_LARGE",
   "UPLOAD_SOURCE_MISSING",
   "UPLOAD_ACCOUNT_CHANGED",
   "VAULT_ACCESS_CHANGED",
@@ -132,7 +131,10 @@ export function UploadQueueTray() {
       </div>
 
       {!collapsed && (
-        <div className="max-h-80 overflow-y-auto">
+        <div
+          className="max-h-80 overflow-y-auto"
+          data-testid="upload-queue-scroll-region"
+        >
           {tasks.map((task) => {
             const active = ACTIVE_STATUSES.has(task.status);
             const failed = task.status === "failed";

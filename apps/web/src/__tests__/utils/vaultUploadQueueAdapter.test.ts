@@ -1,7 +1,6 @@
 import { createUploadQueue, type UploadQueue } from "@zerodrivehq/upload-queue";
 import {
   createVaultUploadQueueAdapter,
-  MAX_UPLOAD_SIZE_BYTES,
   type PreparedVaultUpload,
   type UploadedVaultUpload,
   type VaultUploadMetadata,
@@ -263,22 +262,25 @@ describe("vault upload queue adapter", () => {
     expect(sendToGoogleDrive).toHaveBeenCalledTimes(2);
   });
 
-  it("fails before encryption when a selected file exceeds 100 MB", async () => {
-    const oversized = new File(["x"], "large.bin");
-    Object.defineProperty(oversized, "size", {
+  it("does not impose the former 100 MB Storage limit", async () => {
+    const largeFile = new File(["x"], "large.bin");
+    Object.defineProperty(largeFile, "size", {
       configurable: true,
-      value: MAX_UPLOAD_SIZE_BYTES + 1,
+      value: 101 * 1024 * 1024,
     });
     const queue = createQueue();
-    const taskId = enqueue(queue, oversized);
+    const taskId = enqueue(queue, largeFile);
     const terminal = waitForTerminal(queue, taskId);
     queue.start();
 
     const task = await terminal;
-    expect(task.status).toBe("failed");
-    expect(task.error?.code).toBe("FILE_TOO_LARGE");
-    expect(mockEncryptFile).not.toHaveBeenCalled();
-    expect(mockGoogleDriveFetch).not.toHaveBeenCalled();
+    expect(task.status).toBe("complete");
+    expect(mockEncryptFile).toHaveBeenCalledWith(
+      largeFile,
+      expect.any(String),
+      expect.any(String),
+    );
+    expect(mockGoogleDriveFetch).toHaveBeenCalled();
     expect(sourceFiles.has(taskId)).toBe(false);
   });
 
