@@ -203,12 +203,14 @@ describe("UploadQueueProvider", () => {
     fireEvent.click(screen.getByRole("button", { name: "Upload" }));
     await waitFor(() => {
       expect(screen.getByTestId("statuses")).toHaveTextContent("failed");
+      expect(screen.getByTestId("pending")).toHaveTextContent("true");
     });
 
     await prepareForAuthSessionClear();
     await waitFor(() => expect(cleanup).toHaveBeenCalled());
     await waitFor(() => {
       expect(screen.getByTestId("statuses")).toHaveTextContent("canceled");
+      expect(screen.getByTestId("pending")).toHaveTextContent("false");
     });
   });
 });

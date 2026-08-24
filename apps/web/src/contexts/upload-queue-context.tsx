@@ -91,10 +91,9 @@ function snapshotHasPendingUploads(
     if (task.metadata?.userEmail.trim().toLowerCase() !== normalizedUserEmail) {
       return false;
     }
-    return (
-      UNFINISHED_STATUSES.has(task.status) ||
-      (task.status === "failed" && task.error?.retryable === true)
-    );
+    // Failed tasks remain manually retryable and may retain prepared/uploaded
+    // artifacts. They must block destructive vault operations until canceled.
+    return UNFINISHED_STATUSES.has(task.status) || task.status === "failed";
   });
 }
 
