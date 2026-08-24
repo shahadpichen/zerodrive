@@ -1,19 +1,14 @@
-import { toast } from "sonner";
+import { userNotifications as toast } from "./userNotifications";
 import { login } from "./authService";
 
-export const DRIVE_FILE_SCOPE =
-  "https://www.googleapis.com/auth/drive.file";
+export const DRIVE_FILE_SCOPE = "https://www.googleapis.com/auth/drive.file";
 export const DRIVE_APPDATA_SCOPE =
   "https://www.googleapis.com/auth/drive.appdata";
 export const FULL_DRIVE_SCOPE = "https://www.googleapis.com/auth/drive";
 
 export type MissingGoogleDriveScope = "drive.file" | "drive.appdata";
 export type GoogleDrivePermissionIntent =
-  | "storage"
-  | "upload"
-  | "folder"
-  | "share"
-  | "save";
+  "storage" | "upload" | "folder" | "share" | "save";
 
 interface StoredGoogleTokens {
   scope?: string;
@@ -25,23 +20,19 @@ const intentCopy: Record<
 > = {
   storage: {
     title: "Google Drive permission is incomplete",
-    description:
-      "Grant Drive access before opening encrypted Storage.",
+    description: "Grant Drive access before opening encrypted Storage.",
   },
   upload: {
     title: "Google Drive permission is incomplete",
-    description:
-      "Grant Drive access before uploading encrypted files.",
+    description: "Grant Drive access before uploading encrypted files.",
   },
   folder: {
     title: "Google Drive permission is incomplete",
-    description:
-      "Grant Drive access before creating encrypted folders.",
+    description: "Grant Drive access before creating encrypted folders.",
   },
   share: {
     title: "Google Drive permission is incomplete",
-    description:
-      "Grant Drive access before creating an encrypted share.",
+    description: "Grant Drive access before creating an encrypted share.",
   },
   save: {
     title: "Google Drive permission is incomplete",
@@ -50,7 +41,9 @@ const intentCopy: Record<
   },
 };
 
-export function parseGoogleScopes(scope: string | null | undefined): Set<string> {
+export function parseGoogleScopes(
+  scope: string | null | undefined,
+): Set<string> {
   return new Set((scope || "").split(/\s+/).filter(Boolean));
 }
 
@@ -104,7 +97,10 @@ export function describeMissingGoogleDriveScopes(
     return "Google Drive access is ready.";
   }
 
-  if (missingScopes.includes("drive.file") && missingScopes.includes("drive.appdata")) {
+  if (
+    missingScopes.includes("drive.file") &&
+    missingScopes.includes("drive.appdata")
+  ) {
     return "ZeroDrive needs permission for encrypted files and hidden vault metadata.";
   }
 
@@ -121,6 +117,7 @@ export function showMissingGoogleDrivePermissionToast(
   const copy = intentCopy[intent];
 
   toast.warning(copy.title, {
+    id: `drive-permission:${intent}`,
     description: copy.description,
     action: {
       label: "Grant access",

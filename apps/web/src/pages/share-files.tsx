@@ -16,7 +16,7 @@ import {
   Upload,
   X,
 } from "lucide-react";
-import { toast } from "sonner";
+import { userNotifications as toast } from "../utils/userNotifications";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
@@ -83,7 +83,9 @@ function normalizeEmail(email: string): string {
   return email.trim().toLowerCase();
 }
 
-function readCachedShareSetupState(email: string): CachedShareSetupState | null {
+function readCachedShareSetupState(
+  email: string,
+): CachedShareSetupState | null {
   const normalizedEmail = normalizeEmail(email);
   if (!normalizedEmail) return null;
 
@@ -271,7 +273,7 @@ const ShareFilesPage: React.FC = () => {
         }
 
         const [result, serverPublicKey] = await Promise.all([
-          recoverRsaKeysIfNeeded(email, true),
+          recoverRsaKeysIfNeeded(email),
           fetchUserPublicKey(email).catch(() => null),
         ]);
         if (!active) return;
@@ -323,7 +325,7 @@ const ShareFilesPage: React.FC = () => {
       const mnemonic = getMnemonic();
 
       if (!mnemonic) {
-        toast.info("Set up your encryption key first");
+        toast.info("Set up vault access first", { id: "share:vault-access" });
         openKeyManagement();
         return;
       }
@@ -357,15 +359,13 @@ const ShareFilesPage: React.FC = () => {
         throw error;
       }
 
-      toast.success("File sharing is ready");
+      toast.success("Sharing identity is ready", { id: "share:identity" });
       writeCachedShareSetupState(senderEmail, "compose");
       setPageState("compose");
     } catch (error) {
       console.error("[Share] Failed to enable sharing:", error);
       setShareError(
-        error instanceof Error
-          ? error.message
-          : "Sharing setup failed. Check your connection and try again.",
+        "Sharing identity could not be created. Check your Google Drive connection and retry.",
       );
     } finally {
       setIsGeneratingKeys(false);
@@ -625,9 +625,7 @@ const ShareFilesPage: React.FC = () => {
       }
 
       setShareError(
-        error instanceof Error
-          ? error.message
-          : "The file could not be shared. Try again.",
+        "The file could not be shared. Check your connection and retry.",
       );
       setPageState("review");
     }
@@ -646,14 +644,11 @@ const ShareFilesPage: React.FC = () => {
       setInvitationSent(true);
       toast.success("Invitation sent", {
         description: `${result.remaining} invitations remaining this hour.`,
+        id: "share:invitation",
       });
     } catch (error) {
       console.error("[Share] Invitation failed:", error);
-      setShareError(
-        error instanceof Error
-          ? error.message
-          : "The invitation could not be sent.",
-      );
+      setShareError("The invitation could not be sent. Retry in a moment.");
     } finally {
       setIsSendingInvitation(false);
     }
@@ -700,10 +695,7 @@ const ShareFilesPage: React.FC = () => {
 
     if (pageState === "access") {
       return (
-        <VaultAccessRequired
-          intent="share"
-          onSetUpAccess={openKeyManagement}
-        />
+        <VaultAccessRequired intent="share" onSetUpAccess={openKeyManagement} />
       );
     }
 
@@ -1073,7 +1065,8 @@ const ShareFilesPage: React.FC = () => {
                 />
                 <div className="flex justify-between text-xs text-muted-foreground">
                   <span>
-                    The message stays encrypted. The email notification stays generic.
+                    The message stays encrypted. The email notification stays
+                    generic.
                   </span>
                   <span>{customMessage.length}/500</span>
                 </div>
@@ -1333,8 +1326,7 @@ const ShareFilesPage: React.FC = () => {
           <span className="font-medium text-foreground">
             {receipt?.recipientEmail}
           </span>
-          .
-          {" "}Only this recipient can unlock the encrypted copy, and the share
+          . Only this recipient can unlock the encrypted copy, and the share
           expires automatically.
         </p>
       </div>

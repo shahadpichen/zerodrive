@@ -33,7 +33,7 @@ export async function testEncryptionKey(): Promise<{
     if (result === testString) {
       return {
         success: true,
-        message: "Your recovery phrase can open Capsule v1 files.",
+        message: "Your recovery phrase can open matching encrypted files.",
       };
     }
 

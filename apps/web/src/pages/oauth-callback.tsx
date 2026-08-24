@@ -7,7 +7,7 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { toast } from "sonner";
+import { userNotifications as toast } from "../utils/userNotifications";
 import { Loader2 } from "lucide-react";
 import {
   getGoogleUserProfile,
@@ -23,7 +23,7 @@ import { hasRequiredGoogleDriveScopes } from "../utils/googleDrivePermissions";
 const OAuthCallback: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const [error, setError] = useState<string | null>(null);
+  const [hasError, setHasError] = useState(false);
   const callbackStarted = useRef(false);
   const { setUserInfo } = useApp();
 
@@ -60,12 +60,13 @@ const OAuthCallback: React.FC = () => {
             errorMessage = "Failed to initialize OAuth - Please try again";
             break;
           default:
-            errorMessage = `Authentication error: ${errorParam}`;
+            errorMessage = "Sign-in could not be completed. Please try again";
         }
 
-        setError(errorMessage);
+        setHasError(true);
         toast.error("Sign-in failed", {
           description: errorMessage,
+          id: "auth:callback",
         });
 
         // Redirect to landing page after 3 seconds
@@ -124,7 +125,8 @@ const OAuthCallback: React.FC = () => {
           const profile = await getGoogleUserProfile(tokenData.accessToken);
           if (
             profile &&
-            profile.email.trim().toLowerCase() === userEmail.trim().toLowerCase()
+            profile.email.trim().toLowerCase() ===
+              userEmail.trim().toLowerCase()
           ) {
             setUserInfo(userEmail, profile.name, profile.picture);
           } else {
@@ -138,17 +140,18 @@ const OAuthCallback: React.FC = () => {
 
           if (hasLimitedScope) {
             toast.warning("Google Drive permission is incomplete", {
-              description:
-                hasRequiredGoogleDriveScopes(tokenData.scope)
-                  ? "Google reported limited access, but the required Drive permissions are present."
-                  : "Storage and sharing stay locked until Drive access is granted.",
+              id: "auth:callback",
+              description: hasRequiredGoogleDriveScopes(tokenData.scope)
+                ? "Google reported limited access, but the required Drive permissions are present."
+                : "Storage and sharing stay locked until Drive access is granted.",
             });
           } else if (isNewUser) {
             toast.success("Welcome to ZeroDrive!", {
               description: "Your account has been created successfully",
+              id: "auth:callback",
             });
           } else {
-            toast.success("Signed in successfully!");
+            toast.success("Signed in successfully!", { id: "auth:callback" });
           }
         } else {
           throw new Error("OAuth exchange code is missing");
@@ -158,13 +161,15 @@ const OAuthCallback: React.FC = () => {
         navigate("/home");
       } catch (error) {
         logger.error("Failed to complete sign-in:", error);
-        setError("Failed to complete sign-in");
-        toast.error("Sign-in failed", {
-          description:
-            error instanceof Error
-              ? error.message
-              : "Failed to complete authentication process",
-        });
+        setHasError(true);
+        toast.errorFrom(
+          error,
+          {
+            title: "Sign-in failed",
+            description: "Return to the landing page and try signing in again.",
+          },
+          { id: "auth:callback" },
+        );
 
         setTimeout(() => {
           navigate("/");
@@ -178,15 +183,14 @@ const OAuthCallback: React.FC = () => {
   return (
     <div className="flex items-center justify-center min-h-screen bg-background">
       <div className="text-center">
-        {error ? (
+        {hasError ? (
           <div className="space-y-4">
             <div className="text-red-500 text-4xl">✕</div>
             <h2 className="text-xl font-semibold text-foreground">
               Sign-in Failed
             </h2>
-            <p className="text-muted-foreground max-w-md">{error}</p>
             <p className="text-sm text-muted-foreground">
-              Redirecting to home...
+              Returning to sign in…
             </p>
           </div>
         ) : (

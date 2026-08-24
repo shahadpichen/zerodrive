@@ -1,4 +1,4 @@
-import { toast } from "sonner";
+import { userNotifications as toast } from "./userNotifications";
 import {
   deleteFileFromDB,
   getAllFilesForUser,
@@ -32,15 +32,18 @@ export const deleteAndSyncFile = async (
   fileId: string,
   fileName: string, // Added for better feedback
   userEmail: string,
+  options: { notifications?: boolean } = {},
 ): Promise<boolean> => {
-  const deleteToastId = toast.loading(`Deleting ${fileName}...`);
+  const notifications = options.notifications === false ? null : toast;
+  const deleteToastId = `storage:delete:${fileId}`;
+  notifications?.loading(`Deleting ${fileName}…`, { id: deleteToastId });
 
   try {
     const recoveryPhraseSession = captureActiveRecoveryPhraseSession();
     assertCanWriteVaultMetadata(userEmail);
 
     // 1. Attempt to delete from Google Drive
-    toast.loading(`Deleting ${fileName} from Google Drive...`, {
+    notifications?.loading(`Deleting ${fileName} from Google Drive…`, {
       id: deleteToastId,
     });
     assertRecoveryPhraseSessionCurrent(recoveryPhraseSession);
@@ -58,15 +61,15 @@ export const deleteAndSyncFile = async (
       );
       // Optionally throw error or just continue to ensure local DB is cleaned up
       // throw new Error(`Google Drive delete failed: ${response.statusText}`);
-      toast.warning(
-        `Could not delete ${fileName} from Google Drive (may already be deleted). Proceeding locally.`,
-        { id: deleteToastId },
-      );
+      notifications?.warning("Google Drive could not confirm the deletion", {
+        id: deleteToastId,
+        description:
+          "ZeroDrive will update its encrypted file list. The Drive copy may need to be removed manually.",
+      });
     } else {
-      toast.info(
-        `Removed ${fileName} from Google Drive. Updating local data...`,
-        { id: deleteToastId },
-      );
+      notifications?.loading("Updating the encrypted file list…", {
+        id: deleteToastId,
+      });
     }
 
     await withVaultMetadataCommitLock(userEmail, async () => {
@@ -79,16 +82,20 @@ export const deleteAndSyncFile = async (
       });
     });
 
-    toast.success(`Successfully processed deletion for ${fileName}.`, {
+    notifications?.success(`${fileName} deleted`, {
       id: deleteToastId,
     });
     return true;
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error(`[Delete Error - ${fileName}]:`, error);
-    toast.error(`Failed to process deletion for ${fileName}`, {
-      description: error.message,
-      id: deleteToastId,
-    });
+    notifications?.errorFrom(
+      error,
+      {
+        title: `${fileName} could not be deleted`,
+        description: "Refresh Storage and retry the deletion.",
+      },
+      { id: deleteToastId },
+    );
     return false;
   }
 };
@@ -102,7 +109,8 @@ export const deleteAndSyncFile = async (
 export const deleteAllAndSyncFiles = async (
   userEmail: string,
 ): Promise<boolean> => {
-  const deleteToastId = toast.loading(`Fetching file list to delete...`);
+  const deleteToastId = "storage:delete-all";
+  toast.loading("Preparing to delete all files…", { id: deleteToastId });
 
   try {
     const recoveryPhraseSession = captureActiveRecoveryPhraseSession();
@@ -116,7 +124,7 @@ export const deleteAllAndSyncFiles = async (
       }
       const fileIds = allFiles.map((file) => file.id);
 
-      toast.loading(`Deleting ${fileIds.length} files from Google Drive...`, {
+      toast.loading(`Deleting ${fileIds.length} files from Google Drive…`, {
         id: deleteToastId,
       });
       await ensureGoogleDriveConnected();
@@ -147,12 +155,13 @@ export const deleteAllAndSyncFiles = async (
       );
 
       if (driveDeleteFailures > 0) {
-        toast.warning(
-          `Failed to delete ${driveDeleteFailures} file(s) from Google Drive (may already be deleted). Cleaning up locally.`,
-          { id: deleteToastId },
-        );
+        toast.warning("Some Drive copies could not be removed", {
+          id: deleteToastId,
+          description:
+            "ZeroDrive will finish updating the encrypted file list. Check Google Drive for copies that may remain.",
+        });
       } else {
-        toast.info("Removed files from Google Drive. Cleaning up locally...", {
+        toast.loading("Updating the encrypted file list…", {
           id: deleteToastId,
         });
       }
@@ -164,18 +173,19 @@ export const deleteAllAndSyncFiles = async (
         recoveryPhraseSession,
       });
 
-      toast.success(
-        `Successfully deleted all ${fileIds.length} files and synced metadata.`,
-        { id: deleteToastId },
-      );
+      toast.success(`${fileIds.length} files deleted`, { id: deleteToastId });
       return true;
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[Delete All Error]:", error);
-    toast.error("Failed to delete all files", {
-      description: error.message,
-      id: deleteToastId,
-    });
+    toast.errorFrom(
+      error,
+      {
+        title: "Files could not be deleted",
+        description: "Refresh Storage and retry the deletion.",
+      },
+      { id: deleteToastId },
+    );
     return false;
   }
 };

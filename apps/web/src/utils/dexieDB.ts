@@ -1,5 +1,4 @@
 import Dexie from "dexie";
-import { toast } from "sonner";
 import type { JsonObject } from "@zerodrivehq/capsule";
 import { initializeGapi, refreshGapiToken } from "./gapiInit";
 import logger from "./logger";
@@ -266,10 +265,8 @@ const sendToGoogleDrive = async (
     userEmail?: string;
     allowMetadataReplacement?: boolean;
     recoveryPhraseSession?: RecoveryPhraseSession;
-    showToast?: boolean;
   } = {},
 ) => {
-  let driveUpdateToastId: string | number | undefined;
   logger.log(
     "[Sync] Starting metadata sync with Google Drive for:",
     filesToSync,
@@ -291,12 +288,6 @@ const sendToGoogleDrive = async (
     assertCanWriteVaultMetadata(userEmail, {
       allowMetadataReplacement: options.allowMetadataReplacement,
     });
-
-    if (options.showToast !== false) {
-      driveUpdateToastId = toast.loading(
-        "Syncing metadata with Google Drive...",
-      );
-    }
 
     const { getGoogleAccessToken } = await import("./gapiInit");
     const token = await getGoogleAccessToken();
@@ -327,23 +318,12 @@ const sendToGoogleDrive = async (
     // verified state—unless the same phrase session is still active.
     assertRecoveryPhraseSessionCurrent(recoveryPhraseSession);
 
-    if (options.showToast !== false) {
-      toast.success("Metadata successfully synchronized.", {
-        id: driveUpdateToastId,
-      });
-    }
     logger.log("[Sync] Metadata sync successful. File ID:", fileId);
   } catch (error: any) {
     logger.error(
       "[Sync Error] Error synchronizing metadata with Google Drive:",
       error,
     );
-    if (options.showToast !== false) {
-      toast.error("Failed to sync metadata with Google Drive", {
-        description: error?.message || "Unknown error",
-        id: driveUpdateToastId,
-      });
-    }
     // IMPORTANT: Re-throw the error so the calling function knows it failed
     throw error;
   }
@@ -498,7 +478,6 @@ const fetchAndStoreFileMetadataUnlocked = async (
             }
 
             recordVaultIndexMigrationNotice();
-            toast.success("Vault index moved to hidden app storage.");
           }
         }
       } else if (readTarget.shouldMigrateLegacy) {

@@ -36,7 +36,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "../components/ui/dialog";
-import { toast } from "sonner";
+import { userNotifications as toast } from "../utils/userNotifications";
 
 type KeyMode = "recover" | "generate";
 const allowedReturnTargets = new Set([
@@ -91,7 +91,8 @@ export const KeyManagementPage: React.FC = () => {
         );
         toast.warning("Google Drive connection unavailable", {
           description:
-            "Your primary key still works, but sharing-key recovery is unavailable.",
+            "Vault access remains available, but sharing identity recovery is unavailable.",
+          id: "recovery:drive-connection",
         });
       }
     };
@@ -104,7 +105,7 @@ export const KeyManagementPage: React.FC = () => {
 
     try {
       const email = await getUserEmail();
-      if (email) await recoverRsaKeysIfNeeded(email, true);
+      if (email) await recoverRsaKeysIfNeeded(email);
     } catch (recoveryError) {
       console.error(
         "[KeyManagement] Sharing-key recovery failed:",
@@ -139,7 +140,7 @@ export const KeyManagementPage: React.FC = () => {
       setGeneratedMnemonic(mnemonic);
       setKeyStatusVersion((version) => version + 1);
       await recoverSharingKeys();
-      toast.success("Encryption key created");
+      toast.success("Vault access created", { id: "recovery:create" });
     } catch (generationError) {
       console.error("[KeyManagement] Key generation failed:", generationError);
       setError("Your encryption key could not be created. Try again.");
@@ -162,7 +163,7 @@ export const KeyManagementPage: React.FC = () => {
       clearCachedHomeDashboard();
       setKeyStatusVersion((version) => version + 1);
       await recoverSharingKeys();
-      toast.success("Encryption key recovered");
+      toast.success("Vault access recovered", { id: "recovery:recover" });
       navigate(returnTo);
     } catch (recoveryError) {
       console.error("Error loading key from mnemonic:", recoveryError);
@@ -199,13 +200,14 @@ export const KeyManagementPage: React.FC = () => {
       await storeKey(key);
       clearCachedHomeDashboard();
       setKeyStatusVersion((version) => version + 1);
-      toast.success("Legacy key imported", {
-        description: "The key is active in this browser tab.",
+      toast.success("Legacy vault access imported", {
+        description: "This browser can now open matching legacy files.",
+        id: "recovery:legacy-import",
       });
       navigate(returnTo);
     } catch (importError) {
       console.error("[KeyManagement] Key import failed:", importError);
-      setError("This is not a valid ZeroDrive AES-GCM JSON key file.");
+      setError("This legacy key file is not valid or cannot be opened.");
     } finally {
       setIsImporting(false);
       event.target.value = "";
@@ -224,16 +226,20 @@ export const KeyManagementPage: React.FC = () => {
     anchor.click();
     document.body.removeChild(anchor);
     URL.revokeObjectURL(url);
-    toast.success("Recovery phrase downloaded");
+    toast.success("Recovery phrase downloaded", {
+      id: "recovery:download-phrase",
+    });
   };
 
   const handleCopyMnemonic = async () => {
     if (!generatedMnemonic) return;
     try {
       await navigator.clipboard.writeText(generatedMnemonic);
-      toast.success("Recovery phrase copied");
+      toast.success("Recovery phrase copied", { id: "recovery:copy-phrase" });
     } catch {
-      toast.error("Could not copy the recovery phrase");
+      toast.error("Could not copy the recovery phrase", {
+        id: "recovery:copy-phrase",
+      });
     }
   };
 
@@ -242,12 +248,17 @@ export const KeyManagementPage: React.FC = () => {
     try {
       const result = await testEncryptionKey();
       if (result.success) {
-        toast.success("Encryption key verified");
+        toast.success("Vault access verified", { id: "recovery:verify" });
       } else {
-        toast.error(result.message);
+        toast.error("Vault access could not be verified", {
+          description: "Open Recovery & Access and check the active phrase.",
+          id: "recovery:verify",
+        });
       }
     } catch {
-      toast.error("The encryption-key test failed");
+      toast.error("Vault access test could not be completed", {
+        id: "recovery:verify",
+      });
     } finally {
       setIsTesting(false);
     }
@@ -377,9 +388,7 @@ export const KeyManagementPage: React.FC = () => {
           <div className="flex h-10 w-10 items-center justify-center border bg-foreground text-background">
             <Check className="h-5 w-5" />
           </div>
-          <h2 className="mt-4 text-lg font-semibold">
-            Your vault is ready
-          </h2>
+          <h2 className="mt-4 text-lg font-semibold">Your vault is ready</h2>
           <p className="mt-1.5 text-sm text-muted-foreground">
             Save this recovery phrase now. After that, you can upload your first
             encrypted file or return to what you were doing.
@@ -441,7 +450,9 @@ export const KeyManagementPage: React.FC = () => {
             onClick={() => navigate(returnTo)}
             className="w-full sm:w-auto"
           >
-            {returnTo === "/storage" ? "Upload first encrypted file" : returnLabel}
+            {returnTo === "/storage"
+              ? "Upload first encrypted file"
+              : returnLabel}
           </Button>
         </div>
       </div>
@@ -578,8 +589,8 @@ export const KeyManagementPage: React.FC = () => {
           <h1 className="text-2xl tracking-tight">Recovery & Access</h1>
           <p className="mt-1 max-w-2xl text-sm leading-relaxed text-muted-foreground">
             Manage the browser access that protects your encrypted vault.
-            Recovery happens locally; your phrase and file key are not sent to
-            the ZeroDrive server.
+            Recovery happens locally; your recovery phrase is not sent to the
+            ZeroDrive server.
           </p>
         </div>
 

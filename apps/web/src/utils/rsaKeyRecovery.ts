@@ -3,7 +3,6 @@
  * Centralized logic for recovering RSA keys from Google Drive backups
  */
 
-import { toast } from "sonner";
 import { downloadEncryptedRsaKeyFromDrive } from "./gdriveKeyStorage";
 import { userHasStoredKeys, storeUserKeyPair } from "./keyStorage";
 import { fetchRecipientPublicKey, UserKeyPair } from "./fileSharing";
@@ -37,11 +36,9 @@ export async function recoverRsaKeyVersion(
 ): Promise<UserKeyPair | null> {
   try {
     const encrypted = await downloadEncryptedRsaKeyFromDrive(keyVersion);
-    const opened = await openSharingKeyBackupCapsule(
-      encrypted,
-      mnemonic,
-      { legacyKeyVersion: keyVersion },
-    );
+    const opened = await openSharingKeyBackupCapsule(encrypted, mnemonic, {
+      legacyKeyVersion: keyVersion,
+    });
     if (opened.keyVersion !== undefined && opened.keyVersion !== keyVersion) {
       throw new Error("Sharing-key backup version does not match the share");
     }
@@ -53,14 +50,14 @@ export async function recoverRsaKeyVersion(
         publicKeyFromPrivate(privateKeyJwk),
       privateKeyJwk,
     };
-    const fingerprint = await fingerprintSharingPublicKey(
-      keyPair.publicKeyJwk,
-    );
+    const fingerprint = await fingerprintSharingPublicKey(keyPair.publicKeyJwk);
     if (
       (opened.fingerprint && opened.fingerprint !== fingerprint) ||
       (expectedFingerprint && expectedFingerprint !== fingerprint)
     ) {
-      throw new Error("Sharing-key backup fingerprint does not match the share");
+      throw new Error(
+        "Sharing-key backup fingerprint does not match the share",
+      );
     }
     await storeUserKeyPair(userEmail, keyPair, mnemonic, keyVersion, {
       makeCurrent: false,
@@ -82,12 +79,10 @@ export interface RsaRecoveryResult {
 /**
  * Attempt to recover RSA keys from Google Drive backup if not present in IndexedDB
  * @param userEmail User's email address
- * @param silent If true, suppresses toast notifications (for background recovery)
  * @returns Recovery result with status information
  */
 export async function recoverRsaKeysIfNeeded(
   userEmail: string,
-  silent: boolean = false,
 ): Promise<RsaRecoveryResult> {
   if (!userEmail) {
     logger.warn("[RSA Recovery] No user email provided");
@@ -115,15 +110,9 @@ export async function recoverRsaKeysIfNeeded(
     }
 
     // Keys don't exist - attempt recovery from Google Drive
-    if (!silent) {
-      logger.log(
-        "[RSA Recovery] Keys not found in IndexedDB, attempting recovery from Google Drive...",
-      );
-    }
-
-    const toastId = silent
-      ? undefined
-      : toast.loading("Checking for RSA key backup in Google Drive...");
+    logger.log(
+      "[Sharing Recovery] Sharing identity not found locally; checking Google Drive backup",
+    );
 
     let encryptedKeyBlob: Blob | null = null;
 
@@ -135,9 +124,6 @@ export async function recoverRsaKeysIfNeeded(
         logger.log(
           "[RSA Recovery] No backup found in Google Drive (user may not have enabled sharing yet)",
         );
-        if (toastId && !silent) {
-          toast.dismiss(toastId);
-        }
         return {
           success: true,
           recovered: false,
@@ -151,9 +137,6 @@ export async function recoverRsaKeysIfNeeded(
 
     if (!encryptedKeyBlob) {
       logger.log("[RSA Recovery] No backup found in Google Drive");
-      if (toastId && !silent) {
-        toast.dismiss(toastId);
-      }
       return {
         success: true,
         recovered: false,
@@ -161,25 +144,10 @@ export async function recoverRsaKeysIfNeeded(
       };
     }
 
-    // Backup found - attempt decryption
-    if (toastId && !silent) {
-      toast.loading("Backup found. Decrypting with your primary key...", {
-        id: toastId,
-      });
-    }
-
     const mnemonic = getMnemonic();
     if (!mnemonic) {
       const errorMsg = "Recovery phrase is not active in this browser tab";
       logger.error("[RSA Recovery]", errorMsg);
-
-      if (toastId && !silent) {
-        toast.error("Cannot decrypt RSA key backup", {
-          description: "Enter your recovery phrase in Recovery & Access.",
-          id: toastId,
-          duration: 7000,
-        });
-      }
 
       return {
         success: false,
@@ -242,13 +210,6 @@ export async function recoverRsaKeysIfNeeded(
         "[RSA Recovery] Successfully recovered and stored RSA keys from Google Drive",
       );
 
-      if (toastId && !silent) {
-        toast.success("RSA keys recovered from Google Drive", {
-          description: "Your sharing keys have been restored successfully.",
-          id: toastId,
-        });
-      }
-
       return {
         success: true,
         recovered: true,
@@ -260,16 +221,6 @@ export async function recoverRsaKeysIfNeeded(
         decryptionError,
       );
 
-      if (toastId && !silent) {
-        toast.error("Failed to decrypt RSA key backup", {
-          description:
-            decryptionError.message ||
-            "The primary key might be incorrect or backup corrupted.",
-          id: toastId,
-          duration: 7000,
-        });
-      }
-
       return {
         success: false,
         recovered: false,
@@ -279,13 +230,6 @@ export async function recoverRsaKeysIfNeeded(
     }
   } catch (error: any) {
     logger.error("[RSA Recovery] Unexpected error during recovery:", error);
-
-    if (!silent) {
-      toast.error("Failed to recover RSA keys", {
-        description: error.message || "An unexpected error occurred",
-        duration: 5000,
-      });
-    }
 
     return {
       success: false,

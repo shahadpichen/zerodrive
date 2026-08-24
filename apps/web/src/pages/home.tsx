@@ -12,11 +12,7 @@ import {
 } from "lucide-react";
 import { useApp } from "../contexts/app-context";
 import { ModeToggle } from "../components/mode-toggle";
-import {
-  Avatar,
-  AvatarFallback,
-  AvatarImage,
-} from "../components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "../components/ui/avatar";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -42,7 +38,6 @@ import {
   fetchAndStoreFileMetadata,
 } from "../utils/dexieDB";
 import { recoverRsaKeysIfNeeded } from "../utils/rsaKeyRecovery";
-import { toast } from "sonner";
 import {
   getAuthenticatedUser,
   hasGoogleTokensInStorage,
@@ -112,7 +107,7 @@ function HomeContent() {
       ? readCachedHomeDashboardForUser(userEmail)
       : null;
   const warmVaultSetup = hasWarmVaultState
-    ? initialCachedDashboard?.vaultSetup ?? {
+    ? (initialCachedDashboard?.vaultSetup ?? {
         ...getVaultSetupState({
           isAuthenticated: true,
           hasGoogleTokens: hasGoogleTokensInStorage(),
@@ -127,28 +122,30 @@ function HomeContent() {
         }),
         tasks: [],
         shouldShowGuidance: false,
-      }
+      })
     : null;
-  const [counts, setCounts] = useState(() =>
-    initialCachedDashboard?.counts ??
-    (hasWarmVaultState
-      ? {
-          files: sharedVaultState.files.length,
-          folders: sharedVaultState.folders.length,
-        }
-      : { files: 0, folders: 0 }),
+  const [counts, setCounts] = useState(
+    () =>
+      initialCachedDashboard?.counts ??
+      (hasWarmVaultState
+        ? {
+            files: sharedVaultState.files.length,
+            folders: sharedVaultState.folders.length,
+          }
+        : { files: 0, folders: 0 }),
   );
-  const [recent, setRecent] = useState<FileMeta[]>(() =>
-    initialCachedDashboard?.recent ??
-    (hasWarmVaultState
-      ? [...sharedVaultState.files]
-          .sort(
-            (a, b) =>
-              new Date(b.uploadedDate).getTime() -
-              new Date(a.uploadedDate).getTime(),
-          )
-          .slice(0, 5)
-      : []),
+  const [recent, setRecent] = useState<FileMeta[]>(
+    () =>
+      initialCachedDashboard?.recent ??
+      (hasWarmVaultState
+        ? [...sharedVaultState.files]
+            .sort(
+              (a, b) =>
+                new Date(b.uploadedDate).getTime() -
+                new Date(a.uploadedDate).getTime(),
+            )
+            .slice(0, 5)
+        : []),
   );
   const [canReadAnalytics, setCanReadAnalytics] = useState(
     initialCachedDashboard?.canReadAnalytics ?? false,
@@ -243,7 +240,7 @@ function HomeContent() {
         setCounts(nextCounts);
         setRecent(nextRecent);
 
-        const rsaRecovery = await recoverRsaKeysIfNeeded(email, false);
+        const rsaRecovery = await recoverRsaKeysIfNeeded(email);
         const setupSnapshot = await readBrowserVaultSetupSnapshot(email, {
           isAuthenticated: true,
           hasGoogleTokens: true,
@@ -267,7 +264,6 @@ function HomeContent() {
         });
       } catch (error) {
         console.error("[Home] Failed to load dashboard:", error);
-        toast.error("Failed to load your dashboard");
       } finally {
         if (isMounted) {
           setIsVaultStateLoading(false);
@@ -325,8 +321,7 @@ function HomeContent() {
     ? vaultSetup.status !== "needs_key"
     : hasWarmVaultState && !!sharedVaultState.hasVaultKey;
   const shouldHoldSharingDestinations = isVaultStateLoading || !hasVaultAccess;
-  const shouldGateSharingDestinations =
-    !isVaultStateLoading && !hasVaultAccess;
+  const shouldGateSharingDestinations = !isVaultStateLoading && !hasVaultAccess;
 
   const sharingDestinationPath = (destination: LockedSharingDestination) =>
     destination === "inbox" ? "/shared-with-me" : "/share";
@@ -384,15 +379,14 @@ function HomeContent() {
         ]
       : []),
   ];
-  const lockedDialogCopy =
-    isVaultStateLoading
-      ? {
-          title: "Checking Recovery & Access",
-          description:
-            "ZeroDrive is checking whether this session already has the recovery key needed for sharing.",
-          returnTo: sharingDestinationPath(lockedSharingDestination || "share"),
-        }
-      : lockedSharingDestination === "inbox"
+  const lockedDialogCopy = isVaultStateLoading
+    ? {
+        title: "Checking Recovery & Access",
+        description:
+          "ZeroDrive is checking whether this session already has the recovery key needed for sharing.",
+        returnTo: sharingDestinationPath(lockedSharingDestination || "share"),
+      }
+    : lockedSharingDestination === "inbox"
       ? {
           title: "Set up Recovery & Access first",
           description:
@@ -414,12 +408,7 @@ function HomeContent() {
     const destination = sharingDestinationPath(lockedSharingDestination);
     setLockedSharingDestination(null);
     navigate(destination);
-  }, [
-    hasVaultAccess,
-    isVaultStateLoading,
-    lockedSharingDestination,
-    navigate,
-  ]);
+  }, [hasVaultAccess, isVaultStateLoading, lockedSharingDestination, navigate]);
 
   const openSharingDestination = (destination: LockedSharingDestination) => {
     if (shouldHoldSharingDestinations) {
@@ -433,8 +422,7 @@ function HomeContent() {
   const openNavCard = (card: (typeof navCards)[number]) => {
     if (
       card.lockedDestination &&
-      (card.lockedDestination === "share" ||
-        card.lockedDestination === "inbox")
+      (card.lockedDestination === "share" || card.lockedDestination === "inbox")
     ) {
       openSharingDestination(card.lockedDestination);
       return;

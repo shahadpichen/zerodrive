@@ -1,10 +1,14 @@
 import React from "react";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { FileList } from "../../components/storage/file-list";
 import { getAllFilesForUser, getFoldersForUser } from "../../utils/dexieDB";
+import { decryptFile } from "../../utils/decryptFile";
+import { googleDriveFetch } from "../../utils/googleDriveRequest";
+import { getStoredKey } from "../../utils/cryptoUtils";
 import { useFolderContext } from "../../components/storage/folder-context";
 import { useOptionalVaultData } from "../../contexts/vault-data-context";
+import { userNotifications } from "../../utils/userNotifications";
 
 jest.mock("../../utils/dexieDB", () => ({
   deleteFileFromDB: jest.fn(),
@@ -32,14 +36,32 @@ jest.mock("../../components/storage/file-preview-dialog", () => ({
 }));
 
 jest.mock("../../utils/cryptoUtils", () => ({
-  getStoredKey: jest.fn(),
+  getStoredKey: jest.fn().mockResolvedValue({ kty: "oct", k: "test-key" }),
 }));
 
-jest.mock("sonner", () => ({
-  toast: {
+jest.mock("../../utils/mnemonicManager", () => ({
+  hasMnemonic: jest.fn(() => true),
+  requireActiveRecoveryPhrase: jest.fn(() => "test recovery phrase"),
+}));
+
+jest.mock("../../utils/decryptFile", () => ({
+  decryptFile: jest.fn(),
+}));
+
+jest.mock("../../utils/googleDriveRequest", () => ({
+  googleDriveFetch: jest.fn(),
+  readGoogleDriveError: jest.fn(),
+}));
+
+jest.mock("../../utils/userNotifications", () => ({
+  userNotifications: {
     error: jest.fn(),
+    errorFrom: jest.fn(),
     loading: jest.fn(),
     success: jest.fn(),
+    warning: jest.fn(),
+    info: jest.fn(),
+    dismiss: jest.fn(),
   },
 }));
 
@@ -49,6 +71,18 @@ const mockGetAllFilesForUser = getAllFilesForUser as jest.MockedFunction<
 const mockGetFoldersForUser = getFoldersForUser as jest.MockedFunction<
   typeof getFoldersForUser
 >;
+const mockGetStoredKey = getStoredKey as jest.MockedFunction<
+  typeof getStoredKey
+>;
+const mockDecryptFile = decryptFile as jest.MockedFunction<typeof decryptFile>;
+const mockGoogleDriveFetch = googleDriveFetch as jest.MockedFunction<
+  typeof googleDriveFetch
+>;
+const mockNotifications = userNotifications as unknown as {
+  loading: jest.Mock;
+  success: jest.Mock;
+  dismiss: jest.Mock;
+};
 const mockUseFolderContext = useFolderContext as jest.MockedFunction<
   typeof useFolderContext
 >;
@@ -70,6 +104,7 @@ describe("Storage FileList empty state", () => {
     });
     mockGetAllFilesForUser.mockResolvedValue([]);
     mockGetFoldersForUser.mockResolvedValue([]);
+    mockGetStoredKey.mockResolvedValue({ kty: "oct", k: "test-key" } as any);
   });
 
   it("explains the encrypted vault and offers the first upload action", async () => {
@@ -191,5 +226,64 @@ describe("Storage FileList empty state", () => {
 
     expect(onRecoverAccessClick).toHaveBeenCalledTimes(1);
     expect(onUploadClick).not.toHaveBeenCalled();
+  });
+
+  it("uses one notification id from download through completion without a global dismiss", async () => {
+    const encryptedFile = new File(["encrypted"], "opaque.zd");
+    const decryptedFile = new File(["readable"], "archive.zip", {
+      type: "application/zip",
+    });
+    mockGetAllFilesForUser.mockResolvedValue([
+      {
+        id: "file-download-1",
+        name: "archive.zip",
+        mimeType: "application/zip",
+        userEmail: "owner@example.com",
+        uploadedDate: new Date("2026-08-25T00:00:00.000Z"),
+        folderId: null,
+      },
+    ]);
+    mockGoogleDriveFetch.mockResolvedValue({
+      ok: true,
+      blob: jest.fn().mockResolvedValue(encryptedFile),
+    } as unknown as Response);
+    mockDecryptFile.mockResolvedValue({
+      contentBlob: decryptedFile,
+      fileName: "archive.zip",
+      mimeType: "application/zip",
+      contentFormat: "capsule_v1",
+    });
+    Object.defineProperty(URL, "createObjectURL", {
+      configurable: true,
+      value: jest.fn(() => "blob:download-test"),
+    });
+    Object.defineProperty(URL, "revokeObjectURL", {
+      configurable: true,
+      value: jest.fn(),
+    });
+    jest.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+
+    render(<FileList view="recent" userEmail="owner@example.com" />);
+    await userEvent.click(
+      await screen.findByTitle("Download archive.zip"),
+    );
+
+    await waitFor(() =>
+      expect(mockNotifications.loading).toHaveBeenCalledWith(
+        "Downloading archive.zip…",
+        expect.objectContaining({ id: "storage:download:file-download-1" }),
+      ),
+    );
+    expect(mockNotifications.loading).toHaveBeenCalledWith(
+      "Opening encrypted file…",
+      expect.objectContaining({ id: "storage:download:file-download-1" }),
+    );
+    await waitFor(() =>
+      expect(mockNotifications.success).toHaveBeenCalledWith(
+        "File downloaded",
+        expect.objectContaining({ id: "storage:download:file-download-1" }),
+      ),
+    );
+    expect(mockNotifications.dismiss).not.toHaveBeenCalled();
   });
 });

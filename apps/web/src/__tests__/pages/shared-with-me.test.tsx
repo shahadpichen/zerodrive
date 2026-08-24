@@ -15,6 +15,7 @@ import { fetchAndStoreFileMetadata } from "../../utils/dexieDB";
 import { openSharingKeyBackupCapsule } from "../../utils/capsuleAdapter";
 import { useOptionalVaultData } from "../../contexts/vault-data-context";
 import { useUploadQueue } from "../../contexts/upload-queue-context";
+import { toast as sonnerToast } from "sonner";
 
 const mockNavigate = jest.fn();
 
@@ -89,8 +90,12 @@ jest.mock("../../utils/analyticsTracker", () => ({
 
 jest.mock("sonner", () => ({
   toast: {
+    loading: jest.fn().mockReturnValue("inbox:refresh"),
     error: jest.fn(),
     success: jest.fn(),
+    warning: jest.fn(),
+    info: jest.fn(),
+    dismiss: jest.fn(),
   },
 }));
 
@@ -481,7 +486,10 @@ describe("SharedWithMePage", () => {
     renderPage();
 
     expect(await screen.findByText("Inbox unavailable")).toBeInTheDocument();
-    expect(screen.getByText("Network unavailable")).toBeInTheDocument();
+    expect(
+      screen.getByText("Shared inbox could not be refreshed"),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Network unavailable")).not.toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: /try again/i }),
     ).toBeInTheDocument();
@@ -495,6 +503,16 @@ describe("SharedWithMePage", () => {
 
     await waitFor(() =>
       expect(apiClient.sharedFiles.getForUser).toHaveBeenCalledTimes(2),
+    );
+    expect(sonnerToast.loading).toHaveBeenCalledWith(
+      "Refreshing shared inbox…",
+      expect.objectContaining({ id: "inbox:refresh" }),
+    );
+    await waitFor(() =>
+      expect(sonnerToast.success).toHaveBeenCalledWith(
+        "Shared inbox refreshed",
+        expect.objectContaining({ id: "inbox:refresh" }),
+      ),
     );
   });
 });

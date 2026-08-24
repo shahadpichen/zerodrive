@@ -24,15 +24,12 @@ jest.mock("../../utils/logger", () => ({
   },
 }));
 
-const mockGetAuthenticatedUser =
-  getAuthenticatedUser as jest.MockedFunction<typeof getAuthenticatedUser>;
-const mockHasMnemonic = hasMnemonic as jest.MockedFunction<
-  typeof hasMnemonic
+const mockGetAuthenticatedUser = getAuthenticatedUser as jest.MockedFunction<
+  typeof getAuthenticatedUser
 >;
+const mockHasMnemonic = hasMnemonic as jest.MockedFunction<typeof hasMnemonic>;
 const mockRecoverRsaKeysIfNeeded =
-  recoverRsaKeysIfNeeded as jest.MockedFunction<
-    typeof recoverRsaKeysIfNeeded
-  >;
+  recoverRsaKeysIfNeeded as jest.MockedFunction<typeof recoverRsaKeysIfNeeded>;
 
 describe("useRsaKeyRecovery", () => {
   beforeEach(() => {
@@ -51,7 +48,9 @@ describe("useRsaKeyRecovery", () => {
   });
 
   it("binds the backend-authenticated account before restoring the tab phrase", async () => {
-    let resolveUser!: (value: Awaited<ReturnType<typeof getAuthenticatedUser>>) => void;
+    let resolveUser!: (
+      value: Awaited<ReturnType<typeof getAuthenticatedUser>>,
+    ) => void;
     mockGetAuthenticatedUser.mockReturnValue(
       new Promise((resolve) => {
         resolveUser = resolve;
@@ -80,7 +79,6 @@ describe("useRsaKeyRecovery", () => {
     expect(mockHasMnemonic).toHaveBeenCalledTimes(1);
     expect(mockRecoverRsaKeysIfNeeded).toHaveBeenCalledWith(
       "person@example.com",
-      true,
     );
   });
 

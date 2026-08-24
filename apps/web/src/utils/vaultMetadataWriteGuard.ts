@@ -1,5 +1,5 @@
-import { toast } from "sonner";
 import type { VaultMetadataStatus } from "../contexts/vault-data-context";
+import { userNotifications } from "./userNotifications";
 
 const VAULT_METADATA_STATUS_KEY = "zerodrive:vault-metadata-status:v2";
 
@@ -62,8 +62,9 @@ export function getVaultMetadataWriteBlockMessage() {
 }
 
 export function showVaultMetadataWriteBlockedToast() {
-  toast.error("Vault metadata could not be verified", {
+  userNotifications.error("Encrypted file list could not be verified", {
     description: getVaultMetadataWriteBlockMessage(),
+    id: "vault:metadata-write-blocked",
   });
 }
 

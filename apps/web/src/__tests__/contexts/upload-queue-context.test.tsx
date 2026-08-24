@@ -11,6 +11,7 @@ import {
   AUTH_SESSION_CLEARED_EVENT,
   prepareForAuthSessionClear,
 } from "../../utils/authEvents";
+import { toast as sonnerToast } from "sonner";
 
 jest.mock("../../contexts/app-context", () => ({
   useApp: jest.fn(() => ({
@@ -39,6 +40,10 @@ jest.mock("sonner", () => ({
 const mockCreateAdapter = createVaultUploadQueueAdapter as jest.Mock;
 const mockUseApp = useApp as jest.Mock;
 const mockUseVaultData = useVaultData as jest.Mock;
+const mockSonnerToast = sonnerToast as unknown as {
+  success: jest.Mock;
+  error: jest.Mock;
+};
 
 function QueueHarness({ page }: { page: string }) {
   const {
@@ -168,6 +173,8 @@ describe("UploadQueueProvider", () => {
       expect(screen.getByTestId("statuses")).toHaveTextContent("complete");
       expect(screen.getByTestId("pending")).toHaveTextContent("false");
     });
+    expect(mockSonnerToast.success).not.toHaveBeenCalled();
+    expect(mockSonnerToast.error).not.toHaveBeenCalled();
   });
 
   it("prevents an upload from being enqueued during an exclusive vault operation", () => {
@@ -212,5 +219,7 @@ describe("UploadQueueProvider", () => {
       expect(screen.getByTestId("statuses")).toHaveTextContent("canceled");
       expect(screen.getByTestId("pending")).toHaveTextContent("false");
     });
+    expect(mockSonnerToast.success).not.toHaveBeenCalled();
+    expect(mockSonnerToast.error).not.toHaveBeenCalled();
   });
 });
