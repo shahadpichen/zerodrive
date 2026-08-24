@@ -1,6 +1,7 @@
 import { decryptFile } from "./decryptFile";
 import { getStoredKey } from "./cryptoUtils";
 import { hasMnemonic } from "./mnemonicManager";
+import { googleDriveFetch } from "./googleDriveRequest";
 
 // Extension-to-MIME fallback for files with missing/incorrect MIME types
 const EXTENSION_MIME_MAP: Record<string, string> = {
@@ -108,19 +109,11 @@ export async function decryptFileForPreview(
     );
   }
 
-  // Get Google access token
-  const { getGoogleAccessToken } = await import("./gapiInit");
-  const token = await getGoogleAccessToken();
-  if (!token) {
-    throw new Error("Authentication error");
-  }
-
   // Fetch encrypted file from Google Drive
-  const response = await fetch(
+  const response = await googleDriveFetch(
     `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`,
     {
       method: "GET",
-      headers: new Headers({ Authorization: `Bearer ${token}` }),
     }
   );
 

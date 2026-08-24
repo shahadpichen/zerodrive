@@ -1,5 +1,5 @@
 import { createVaultIndexCapsule } from "./capsuleAdapter";
-import { getGoogleAccessToken } from "./gapiInit";
+import { googleDriveFetch } from "./googleDriveRequest";
 
 const capabilityFileName = (shareId: string) =>
   `zerodrive_share_${shareId}.cap`;
@@ -8,11 +8,6 @@ export async function storeShareManagementCapability(
   shareId: string,
   capability: string,
 ): Promise<void> {
-  const token = await getGoogleAccessToken();
-  if (!token) {
-    throw new Error("Cannot back up the share management capability");
-  }
-
   const { encryptedBlob } = await createVaultIndexCapsule({
     version: 1,
     kind: "share_management_capability",
@@ -32,11 +27,10 @@ export async function storeShareManagementCapability(
   );
   form.append("file", encryptedBlob);
 
-  const response = await fetch(
+  const response = await googleDriveFetch(
     "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart",
     {
       method: "POST",
-      headers: { Authorization: `Bearer ${token}` },
       body: form,
     },
   );

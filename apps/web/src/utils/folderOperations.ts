@@ -14,6 +14,7 @@ import type { FolderMeta } from "./dexieDB";
 import logger from "./logger";
 import { assertCanWriteVaultMetadata } from "./vaultMetadataWriteGuard";
 import { requireActiveRecoveryPhrase } from "./mnemonicManager";
+import { googleDriveFetch } from "./googleDriveRequest";
 
 export const createFolder = async (
   folderName: string,
@@ -26,10 +27,6 @@ export const createFolder = async (
     requireActiveRecoveryPhrase();
     assertCanWriteVaultMetadata(userEmail);
 
-    const { getGoogleAccessToken } = await import("./gapiInit");
-    const token = await getGoogleAccessToken();
-    if (!token) throw new Error("User not authenticated.");
-
     // Create folder on Google Drive
     const metadata = {
       name: folderName,
@@ -38,12 +35,11 @@ export const createFolder = async (
     };
 
     logger.log("[Folder] Creating folder on Google Drive:", metadata);
-    const response = await fetch(
+    const response = await googleDriveFetch(
       "https://www.googleapis.com/drive/v3/files?fields=id,name",
       {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify(metadata),
@@ -117,17 +113,12 @@ export const deleteFolder = async (
       await Promise.all(filesInFolder.map((f) => moveFileToFolder(f.id, null)));
     }
 
-    const { getGoogleAccessToken } = await import("./gapiInit");
-    const token = await getGoogleAccessToken();
-    if (!token) throw new Error("User not authenticated.");
-
     // Delete from Google Drive
     logger.log("[Folder] Deleting folder from Google Drive:", folderId);
-    const response = await fetch(
+    const response = await googleDriveFetch(
       `https://www.googleapis.com/drive/v3/files/${folderId}`,
       {
         method: "DELETE",
-        headers: { Authorization: `Bearer ${token}` },
       },
     );
 
@@ -172,18 +163,13 @@ export const renameFolder = async (
     requireActiveRecoveryPhrase();
     assertCanWriteVaultMetadata(userEmail);
 
-    const { getGoogleAccessToken } = await import("./gapiInit");
-    const token = await getGoogleAccessToken();
-    if (!token) throw new Error("User not authenticated.");
-
     // Rename the folder on Google Drive
     logger.log("[Folder] Renaming folder on Google Drive:", folderId, trimmed);
-    const response = await fetch(
+    const response = await googleDriveFetch(
       `https://www.googleapis.com/drive/v3/files/${folderId}`,
       {
         method: "PATCH",
         headers: {
-          Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({ name: trimmed }),
@@ -228,10 +214,6 @@ export const moveFile = async (
     requireActiveRecoveryPhrase();
     assertCanWriteVaultMetadata(userEmail);
 
-    const { getGoogleAccessToken } = await import("./gapiInit");
-    const token = await getGoogleAccessToken();
-    if (!token) throw new Error("User not authenticated.");
-
     // Get current file to find old parent
     const file = await getFileByIdForUser(fileId, userEmail);
     if (!file) {
@@ -259,9 +241,8 @@ export const moveFile = async (
     if (params.length > 0) {
       url += params.join("&");
 
-      const response = await fetch(url, {
+      const response = await googleDriveFetch(url, {
         method: "PATCH",
-        headers: { Authorization: `Bearer ${token}` },
       });
 
       if (!response.ok) {

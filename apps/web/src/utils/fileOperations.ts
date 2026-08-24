@@ -16,6 +16,10 @@ import {
 import logger from "./logger";
 import { trackFileAddedToDrive } from "./analyticsTracker";
 import { assertCanWriteVaultMetadata } from "./vaultMetadataWriteGuard";
+import {
+  ensureGoogleDriveConnected,
+  googleDriveFetch,
+} from "./googleDriveRequest";
 
 // --- Upload Operation ---
 
@@ -53,14 +57,7 @@ export const uploadAndSyncFile = async (
       throw new Error(errorMsg);
     }
 
-    // 3. Check auth and get token
-    const { getGoogleAccessToken } = await import("./gapiInit");
-    const token = await getGoogleAccessToken();
-    if (!token) {
-      throw new Error("User not authenticated.");
-    }
-
-    // 4. Encrypt
+    // 3. Encrypt
     toast.loading(`Encrypting ${file.name}...`, { id: uploadToastId });
     const objectId = crypto.randomUUID();
     const encryptedBlob = await encryptFile(
@@ -69,7 +66,7 @@ export const uploadAndSyncFile = async (
       recoveryPhraseSession.phrase,
     );
 
-    // 5. Prepare metadata & form data
+    // 4. Prepare metadata & form data
     const metadata = {
       name: `${crypto.randomUUID()}.zd`,
       mimeType: "application/octet-stream",
@@ -82,16 +79,15 @@ export const uploadAndSyncFile = async (
     );
     form.append("file", encryptedBlob);
 
-    // 6. Upload to Google Drive
+    // 5. Upload to Google Drive
     toast.loading(`Uploading ${file.name} to Google Drive...`, {
       id: uploadToastId,
     });
     assertRecoveryPhraseSessionCurrent(recoveryPhraseSession);
-    const response = await fetch(
+    const response = await googleDriveFetch(
       "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id", // Only request ID
       {
         method: "POST",
-        headers: new Headers({ Authorization: `Bearer ${token}` }),
         body: form,
       }
     );
@@ -171,23 +167,15 @@ export const deleteAndSyncFile = async (
     const recoveryPhraseSession = captureActiveRecoveryPhraseSession();
     assertCanWriteVaultMetadata(userEmail);
 
-    // 1. Check auth and get token
-    const { getGoogleAccessToken } = await import("./gapiInit");
-    const token = await getGoogleAccessToken();
-    if (!token) {
-      throw new Error("User not authenticated.");
-    }
-
-    // 2. Attempt to delete from Google Drive
+    // 1. Attempt to delete from Google Drive
     toast.loading(`Deleting ${fileName} from Google Drive...`, {
       id: deleteToastId,
     });
     assertRecoveryPhraseSessionCurrent(recoveryPhraseSession);
-    const response = await fetch(
+    const response = await googleDriveFetch(
       `https://www.googleapis.com/drive/v3/files/${fileId}`,
       {
         method: "DELETE",
-        headers: new Headers({ Authorization: `Bearer ${token}` }),
       }
     );
 
@@ -262,25 +250,18 @@ export const deleteAllAndSyncFiles = async (
     toast.loading(`Deleting ${fileIds.length} files from Google Drive...`, {
       id: deleteToastId,
     });
+    await ensureGoogleDriveConnected();
 
-    // 2. Check auth and get token (needed for Drive delete loop)
-    const { getGoogleAccessToken } = await import("./gapiInit");
-    const token = await getGoogleAccessToken();
-    if (!token) {
-      throw new Error("User not authenticated.");
-    }
-
-    // 3. Delete each file from Google Drive (best effort, ignore 404s)
+    // 2. Delete each file from Google Drive (best effort, ignore 404s)
     let driveDeleteFailures = 0;
     assertRecoveryPhraseSessionCurrent(recoveryPhraseSession);
     await Promise.all(
       fileIds.map(async (fileId) => {
         try {
-          const response = await fetch(
+          const response = await googleDriveFetch(
             `https://www.googleapis.com/drive/v3/files/${fileId}`,
             {
               method: "DELETE",
-              headers: new Headers({ Authorization: `Bearer ${token}` }),
             }
           );
           if (!response.ok && response.status !== 404) {

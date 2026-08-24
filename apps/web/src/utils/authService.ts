@@ -23,6 +23,8 @@ let googleTokenCache: {
   userEmail: string;
 } | null = null;
 
+export const GOOGLE_TOKEN_REFRESH_BUFFER_MS = 2 * 60 * 1000;
+
 /**
  * Initiate login by redirecting to backend OAuth
  */
@@ -210,7 +212,10 @@ export async function refreshToken(): Promise<boolean> {
 /**
  * Check if cached Google token is valid for the given user
  */
-function isGoogleTokenCacheValid(userEmail: string): boolean {
+function isGoogleTokenCacheValid(
+  userEmail: string,
+  minValidityMs: number = 0,
+): boolean {
   if (!googleTokenCache) {
     return false;
   }
@@ -220,8 +225,8 @@ function isGoogleTokenCacheValid(userEmail: string): boolean {
     return false;
   }
 
-  // Check if token is expired
-  return Date.now() < googleTokenCache.expiry.getTime();
+  // Check if token is expired or too close to expiry for a long operation.
+  return Date.now() + minValidityMs < googleTokenCache.expiry.getTime();
 }
 
 /**
@@ -295,6 +300,10 @@ async function refreshGoogleAccessToken(
  */
 export async function getGoogleTokenFromStorage(
   userEmail: string,
+  options: {
+    forceRefresh?: boolean;
+    minValidityMs?: number;
+  } = {},
 ): Promise<string | null> {
   try {
     const storedData = sessionStorage.getItem("google-tokens");
@@ -312,11 +321,13 @@ export async function getGoogleTokenFromStorage(
       return null;
     }
 
-    // Check if token is expired
+    const minValidityMs = options.minValidityMs ?? 0;
+
+    // Check if token is expired or too close to expiry for the requested flow.
     const expiresAt = new Date(parsed.expiresAt);
     const now = Date.now();
-    if (now >= expiresAt.getTime()) {
-      logger.log("[Auth] Access token expired, attempting refresh...");
+    if (options.forceRefresh || now + minValidityMs >= expiresAt.getTime()) {
+      logger.log("[Auth] Google access token needs refresh");
 
       // Try to refresh the token before clearing
       const refreshResult = await refreshGoogleAccessToken(userEmail);
@@ -366,7 +377,12 @@ export async function getGoogleTokenFromStorage(
 /**
  * Get Google token (from cache or retrieve from sessionStorage)
  */
-export async function getOrFetchGoogleToken(): Promise<string | null> {
+export async function getOrFetchGoogleToken(
+  options: {
+    forceRefresh?: boolean;
+    minValidityMs?: number;
+  } = {},
+): Promise<string | null> {
   // Get current user email
   const userEmail = await getUserEmail();
   if (!userEmail) {
@@ -375,12 +391,15 @@ export async function getOrFetchGoogleToken(): Promise<string | null> {
   }
 
   // Check if we have a valid cached token in memory
-  if (isGoogleTokenCacheValid(userEmail)) {
+  if (
+    !options.forceRefresh &&
+    isGoogleTokenCacheValid(userEmail, options.minValidityMs ?? 0)
+  ) {
     return googleTokenCache!.token;
   }
 
   // Token expired or not in cache, try to get from sessionStorage
-  return await getGoogleTokenFromStorage(userEmail);
+  return await getGoogleTokenFromStorage(userEmail, options);
 }
 
 /**

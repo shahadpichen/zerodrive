@@ -111,14 +111,13 @@ describe("gdriveKeyStorage", () => {
       const result = await uploadEncryptedRsaKeyToDrive(mockBlob);
 
       expect(result).toBe(mockFileId);
-      expect(global.fetch).toHaveBeenCalledWith(
+      const fetchCall = (global.fetch as jest.Mock).mock.calls[0];
+      expect(fetchCall[0]).toEqual(
         expect.stringContaining("googleapis.com/upload/drive/v3/files"),
-        expect.objectContaining({
-          method: "POST",
-          headers: expect.objectContaining({
-            Authorization: `Bearer ${mockAccessToken}`,
-          }),
-        }),
+      );
+      expect(fetchCall[1].method).toBe("POST");
+      expect(fetchCall[1].headers.get("Authorization")).toBe(
+        `Bearer ${mockAccessToken}`,
       );
     });
 

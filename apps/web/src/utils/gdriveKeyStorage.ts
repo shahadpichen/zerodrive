@@ -1,6 +1,7 @@
 import { gapi } from "gapi-script";
 import logger from "./logger";
 import { getGoogleAccessToken } from "./gapiInit";
+import { googleDriveFetch } from "./googleDriveRequest";
 
 // const FOLDER_NAME = "ZeroDrive_Key_Backup"; // No longer using a visible custom folder
 const RSA_KEY_FILE_NAME = "zerodrive_rsa_key_backup.json"; // Stored in appDataFolder
@@ -77,11 +78,8 @@ export async function uploadEncryptedRsaKeyToDrive(
 
     const method = fileIdToUpdate ? "PATCH" : "POST";
 
-    const response = await fetch(uploadUrl, {
+    const response = await googleDriveFetch(uploadUrl, {
       method: method,
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
       body: form,
     });
 
@@ -189,11 +187,10 @@ export async function downloadEncryptedRsaKeyFromDrive(
   // Download the file
   try {
     logger.log(`Downloading RSA key backup from ${foundLocation}...`);
-    const fetchResponse = await fetch(
+    const fetchResponse = await googleDriveFetch(
       `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`,
       {
         method: "GET",
-        headers: new Headers({ Authorization: `Bearer ${token}` }),
       },
     );
 

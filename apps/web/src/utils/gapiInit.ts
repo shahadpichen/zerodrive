@@ -70,13 +70,18 @@ export const initializeGapi = async (): Promise<void> => {
  * Get current Google access token for direct API calls
  * @returns Access token or null if not available
  */
-export const getGoogleAccessToken = async (): Promise<string | null> => {
+export const getGoogleAccessToken = async (
+  options: {
+    forceRefresh?: boolean;
+    minValidityMs?: number;
+  } = {},
+): Promise<string | null> => {
   try {
     // Ensure gapi is initialized
     await initializeGapi();
 
     // Get token from backend
-    const token = await getOrFetchGoogleToken();
+    const token = await getOrFetchGoogleToken(options);
 
     // Update gapi client token if we got a new one
     if (token) {
@@ -98,7 +103,7 @@ export const getGoogleAccessToken = async (): Promise<string | null> => {
  */
 export const refreshGapiToken = async (): Promise<void> => {
   try {
-    const token = await getOrFetchGoogleToken();
+    const token = await getOrFetchGoogleToken({ forceRefresh: true });
     if (!token) {
       throw new Error("Failed to refresh token");
     }
