@@ -24,6 +24,7 @@
     "@types/gapi.auth2": "^0.0.61",
     "@zerodrive/shared-types": "workspace:*",
     "@zerodrivehq/capsule": "^0.4.0",
+    "@zerodrivehq/upload-queue": "0.1.0",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.1",
     "dexie": "^4.0.8",
@@ -63,7 +64,7 @@
   },
   "jest": {
     "transformIgnorePatterns": [
-      "node_modules/.pnpm/(?!(?:@zerodrivehq\\+capsule|@scure\\+bip39|@scure\\+base|@noble\\+hashes)@)",
+      "node_modules/.pnpm/(?!(?:@zerodrivehq\\+capsule|@zerodrivehq\\+upload-queue|@scure\\+bip39|@scure\\+base|@noble\\+hashes)@)",
       "node_modules/(?!.pnpm|@zerodrivehq|@scure|@noble)"
     ]
   },

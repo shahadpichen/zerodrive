@@ -24,6 +24,8 @@ import {
   hasMnemonic,
   type RecoveryPhraseSession,
 } from "./mnemonicManager";
+import { getSessionUser } from "./sessionManager";
+import { withVaultMetadataCommitLock } from "./vaultMetadataCommitCoordinator";
 
 export interface FileMeta {
   id: string;
@@ -264,6 +266,7 @@ const sendToGoogleDrive = async (
     userEmail?: string;
     allowMetadataReplacement?: boolean;
     recoveryPhraseSession?: RecoveryPhraseSession;
+    showToast?: boolean;
   } = {},
 ) => {
   let driveUpdateToastId: string | number | undefined;
@@ -289,7 +292,11 @@ const sendToGoogleDrive = async (
       allowMetadataReplacement: options.allowMetadataReplacement,
     });
 
-    driveUpdateToastId = toast.loading("Syncing metadata with Google Drive...");
+    if (options.showToast !== false) {
+      driveUpdateToastId = toast.loading(
+        "Syncing metadata with Google Drive...",
+      );
+    }
 
     const { getGoogleAccessToken } = await import("./gapiInit");
     const token = await getGoogleAccessToken();
@@ -320,25 +327,29 @@ const sendToGoogleDrive = async (
     // verified state—unless the same phrase session is still active.
     assertRecoveryPhraseSessionCurrent(recoveryPhraseSession);
 
-    toast.success("Metadata successfully synchronized.", {
-      id: driveUpdateToastId,
-    });
+    if (options.showToast !== false) {
+      toast.success("Metadata successfully synchronized.", {
+        id: driveUpdateToastId,
+      });
+    }
     logger.log("[Sync] Metadata sync successful. File ID:", fileId);
   } catch (error: any) {
     logger.error(
       "[Sync Error] Error synchronizing metadata with Google Drive:",
       error,
     );
-    toast.error("Failed to sync metadata with Google Drive", {
-      description: error?.message || "Unknown error",
-      id: driveUpdateToastId,
-    });
+    if (options.showToast !== false) {
+      toast.error("Failed to sync metadata with Google Drive", {
+        description: error?.message || "Unknown error",
+        id: driveUpdateToastId,
+      });
+    }
     // IMPORTANT: Re-throw the error so the calling function knows it failed
     throw error;
   }
 };
 
-const fetchAndStoreFileMetadata = async (
+const fetchAndStoreFileMetadataUnlocked = async (
   retryCount: number = 0,
   expectedRecoveryPhraseGeneration: number = getRecoveryPhraseGeneration(),
 ): Promise<void> => {
@@ -604,7 +615,7 @@ const fetchAndStoreFileMetadata = async (
         );
         await refreshGapiToken();
         // Retry the request after token refresh with incremented retry count
-        await fetchAndStoreFileMetadata(
+        await fetchAndStoreFileMetadataUnlocked(
           retryCount + 1,
           expectedRecoveryPhraseGeneration,
         );
@@ -618,6 +629,27 @@ const fetchAndStoreFileMetadata = async (
       throw error;
     }
   }
+};
+
+const fetchAndStoreFileMetadata = async (
+  retryCount: number = 0,
+  expectedRecoveryPhraseGeneration: number = getRecoveryPhraseGeneration(),
+): Promise<void> => {
+  const sessionUser = getSessionUser();
+  if (!sessionUser) {
+    await fetchAndStoreFileMetadataUnlocked(
+      retryCount,
+      expectedRecoveryPhraseGeneration,
+    );
+    return;
+  }
+
+  await withVaultMetadataCommitLock(sessionUser, () =>
+    fetchAndStoreFileMetadataUnlocked(
+      retryCount,
+      expectedRecoveryPhraseGeneration,
+    ),
+  );
 };
 
 export {

@@ -9,12 +9,12 @@ import {
   downloadEncryptedFile,
 } from "../../utils/fileSharing";
 import { getUserKeyPair, getUserKeyPairs } from "../../utils/keyStorage";
-import { uploadAndSyncFile } from "../../utils/fileOperations";
 import { getMnemonic } from "../../utils/mnemonicManager";
 import { downloadEncryptedRsaKeyFromDrive } from "../../utils/gdriveKeyStorage";
 import { fetchAndStoreFileMetadata } from "../../utils/dexieDB";
 import { openSharingKeyBackupCapsule } from "../../utils/capsuleAdapter";
 import { useOptionalVaultData } from "../../contexts/vault-data-context";
+import { useUploadQueue } from "../../contexts/upload-queue-context";
 
 const mockNavigate = jest.fn();
 
@@ -48,10 +48,6 @@ jest.mock("../../utils/keyStorage", () => ({
   userHasStoredKeys: jest.fn().mockResolvedValue(true),
 }));
 
-jest.mock("../../utils/fileOperations", () => ({
-  uploadAndSyncFile: jest.fn(),
-}));
-
 jest.mock("../../utils/dexieDB", () => ({
   fetchAndStoreFileMetadata: jest.fn(),
 }));
@@ -81,6 +77,10 @@ jest.mock("../../contexts/vault-data-context", () => ({
   useOptionalVaultData: jest.fn(),
 }));
 
+jest.mock("../../contexts/upload-queue-context", () => ({
+  useUploadQueue: jest.fn(),
+}));
+
 jest.mock("../../utils/analyticsTracker", () => ({
   trackEvent: jest.fn().mockResolvedValue(undefined),
   AnalyticsEvent: { SHARED_FILE_ACCESSED: "shared_file_accessed" },
@@ -108,25 +108,27 @@ const mockDownloadKeyBackup =
   downloadEncryptedRsaKeyFromDrive as jest.MockedFunction<
     typeof downloadEncryptedRsaKeyFromDrive
   >;
-const mockDecryptKeyBackup =
-  openSharingKeyBackupCapsule as jest.MockedFunction<
-    typeof openSharingKeyBackupCapsule
-  >;
+const mockDecryptKeyBackup = openSharingKeyBackupCapsule as jest.MockedFunction<
+  typeof openSharingKeyBackupCapsule
+>;
 const mockDownloadEncryptedFile = downloadEncryptedFile as jest.MockedFunction<
   typeof downloadEncryptedFile
 >;
 const mockDecryptSharedFile = decryptSharedFile as jest.MockedFunction<
   typeof decryptSharedFile
 >;
-const mockUploadAndSyncFile = uploadAndSyncFile as jest.MockedFunction<
-  typeof uploadAndSyncFile
+const mockUseUploadQueue = useUploadQueue as jest.MockedFunction<
+  typeof useUploadQueue
 >;
+const mockEnqueueUploads = jest.fn();
+const mockWaitForTask = jest.fn();
 const mockFetchAndStoreFileMetadata =
   fetchAndStoreFileMetadata as jest.MockedFunction<
     typeof fetchAndStoreFileMetadata
   >;
-const mockUseOptionalVaultData =
-  useOptionalVaultData as jest.MockedFunction<typeof useOptionalVaultData>;
+const mockUseOptionalVaultData = useOptionalVaultData as jest.MockedFunction<
+  typeof useOptionalVaultData
+>;
 
 const databaseFile = {
   id: "share-123",
@@ -196,13 +198,32 @@ describe("SharedWithMePage", () => {
       fileName: "project-brief.pdf",
       mimeType: "application/pdf",
     });
-    mockUploadAndSyncFile.mockResolvedValue({
-      id: "drive-copy",
+    mockEnqueueUploads.mockReturnValue(["upload-1"]);
+    mockWaitForTask.mockResolvedValue({
+      id: "upload-1",
+      source: { sourceId: "upload-1" },
       name: "project-brief.pdf",
-      mimeType: "application/pdf",
-      userEmail: "recipient@example.com",
-      uploadedDate: new Date(),
-      folderId: null,
+      status: "complete",
+      progress: 1,
+      attempts: 1,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      result: {
+        id: "drive-copy",
+        name: "project-brief.pdf",
+        mimeType: "application/pdf",
+        userEmail: "recipient@example.com",
+        uploadedDate: new Date(),
+        folderId: null,
+      },
+    });
+    mockUseUploadQueue.mockReturnValue({
+      snapshot: { running: true, activeCount: 0, tasks: [] },
+      enqueueUploads: mockEnqueueUploads,
+      waitForTask: mockWaitForTask,
+      retry: jest.fn(),
+      cancel: jest.fn(),
+      clearCompleted: jest.fn(),
     });
     mockFetchAndStoreFileMetadata.mockResolvedValue(undefined);
     (apiClient.sharedFiles.recordAccess as jest.Mock).mockResolvedValue({
@@ -228,9 +249,7 @@ describe("SharedWithMePage", () => {
     expect(
       await screen.findByText("Set up Recovery & Access first"),
     ).toBeInTheDocument();
-    fireEvent.click(
-      screen.getByRole("button", { name: /set up access/i }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: /set up access/i }));
     expect(mockNavigate).toHaveBeenCalledWith(
       "/recovery-access?returnTo=%2Fshared-with-me",
     );
@@ -279,9 +298,7 @@ describe("SharedWithMePage", () => {
       await screen.findByText("Set up Recovery & Access first"),
     ).toBeInTheDocument();
     expect(screen.queryByLabelText(/recovery phrase/i)).not.toBeInTheDocument();
-    fireEvent.click(
-      screen.getByRole("button", { name: /set up access/i }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: /set up access/i }));
     expect(mockNavigate).toHaveBeenCalledWith(
       "/recovery-access?returnTo=%2Fshared-with-me",
     );
@@ -337,7 +354,7 @@ describe("SharedWithMePage", () => {
 
     await waitFor(() => expect(mockDecryptSharedFile).toHaveBeenCalled());
     expect(anchorClick).toHaveBeenCalled();
-    expect(mockUploadAndSyncFile).not.toHaveBeenCalled();
+    expect(mockEnqueueUploads).not.toHaveBeenCalled();
     anchorClick.mockRestore();
   });
 
@@ -387,19 +404,22 @@ describe("SharedWithMePage", () => {
       await screen.findByRole("button", { name: /saved to storage/i }),
     ).toBeDisabled();
     expect(mockFetchAndStoreFileMetadata).toHaveBeenCalled();
-    expect(mockUploadAndSyncFile).toHaveBeenCalledWith(
-      expect.objectContaining({
-        name: "project-brief.pdf",
-        type: "application/pdf",
-      }),
-      "recipient@example.com",
-    );
+    expect(mockEnqueueUploads).toHaveBeenCalledWith([
+      {
+        file: expect.objectContaining({
+          name: "project-brief.pdf",
+          type: "application/pdf",
+        }),
+        userEmail: "recipient@example.com",
+      },
+    ]);
+    expect(mockWaitForTask).toHaveBeenCalledWith("upload-1");
     expect(apiClient.sharedFiles.recordAccess).toHaveBeenCalledWith(
       "share-123",
     );
   });
 
-  it("refreshes the shared vault snapshot after saving to Storage", async () => {
+  it("leaves shared vault refreshes to the global upload provider", async () => {
     const refreshVaultFromLocal = jest.fn().mockResolvedValue({
       files: [],
       folders: [],
@@ -429,13 +449,9 @@ describe("SharedWithMePage", () => {
       await screen.findByRole("button", { name: /save to storage/i }),
     );
 
-    await waitFor(() =>
-      expect(refreshVaultFromLocal).toHaveBeenCalledWith(
-        "recipient@example.com",
-        { metadataStatus: "ready" },
-      ),
-    );
-    expect(mockUploadAndSyncFile).toHaveBeenCalledTimes(1);
+    await screen.findByRole("button", { name: /saved to storage/i });
+    expect(mockEnqueueUploads).toHaveBeenCalledTimes(1);
+    expect(refreshVaultFromLocal).not.toHaveBeenCalled();
   });
 
   it("verifies Storage metadata before saving a shared file", async () => {
@@ -453,7 +469,7 @@ describe("SharedWithMePage", () => {
       expect(mockFetchAndStoreFileMetadata).toHaveBeenCalled(),
     );
     expect(mockDownloadEncryptedFile).not.toHaveBeenCalled();
-    expect(mockUploadAndSyncFile).not.toHaveBeenCalled();
+    expect(mockEnqueueUploads).not.toHaveBeenCalled();
   });
 
   it("shows a recoverable inline error when the inbox fails", async () => {

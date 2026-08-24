@@ -50,6 +50,7 @@ import {
   showVaultMetadataWriteBlockedToast,
 } from "../../utils/vaultMetadataWriteGuard";
 import { googleDriveFetch } from "../../utils/googleDriveRequest";
+import { withVaultMetadataCommitLock } from "../../utils/vaultMetadataCommitCoordinator";
 
 interface FileListProps {
   view?: "compact" | "recent" | "full";
@@ -339,9 +340,12 @@ export const FileList: React.FC<FileListProps> = ({
 
       try {
         const fileMetadata = allUserFiles.find((file) => file.id === fileId);
-        const decrypted = await decryptFile(fileBlob, fileMetadata || {
-          name: fileName,
-        });
+        const decrypted = await decryptFile(
+          fileBlob,
+          fileMetadata || {
+            name: fileName,
+          },
+        );
 
         const url = URL.createObjectURL(decrypted.contentBlob);
         const a = document.createElement("a");
@@ -429,17 +433,18 @@ export const FileList: React.FC<FileListProps> = ({
         console.warn(`Drive delete failed: ${response.statusText}`);
       }
 
-      await deleteFileFromDB(fileId);
+      const { updatedFiles, updatedFolders } =
+        await withVaultMetadataCommitLock(userEmail, async () => {
+          await deleteFileFromDB(fileId);
+          const files = await getAllFilesForUser(userEmail);
+          const folders = await getFoldersForUser(userEmail);
+          await sendToGoogleDrive(files, folders, { userEmail });
+          return { updatedFiles: files, updatedFolders: folders };
+        });
       toast.info(`Removed ${fileName} locally.`, { id: deleteToastId });
-
-      const updatedFiles = await getAllFilesForUser(userEmail);
-      const updatedFolders = await getFoldersForUser(userEmail);
       setAllUserFiles(updatedFiles);
       setFilteredFiles(updatedFiles);
       replaceVaultData?.(userEmail, updatedFiles, updatedFolders);
-
-      console.log("[FileList] Deletion complete, syncing metadata...");
-      await sendToGoogleDrive(updatedFiles, updatedFolders, { userEmail });
 
       toast.success(`Deleted ${fileName} and synced metadata.`, {
         id: deleteToastId,

@@ -8,10 +8,7 @@ import { useApp } from "../contexts/app-context";
 import { hasMnemonic } from "../utils/mnemonicManager";
 import { hasVaultReadAccess } from "../utils/vaultAccess";
 import { fetchAndStoreFileMetadata } from "../utils/dexieDB";
-import {
-  uploadAndSyncFile,
-  deleteAllAndSyncFiles,
-} from "../utils/fileOperations";
+import { deleteAllAndSyncFiles } from "../utils/fileOperations";
 import { ConfirmationDialog } from "../components/storage/confirmation-dialog";
 import {
   AlertTriangle,
@@ -44,6 +41,7 @@ import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
 import { useVaultData } from "../contexts/vault-data-context";
 import { ensureGoogleDrivePermissionForAction } from "../utils/googleDrivePermissions";
+import { useUploadQueue } from "../contexts/upload-queue-context";
 
 // Imports for sharing key functionality (kept for potential future use)
 import { recoverRsaKeysIfNeeded } from "../utils/rsaKeyRecovery";
@@ -75,11 +73,11 @@ function PrivateStorageContent() {
     setVaultKeyStatus,
     setVaultMetadataStatus,
   } = useVaultData();
+  const { enqueueUploads } = useUploadQueue();
   const hasCurrentVaultSnapshot =
     !!userEmail &&
     vaultState.userEmail === userEmail.trim().toLowerCase() &&
     !vaultState.isHydrating;
-  const [uploading, setUploading] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showMetadataReplaceConfirm, setShowMetadataReplaceConfirm] =
@@ -450,34 +448,30 @@ function PrivateStorageContent() {
     }
 
     if (
-      (hasDecryptionError || vaultState.metadataStatus === "decryption_error") &&
+      (hasDecryptionError ||
+        vaultState.metadataStatus === "decryption_error") &&
       !options.skipMetadataReplaceWarning
     ) {
       openMetadataReplaceConfirm(filesToUpload);
       return;
     }
 
-    setUploading(true);
-    let successCount = 0;
-
-    for (const file of filesToUpload) {
-      const result = await uploadAndSyncFile(file, userEmail, currentFolderId, {
-        allowMetadataReplacement:
-          options.skipMetadataReplaceWarning &&
-          vaultState.metadataStatus === "decryption_error",
+    try {
+      enqueueUploads(
+        filesToUpload.map((file) => ({
+          file,
+          userEmail,
+          folderId: currentFolderId,
+          allowMetadataReplacement:
+            options.skipMetadataReplaceWarning &&
+            vaultState.metadataStatus === "decryption_error",
+        })),
+      );
+    } catch (error) {
+      toast.error("Files could not be added to uploads", {
+        description:
+          error instanceof Error ? error.message : "Choose the files again.",
       });
-      if (result) successCount++;
-    }
-
-    setUploading(false);
-
-    if (successCount > 0) {
-      await refreshVaultFromLocal(userEmail, {
-        metadataStatus: "ready",
-      });
-      setRefreshFileListKey((prev) => prev + 1);
-      setDecryptionError(false);
-      await refreshAll(); // Refresh storage after upload
     }
   };
 
@@ -577,7 +571,6 @@ function PrivateStorageContent() {
         multiple
         className="hidden"
         onChange={handleFileChangeAndUpload}
-        disabled={uploading}
       />
 
       <div
@@ -621,7 +614,7 @@ function PrivateStorageContent() {
                   ? openRecoveryAccess
                   : handleUploadTriggerInternal
               }
-              disabled={uploading || isLoadingUserFiles}
+              disabled={isLoadingUserFiles}
             >
               <Upload className="h-4 w-4 mr-2" />
               {hasVaultKey === false ? "Set up access" : "Upload"}
@@ -747,8 +740,8 @@ function PrivateStorageContent() {
                   </DialogTitle>
                   <DialogDescription className="mt-2 leading-relaxed">
                     ZeroDrive found your encrypted file list in Google Drive,
-                    but this browser could not open it with the current
-                    recovery phrase.
+                    but this browser could not open it with the current recovery
+                    phrase.
                   </DialogDescription>
                 </div>
               </div>
@@ -795,7 +788,7 @@ function PrivateStorageContent() {
                 variant="destructive"
                 disabled={
                   metadataReplaceInput.trim().toUpperCase() !==
-                    metadataReplaceCode || uploading
+                  metadataReplaceCode
                 }
                 onClick={handleMetadataReplaceConfirm}
               >

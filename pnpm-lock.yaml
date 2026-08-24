@@ -328,6 +328,9 @@ importers:
       '@zerodrivehq/capsule':
         specifier: ^0.4.0
         version: 0.4.0
+      '@zerodrivehq/upload-queue':
+        specifier: 0.1.0
+        version: 0.1.0
       class-variance-authority:
         specifier: ^0.7.0
         version: 0.7.1
@@ -3117,6 +3120,10 @@ packages:
 
   '@zerodrivehq/capsule@0.4.0':
     resolution: {integrity: sha512-T6IdzfLWmvgzXym5guyaJvQtt5AiY4t9uyWWBxgZm9oKPCSo6VSdWLBwJrIJyO6/M0SVVaS6uzIlA76AKPgN4w==}
+    engines: {node: '>=24.0.0'}
+
+  '@zerodrivehq/upload-queue@0.1.0':
+    resolution: {integrity: sha512-TQhw1D5mSi9onMdEhw24xYVy83vTGxQiT9zWa+KponHl7+knm3QRnqIYDvRxEMjHU5Ggu9OCSdFQQiblhHM/9w==}
     engines: {node: '>=24.0.0'}
 
   abab@2.0.6:
@@ -11874,6 +11881,8 @@ snapshots:
   '@zerodrivehq/capsule@0.4.0':
     dependencies:
       '@scure/bip39': 2.2.0
+
+  '@zerodrivehq/upload-queue@0.1.0': {}
 
   abab@2.0.6: {}
 

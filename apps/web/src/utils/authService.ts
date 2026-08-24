@@ -9,6 +9,7 @@ import type { AuthenticatedUser } from "@zerodrive/shared-types";
 import {
   AUTH_SESSION_CLEARED_EVENT,
   GOOGLE_DRIVE_PERMISSION_EVENT,
+  prepareForAuthSessionClear,
 } from "./authEvents";
 
 const API_URL = process.env.REACT_APP_API_URL || "http://localhost:3001/api";
@@ -39,6 +40,11 @@ export async function logout(): Promise<void> {
   logger.log("[Logout] Starting logout process...");
   logger.log("[Logout] CSRF token:", getCsrfToken() ? "Present" : "Missing");
   logger.log("[Logout] API URL:", API_URL);
+
+  // Stop uploads before revoking the backend session or clearing the Google
+  // token and recovery phrase. Cancellation may need both to remove an
+  // accepted Drive object and restore the authoritative vault index.
+  await prepareForAuthSessionClear();
 
   // Call backend logout endpoint to clear httpOnly cookies FIRST
   try {
@@ -449,14 +455,18 @@ export function clearGoogleTokens(): void {
 }
 
 export async function clearSensitiveBrowserSession(): Promise<void> {
-  googleTokenCache = null;
-  const [{ clearMnemonic }, { clearStoredKey }] = await Promise.all([
-    import("./mnemonicManager"),
-    import("./cryptoUtils"),
-  ]);
-  clearMnemonic();
-  clearStoredKey();
-  sessionStorage.clear();
+  try {
+    await prepareForAuthSessionClear();
+  } finally {
+    googleTokenCache = null;
+    const [{ clearMnemonic }, { clearStoredKey }] = await Promise.all([
+      import("./mnemonicManager"),
+      import("./cryptoUtils"),
+    ]);
+    clearMnemonic();
+    clearStoredKey();
+    sessionStorage.clear();
+  }
 }
 
 /**

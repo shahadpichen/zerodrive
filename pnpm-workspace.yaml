@@ -9,3 +9,4 @@ allowBuilds:
   esbuild: true
 minimumReleaseAgeExclude:
   - '@zerodrivehq/capsule@0.4.0'
+  - '@zerodrivehq/upload-queue@0.1.0'

@@ -14,6 +14,10 @@ import {
   storeGoogleTokens,
   GOOGLE_TOKEN_REFRESH_BUFFER_MS,
 } from "../../utils/authService";
+import {
+  AUTH_SESSION_CLEAR_REQUEST_EVENT,
+  type AuthSessionClearRequestDetail,
+} from "../../utils/authEvents";
 
 // Mock fetch globally
 global.fetch = jest.fn();
@@ -245,6 +249,47 @@ describe("AuthService", () => {
   });
 
   describe("logout", () => {
+    it("waits for upload cleanup before clearing credentials or logging out", async () => {
+      sessionStorage.setItem("google-tokens", "still-available");
+      let finishCleanup: (() => void) | undefined;
+      const cleanup = new Promise<void>((resolve) => {
+        finishCleanup = resolve;
+      });
+      const handleClearRequest = (event: Event) => {
+        const request = event as CustomEvent<AuthSessionClearRequestDetail>;
+        request.detail.waitUntil(cleanup);
+      };
+      window.addEventListener(
+        AUTH_SESSION_CLEAR_REQUEST_EVENT,
+        handleClearRequest,
+      );
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: true,
+        text: async () => JSON.stringify({}),
+      });
+
+      try {
+        const logoutPromise = logout();
+        await Promise.resolve();
+
+        expect(sessionStorage.getItem("google-tokens")).toBe(
+          "still-available",
+        );
+        expect(global.fetch).not.toHaveBeenCalled();
+
+        finishCleanup?.();
+        await logoutPromise;
+
+        expect(sessionStorage.getItem("google-tokens")).toBeNull();
+        expect(global.fetch).toHaveBeenCalled();
+      } finally {
+        window.removeEventListener(
+          AUTH_SESSION_CLEAR_REQUEST_EVENT,
+          handleClearRequest,
+        );
+      }
+    });
+
     it("should clear sessionStorage", async () => {
       sessionStorage.setItem("test-key", "test-value");
 

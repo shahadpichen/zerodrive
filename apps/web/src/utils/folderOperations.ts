@@ -15,6 +15,7 @@ import logger from "./logger";
 import { assertCanWriteVaultMetadata } from "./vaultMetadataWriteGuard";
 import { requireActiveRecoveryPhrase } from "./mnemonicManager";
 import { googleDriveFetch } from "./googleDriveRequest";
+import { withVaultMetadataCommitLock } from "./vaultMetadataCommitCoordinator";
 
 export const createFolder = async (
   folderName: string,
@@ -55,7 +56,6 @@ export const createFolder = async (
 
     logger.log("[Folder] Folder created on Google Drive:", data);
 
-    // Add to IndexedDB
     const newFolder: FolderMeta = {
       id: data.id,
       name: folderName,
@@ -63,12 +63,12 @@ export const createFolder = async (
       userEmail,
       createdDate: new Date(),
     };
-    await addFolder(newFolder);
-
-    // Sync metadata
-    const updatedFiles = await getAllFilesForUser(userEmail);
-    const updatedFolders = await getFoldersForUser(userEmail);
-    await sendToGoogleDrive(updatedFiles, updatedFolders, { userEmail });
+    await withVaultMetadataCommitLock(userEmail, async () => {
+      await addFolder(newFolder);
+      const updatedFiles = await getAllFilesForUser(userEmail);
+      const updatedFolders = await getFoldersForUser(userEmail);
+      await sendToGoogleDrive(updatedFiles, updatedFolders, { userEmail });
+    });
 
     toast.success(`Folder "${folderName}" created`, { id: createToastId });
     return newFolder;
@@ -94,47 +94,44 @@ export const deleteFolder = async (
     requireActiveRecoveryPhrase();
     assertCanWriteVaultMetadata(userEmail);
 
-    // Check if folder has files
-    const filesInFolder = await getFilesInFolder(userEmail, folderId);
+    const deleted = await withVaultMetadataCommitLock(userEmail, async () => {
+      const filesInFolder = await getFilesInFolder(userEmail, folderId);
 
-    if (filesInFolder.length > 0 && !force) {
-      toast.error("Folder is not empty", {
-        description: `Move or delete ${filesInFolder.length} file(s) first`,
-        id: deleteToastId,
-      });
-      return false;
-    }
+      if (filesInFolder.length > 0 && !force) {
+        toast.error("Folder is not empty", {
+          description: `Move or delete ${filesInFolder.length} file(s) first`,
+          id: deleteToastId,
+        });
+        return false;
+      }
 
-    // If force, move files to root
-    if (force && filesInFolder.length > 0) {
-      logger.log(
-        `[Folder] Moving ${filesInFolder.length} files to root before deleting folder`,
+      if (force && filesInFolder.length > 0) {
+        logger.log(
+          `[Folder] Moving ${filesInFolder.length} files to root before deleting folder`,
+        );
+        await Promise.all(
+          filesInFolder.map((file) => moveFileToFolder(file.id, null)),
+        );
+      }
+
+      logger.log("[Folder] Deleting folder from Google Drive:", folderId);
+      const response = await googleDriveFetch(
+        `https://www.googleapis.com/drive/v3/files/${folderId}`,
+        { method: "DELETE" },
       );
-      await Promise.all(filesInFolder.map((f) => moveFileToFolder(f.id, null)));
-    }
+      if (!response.ok) {
+        throw new Error(
+          `Failed to delete folder: ${response.status} ${response.statusText}`,
+        );
+      }
 
-    // Delete from Google Drive
-    logger.log("[Folder] Deleting folder from Google Drive:", folderId);
-    const response = await googleDriveFetch(
-      `https://www.googleapis.com/drive/v3/files/${folderId}`,
-      {
-        method: "DELETE",
-      },
-    );
-
-    if (!response.ok) {
-      throw new Error(
-        `Failed to delete folder: ${response.status} ${response.statusText}`,
-      );
-    }
-
-    // Delete from IndexedDB
-    await deleteFolderFromDB(folderId);
-
-    // Sync metadata
-    const updatedFiles = await getAllFilesForUser(userEmail);
-    const updatedFolders = await getFoldersForUser(userEmail);
-    await sendToGoogleDrive(updatedFiles, updatedFolders, { userEmail });
+      await deleteFolderFromDB(folderId);
+      const updatedFiles = await getAllFilesForUser(userEmail);
+      const updatedFolders = await getFoldersForUser(userEmail);
+      await sendToGoogleDrive(updatedFiles, updatedFolders, { userEmail });
+      return true;
+    });
+    if (!deleted) return false;
 
     toast.success(`Folder "${folderName}" deleted`, { id: deleteToastId });
     return true;
@@ -163,32 +160,31 @@ export const renameFolder = async (
     requireActiveRecoveryPhrase();
     assertCanWriteVaultMetadata(userEmail);
 
-    // Rename the folder on Google Drive
-    logger.log("[Folder] Renaming folder on Google Drive:", folderId, trimmed);
-    const response = await googleDriveFetch(
-      `https://www.googleapis.com/drive/v3/files/${folderId}`,
-      {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ name: trimmed }),
-      },
-    );
-
-    if (!response.ok) {
-      throw new Error(
-        `Failed to rename folder: ${response.status} ${response.statusText}`,
+    await withVaultMetadataCommitLock(userEmail, async () => {
+      logger.log(
+        "[Folder] Renaming folder on Google Drive:",
+        folderId,
+        trimmed,
       );
-    }
+      const response = await googleDriveFetch(
+        `https://www.googleapis.com/drive/v3/files/${folderId}`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: trimmed }),
+        },
+      );
+      if (!response.ok) {
+        throw new Error(
+          `Failed to rename folder: ${response.status} ${response.statusText}`,
+        );
+      }
 
-    // Update IndexedDB
-    await updateFolderName(folderId, trimmed);
-
-    // Sync metadata
-    const updatedFiles = await getAllFilesForUser(userEmail);
-    const updatedFolders = await getFoldersForUser(userEmail);
-    await sendToGoogleDrive(updatedFiles, updatedFolders, { userEmail });
+      await updateFolderName(folderId, trimmed);
+      const updatedFiles = await getAllFilesForUser(userEmail);
+      const updatedFolders = await getFoldersForUser(userEmail);
+      await sendToGoogleDrive(updatedFiles, updatedFolders, { userEmail });
+    });
 
     toast.success(`Renamed to "${trimmed}"`, { id: renameToastId });
     return true;
@@ -214,51 +210,35 @@ export const moveFile = async (
     requireActiveRecoveryPhrase();
     assertCanWriteVaultMetadata(userEmail);
 
-    // Get current file to find old parent
-    const file = await getFileByIdForUser(fileId, userEmail);
-    if (!file) {
-      throw new Error("File not found");
-    }
+    await withVaultMetadataCommitLock(userEmail, async () => {
+      const file = await getFileByIdForUser(fileId, userEmail);
+      if (!file) throw new Error("File not found");
 
-    logger.log("[Folder] Moving file:", {
-      fileId,
-      from: file.folderId,
-      to: newFolderId,
-    });
-
-    // Build Google Drive API request
-    let url = `https://www.googleapis.com/drive/v3/files/${fileId}?`;
-    const params: string[] = [];
-
-    if (file.folderId) {
-      params.push(`removeParents=${file.folderId}`);
-    }
-
-    if (newFolderId) {
-      params.push(`addParents=${newFolderId}`);
-    }
-
-    if (params.length > 0) {
-      url += params.join("&");
-
-      const response = await googleDriveFetch(url, {
-        method: "PATCH",
+      logger.log("[Folder] Moving file:", {
+        fileId,
+        from: file.folderId,
+        to: newFolderId,
       });
 
-      if (!response.ok) {
-        throw new Error(
-          `Failed to move file: ${response.status} ${response.statusText}`,
-        );
+      const params: string[] = [];
+      if (file.folderId) params.push(`removeParents=${file.folderId}`);
+      if (newFolderId) params.push(`addParents=${newFolderId}`);
+
+      if (params.length > 0) {
+        const url = `https://www.googleapis.com/drive/v3/files/${fileId}?${params.join("&")}`;
+        const response = await googleDriveFetch(url, { method: "PATCH" });
+        if (!response.ok) {
+          throw new Error(
+            `Failed to move file: ${response.status} ${response.statusText}`,
+          );
+        }
       }
-    }
 
-    // Update IndexedDB
-    await moveFileToFolder(fileId, newFolderId);
-
-    // Sync metadata
-    const updatedFiles = await getAllFilesForUser(userEmail);
-    const updatedFolders = await getFoldersForUser(userEmail);
-    await sendToGoogleDrive(updatedFiles, updatedFolders, { userEmail });
+      await moveFileToFolder(fileId, newFolderId);
+      const updatedFiles = await getAllFilesForUser(userEmail);
+      const updatedFolders = await getFoldersForUser(userEmail);
+      await sendToGoogleDrive(updatedFiles, updatedFolders, { userEmail });
+    });
 
     toast.success(`Moved "${fileName}"`, { id: moveToastId });
     return true;

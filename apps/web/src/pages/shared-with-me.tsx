@@ -34,13 +34,13 @@ import {
 } from "../utils/keyStorage";
 import apiClient from "../utils/apiClient";
 import { fetchAndStoreFileMetadata } from "../utils/dexieDB";
-import { uploadAndSyncFile } from "../utils/fileOperations";
 import { getMnemonic } from "../utils/mnemonicManager";
 import {
   recoverRsaKeysIfNeeded,
   recoverRsaKeyVersion,
 } from "../utils/rsaKeyRecovery";
 import { useOptionalVaultData } from "../contexts/vault-data-context";
+import { useUploadQueue } from "../contexts/upload-queue-context";
 import { rememberVaultMetadataStatus } from "../utils/vaultMetadataWriteGuard";
 import { toast } from "sonner";
 import { inspectSharedMetadataCapsule } from "../utils/capsuleAdapter";
@@ -51,11 +51,7 @@ import type {
   ZeroDriveSharedPrivateKey,
 } from "@zerodrivehq/capsule";
 
-type KeyState =
-  | "checking"
-  | "ready"
-  | "primary-missing"
-  | "sharing-missing";
+type KeyState = "checking" | "ready" | "primary-missing" | "sharing-missing";
 
 type FileAction = "download" | "save";
 type ActionStage = "downloading" | "decrypting" | "saving";
@@ -124,9 +120,7 @@ function mapSharedFile(row: any): SharedFile {
     createdAt: new Date(row.created_at),
     expiresAt: row.expires_at ? new Date(row.expires_at) : null,
     encryptedFileKey:
-      typeof row.encrypted_file_key === "string"
-        ? row.encrypted_file_key
-        : "",
+      typeof row.encrypted_file_key === "string" ? row.encrypted_file_key : "",
     contentFormat: row.content_format,
     recipientKeyVersion:
       typeof row.recipient_key_version === "number"
@@ -217,6 +211,7 @@ async function getRecipientPrivateKeyCandidates(
 const SharedWithMePage: React.FC = () => {
   const navigate = useNavigate();
   const vaultData = useOptionalVaultData();
+  const { enqueueUploads, waitForTask } = useUploadQueue();
   const [userEmail, setUserEmail] = useState("");
   const [sharedFiles, setSharedFiles] = useState<SharedFile[]>([]);
   const [sharingPrivateKey, setSharingPrivateKey] = useState<JsonWebKey | null>(
@@ -383,8 +378,7 @@ const SharedWithMePage: React.FC = () => {
 
     const normalizedEmail = userEmail.trim().toLowerCase();
     const vaultState = vaultData?.state;
-    const stateBelongsToCurrentUser =
-      vaultState?.userEmail === normalizedEmail;
+    const stateBelongsToCurrentUser = vaultState?.userEmail === normalizedEmail;
 
     if (stateBelongsToCurrentUser && vaultState?.metadataStatus === "ready") {
       return;
@@ -482,21 +476,10 @@ const SharedWithMePage: React.FC = () => {
           decrypted.fileName,
           { type: decrypted.mimeType },
         );
-        const saved = await uploadAndSyncFile(fileForVault, userEmail);
-        if (!saved) throw new Error("The file could not be saved to storage.");
-
-        // Keep the persistent vault snapshot in sync with the IndexedDB record
-        // that uploadAndSyncFile just committed. Storage reuses this snapshot
-        // across route navigation, so leaving it stale can make a successful
-        // save appear as an empty vault until a later refresh.
-        if (vaultData) {
-          await vaultData.refreshVaultFromLocal(userEmail, {
-            metadataStatus: "ready",
-          });
-        }
-
+        const [taskId] = enqueueUploads([{ file: fileForVault, userEmail }]);
+        const completedTask = await waitForTask(taskId);
+        if (completedTask.status !== "complete") return;
         setSavedFileIds((current) => new Set(current).add(file.id));
-        toast.success(`${decrypted.fileName} saved to My Storage`);
       }
 
       void Promise.resolve(apiClient.sharedFiles.recordAccess(file.id)).catch(
@@ -574,8 +557,8 @@ const SharedWithMePage: React.FC = () => {
         <div>
           <h1 className="text-2xl tracking-tight">Shared with me</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Encrypted files sent to this ZeroDrive account. Your browser
-            unlocks them only after the sender finalizes the share.
+            Encrypted files sent to this ZeroDrive account. Your browser unlocks
+            them only after the sender finalizes the share.
           </p>
         </div>
         <Button
@@ -707,9 +690,7 @@ const SharedWithMePage: React.FC = () => {
                         size="sm"
                         onClick={() => handleFileAction(file, "save")}
                         disabled={
-                          Boolean(processing) ||
-                          keyState !== "ready" ||
-                          isSaved
+                          Boolean(processing) || keyState !== "ready" || isSaved
                         }
                       >
                         {isSaved ? (
