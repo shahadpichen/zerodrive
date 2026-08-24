@@ -12,7 +12,7 @@ export const content = [
   {
     heading: "Encrypted Sharing Without Sender Records",
     description:
-      "Sharing works the same way: your browser encrypts the shared copy before upload, then locks it with the recipient’s <u>public sharing key</u>. The server can help route the encrypted share, but the share record does not store a sender user ID, sender email, or plaintext recipient email. The recipient’s browser uses their private key to unlock the file.\n\nYour <u>12-word recovery phrase</u> is what recreates the private keys this browser needs to open your encrypted files and restore encrypted key backups on another device. It is not stored by ZeroDrive and cannot be reset, so it should be saved somewhere safe.",
+      "Sharing works the same way: your browser encrypts the shared copy before upload, then locks it with the recipient’s <u>public sharing key</u>. The server can help route the encrypted share, but the share record does not store a sender user ID, sender email, or plaintext recipient email. The recipient’s browser uses their private key to unlock the file.\n\nYour <u>12-word recovery phrase</u> is what recreates the private keys this browser needs to open your encrypted files and restore encrypted key backups on another device. It is never sent to the ZeroDrive server and cannot be reset. The hosted app may retain it only in the current tab’s browser session so a reload stays unlocked; you should still save the phrase somewhere safe.",
   },
   {
     description:

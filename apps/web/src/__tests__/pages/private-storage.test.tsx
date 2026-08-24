@@ -11,13 +11,23 @@ import {
   getFilesInFolder,
   getFoldersForUser,
 } from "../../utils/dexieDB";
-import { uploadAndSyncFile } from "../../utils/fileOperations";
 import { toast } from "sonner";
 import { useVaultData } from "../../contexts/vault-data-context";
+import { useUploadQueue } from "../../contexts/upload-queue-context";
+import { clearMnemonic, setMnemonic } from "../../utils/mnemonicManager";
 import {
-  clearMnemonic,
-  setMnemonic,
-} from "../../utils/mnemonicManager";
+  getUserEmail,
+  hasGoogleTokensInStorage,
+  logout,
+} from "../../utils/authService";
+import { initializeGapi } from "../../utils/gapiInit";
+import {
+  clearSession,
+  getSessionUser,
+  setSessionUser,
+} from "../../utils/sessionManager";
+import { recoverRsaKeysIfNeeded } from "../../utils/rsaKeyRecovery";
+import { deleteAllAndSyncFiles } from "../../utils/fileOperations";
 
 jest.mock("../../contexts/app-context", () => ({
   useApp: jest.fn(),
@@ -40,8 +50,30 @@ jest.mock("../../utils/dexieDB", () => ({
 }));
 
 jest.mock("../../utils/fileOperations", () => ({
-  uploadAndSyncFile: jest.fn(),
   deleteAllAndSyncFiles: jest.fn(),
+}));
+
+jest.mock("../../contexts/upload-queue-context", () => ({
+  useUploadQueue: jest.fn(),
+}));
+
+jest.mock("../../components/ui/dropdown-menu", () => ({
+  DropdownMenu: ({ children }: { children: React.ReactNode }) => (
+    <>{children}</>
+  ),
+  DropdownMenuTrigger: ({ children }: { children: React.ReactNode }) => (
+    <>{children}</>
+  ),
+  DropdownMenuContent: ({ children }: { children: React.ReactNode }) => (
+    <div>{children}</div>
+  ),
+  DropdownMenuItem: ({
+    children,
+    onClick,
+  }: {
+    children: React.ReactNode;
+    onClick?: () => void;
+  }) => <button onClick={onClick}>{children}</button>,
 }));
 
 jest.mock("../../components/storage/file-preview-dialog", () => ({
@@ -97,9 +129,12 @@ const mockGetFilesInFolder = getFilesInFolder as jest.MockedFunction<
 const mockGetFoldersForUser = getFoldersForUser as jest.MockedFunction<
   typeof getFoldersForUser
 >;
-const mockUploadAndSyncFile = uploadAndSyncFile as jest.MockedFunction<
-  typeof uploadAndSyncFile
+const mockUseUploadQueue = useUploadQueue as jest.MockedFunction<
+  typeof useUploadQueue
 >;
+const mockEnqueueUploads = jest.fn();
+const mockHasPendingUploads = jest.fn();
+const mockTryAcquireUploadExclusion = jest.fn();
 const mockToastInfo = toast.info as jest.MockedFunction<typeof toast.info>;
 const mockToastError = toast.error as jest.MockedFunction<typeof toast.error>;
 let mockSetDecryptionError: jest.Mock;
@@ -176,6 +211,15 @@ describe("PrivateStorage metadata replacement warning", () => {
       setUserInfo: jest.fn(),
     });
 
+    (getUserEmail as jest.Mock).mockResolvedValue("owner@example.com");
+    (hasGoogleTokensInStorage as jest.Mock).mockReturnValue(true);
+    (logout as jest.Mock).mockResolvedValue(undefined);
+    (initializeGapi as jest.Mock).mockResolvedValue(undefined);
+    (getSessionUser as jest.Mock).mockReturnValue("owner@example.com");
+    (setSessionUser as jest.Mock).mockImplementation(() => undefined);
+    (clearSession as jest.Mock).mockImplementation(() => undefined);
+    (recoverRsaKeysIfNeeded as jest.Mock).mockResolvedValue(undefined);
+
     mockGetStoredKey.mockResolvedValue({} as CryptoKey);
     mockFetchAndStoreFileMetadata.mockRejectedValue(
       Object.assign(new Error("Cannot decrypt metadata"), {
@@ -185,13 +229,18 @@ describe("PrivateStorage metadata replacement warning", () => {
     mockGetAllFilesForUser.mockResolvedValue([]);
     mockGetFilesInFolder.mockResolvedValue([]);
     mockGetFoldersForUser.mockResolvedValue([]);
-    mockUploadAndSyncFile.mockResolvedValue({
-      id: "drive-file-1",
-      name: "notes.pdf",
-      mimeType: "application/pdf",
-      userEmail: "owner@example.com",
-      uploadedDate: new Date("2026-07-19T00:00:00.000Z"),
-      folderId: null,
+    mockEnqueueUploads.mockReturnValue(["upload-1"]);
+    mockHasPendingUploads.mockReturnValue(false);
+    mockTryAcquireUploadExclusion.mockReturnValue(jest.fn());
+    mockUseUploadQueue.mockReturnValue({
+      snapshot: { running: true, activeCount: 0, tasks: [] },
+      enqueueUploads: mockEnqueueUploads,
+      hasPendingUploads: mockHasPendingUploads,
+      tryAcquireUploadExclusion: mockTryAcquireUploadExclusion,
+      waitForTask: jest.fn(),
+      retry: jest.fn(),
+      cancel: jest.fn(),
+      clearCompleted: jest.fn(),
     });
   });
 
@@ -227,7 +276,7 @@ describe("PrivateStorage metadata replacement warning", () => {
     expect(
       await screen.findByText(/existing vault index could not be opened/i),
     ).toBeInTheDocument();
-    expect(mockUploadAndSyncFile).not.toHaveBeenCalled();
+    expect(mockEnqueueUploads).not.toHaveBeenCalled();
 
     const confirmButton = screen.getByRole("button", {
       name: /start fresh and upload/i,
@@ -242,12 +291,14 @@ describe("PrivateStorage metadata replacement warning", () => {
     await userEvent.click(confirmButton);
 
     await waitFor(() => {
-      expect(mockUploadAndSyncFile).toHaveBeenCalledWith(
-        file,
-        "owner@example.com",
-        null,
-        { allowMetadataReplacement: true },
-      );
+      expect(mockEnqueueUploads).toHaveBeenCalledWith([
+        {
+          file,
+          userEmail: "owner@example.com",
+          folderId: null,
+          allowMetadataReplacement: true,
+        },
+      ]);
     });
   });
 
@@ -312,7 +363,7 @@ describe("PrivateStorage metadata replacement warning", () => {
     expect(
       screen.queryByText(/existing vault index could not be opened/i),
     ).not.toBeInTheDocument();
-    expect(mockUploadAndSyncFile).not.toHaveBeenCalled();
+    expect(mockEnqueueUploads).not.toHaveBeenCalled();
   });
 
   it("blocks uploads when vault metadata verification reaches a terminal error", async () => {
@@ -380,7 +431,7 @@ describe("PrivateStorage metadata replacement warning", () => {
         }),
       );
     });
-    expect(mockUploadAndSyncFile).not.toHaveBeenCalled();
+    expect(mockEnqueueUploads).not.toHaveBeenCalled();
     expect(mockToastInfo).not.toHaveBeenCalledWith(
       "Checking vault metadata",
       expect.any(Object),
@@ -484,6 +535,141 @@ describe("PrivateStorage metadata replacement warning", () => {
         "error",
         "Drive unavailable",
       );
+    });
+  });
+
+  it("blocks delete-all while an upload can still write to the vault", async () => {
+    mockUseVaultData.mockReturnValue({
+      state: {
+        userEmail: "owner@example.com",
+        files: [],
+        folders: [],
+        isHydrating: false,
+        isRefreshing: false,
+        metadataStatus: "ready",
+        hasVaultKey: true,
+        lastSyncedAt: Date.now(),
+        error: null,
+      },
+      replaceVaultData: jest.fn(),
+      refreshVaultFromLocal: mockRefreshVaultFromLocal,
+      setVaultMetadataStatus: mockSetVaultMetadataStatus,
+      setVaultKeyStatus: jest.fn(),
+      clearVaultData: jest.fn(),
+    });
+    mockUseApp.mockReturnValue({
+      userEmail: "owner@example.com",
+      userName: "Owner",
+      userImage: "",
+      storageInfo: null,
+      isLoadingStorage: false,
+      hasDecryptionError: false,
+      setDecryptionError: mockSetDecryptionError,
+      refreshStorage: jest.fn().mockResolvedValue(undefined),
+      refreshAll: jest.fn().mockResolvedValue(undefined),
+      setUserInfo: jest.fn(),
+    });
+    mockFetchAndStoreFileMetadata.mockResolvedValue(undefined);
+    mockHasPendingUploads.mockReturnValue(true);
+    mockTryAcquireUploadExclusion.mockReturnValue(null);
+    mockUseUploadQueue.mockReturnValue({
+      snapshot: {
+        running: true,
+        activeCount: 1,
+        tasks: [
+          {
+            id: "upload-1",
+            source: { sourceId: "upload-1" },
+            metadata: {
+              userEmail: "owner@example.com",
+              folderId: null,
+              allowMetadataReplacement: false,
+            },
+            name: "queued.pdf",
+            status: "uploading",
+            progress: 0.5,
+            attempts: 1,
+            createdAt: Date.now(),
+            updatedAt: Date.now(),
+          },
+        ],
+      },
+      enqueueUploads: mockEnqueueUploads,
+      hasPendingUploads: mockHasPendingUploads,
+      tryAcquireUploadExclusion: mockTryAcquireUploadExclusion,
+      waitForTask: jest.fn(),
+      retry: jest.fn(),
+      cancel: jest.fn(),
+      clearCompleted: jest.fn(),
+    });
+
+    render(
+      <MemoryRouter>
+        <PrivateStorage />
+      </MemoryRouter>,
+    );
+
+    await screen.findByText("Your encrypted vault is empty.");
+    await userEvent.click(
+      screen.getByRole("button", { name: /delete all files/i }),
+    );
+
+    expect(mockToastInfo).toHaveBeenCalledWith("Uploads are still pending", {
+      description: expect.stringContaining("upload tray"),
+    });
+    expect(deleteAllAndSyncFiles).not.toHaveBeenCalled();
+    expect(
+      screen.queryByText(/permanently delete all files/i),
+    ).not.toBeInTheDocument();
+  });
+
+  it("rechecks the queue when delete-all is confirmed", async () => {
+    mockUseVaultData.mockReturnValue({
+      state: {
+        userEmail: "owner@example.com",
+        files: [],
+        folders: [],
+        isHydrating: false,
+        isRefreshing: false,
+        metadataStatus: "ready",
+        hasVaultKey: true,
+        lastSyncedAt: Date.now(),
+        error: null,
+      },
+      replaceVaultData: jest.fn(),
+      refreshVaultFromLocal: mockRefreshVaultFromLocal,
+      setVaultMetadataStatus: mockSetVaultMetadataStatus,
+      setVaultKeyStatus: jest.fn(),
+      clearVaultData: jest.fn(),
+    });
+    mockFetchAndStoreFileMetadata.mockResolvedValue(undefined);
+    mockHasPendingUploads.mockReturnValue(false);
+    mockTryAcquireUploadExclusion.mockReturnValue(null);
+
+    render(
+      <MemoryRouter>
+        <PrivateStorage />
+      </MemoryRouter>,
+    );
+
+    await screen.findByText("Your encrypted vault is empty.");
+    await userEvent.click(
+      screen.getByRole("button", { name: /delete all files/i }),
+    );
+    expect(
+      screen.getByText("Permanently delete every encrypted file?"),
+    ).toBeInTheDocument();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Delete every file" }),
+    );
+
+    expect(mockTryAcquireUploadExclusion).toHaveBeenCalledWith(
+      "owner@example.com",
+    );
+    expect(deleteAllAndSyncFiles).not.toHaveBeenCalled();
+    expect(mockToastInfo).toHaveBeenCalledWith("Uploads are still pending", {
+      description: expect.stringContaining("upload tray"),
     });
   });
 });

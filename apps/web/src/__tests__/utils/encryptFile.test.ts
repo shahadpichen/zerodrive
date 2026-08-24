@@ -58,7 +58,7 @@ describe("encryptFile with Capsule v1", () => {
     );
   });
 
-  it("requires the in-memory recovery phrase", async () => {
+  it("requires an active tab-session recovery phrase", async () => {
     clearMnemonic();
 
     await expect(

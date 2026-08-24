@@ -7,8 +7,9 @@ export type VaultAccessKind =
   | "none";
 
 /**
- * Capsule v1 writes always require the in-memory recovery phrase. An imported
- * legacy JSON key grants read access only to historical ZeroDrive objects.
+ * Capsule v1 writes always require the active tab-session recovery phrase. An
+ * imported legacy JSON key grants read access only to historical ZeroDrive
+ * objects.
  */
 export async function getVaultAccessKind(): Promise<VaultAccessKind> {
   if (hasMnemonic()) return "recovery_phrase";

@@ -27,7 +27,6 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "../ui/dialog";
-import { getAllFilesForUser, sendToGoogleDrive } from "../../utils/dexieDB";
 import { deleteAndSyncFile } from "../../utils/fileOperations";
 import { toast } from "sonner";
 
@@ -77,7 +76,7 @@ export function DataTable<TData, TValue>({
 
     try {
       deleteToastId = toast.loading(
-        `Deleting ${filesToDelete.length} selected file(s)...`
+        `Deleting ${filesToDelete.length} selected file(s)...`,
       );
 
       const { getUserEmail } = await import("../../utils/authService");
@@ -95,25 +94,18 @@ export function DataTable<TData, TValue>({
         }
       }
 
-      // Sync metadata only if deletion was attempted (files existed)
-      // and at least one deletion might have succeeded (allSucceeded isn't guaranteed if loop was empty)
-      if (filesToDelete.length > 0) {
-        const updatedFiles = await getAllFilesForUser(userEmail);
-        await sendToGoogleDrive(updatedFiles, [], { userEmail });
-      }
-
       if (allSucceeded && filesToDelete.length > 0) {
         toast.success(
           `Deleted ${filesToDelete.length} file(s) and synced metadata.`,
           {
             id: deleteToastId,
-          }
+          },
         );
       } else if (filesToDelete.length > 0) {
         // Handle partial success or complete failure
         toast.warning(
           `Finished deleting. Some files may not have been removed. Check console for errors. Metadata synced. `,
-          { id: deleteToastId }
+          { id: deleteToastId },
         );
       } else {
         // No files were selected or deleted
@@ -213,7 +205,7 @@ export function DataTable<TData, TValue>({
                       ? null
                       : flexRender(
                           header.column.columnDef.header,
-                          header.getContext()
+                          header.getContext(),
                         )}
                   </TableHead>
                 ))}
@@ -232,7 +224,7 @@ export function DataTable<TData, TValue>({
                     <TableCell key={cell.id}>
                       {flexRender(
                         cell.column.columnDef.cell,
-                        cell.getContext()
+                        cell.getContext(),
                       )}
                     </TableCell>
                   ))}

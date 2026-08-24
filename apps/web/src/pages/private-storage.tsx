@@ -8,10 +8,7 @@ import { useApp } from "../contexts/app-context";
 import { hasMnemonic } from "../utils/mnemonicManager";
 import { hasVaultReadAccess } from "../utils/vaultAccess";
 import { fetchAndStoreFileMetadata } from "../utils/dexieDB";
-import {
-  uploadAndSyncFile,
-  deleteAllAndSyncFiles,
-} from "../utils/fileOperations";
+import { deleteAllAndSyncFiles } from "../utils/fileOperations";
 import { ConfirmationDialog } from "../components/storage/confirmation-dialog";
 import {
   AlertTriangle,
@@ -44,6 +41,7 @@ import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
 import { useVaultData } from "../contexts/vault-data-context";
 import { ensureGoogleDrivePermissionForAction } from "../utils/googleDrivePermissions";
+import { useUploadQueue } from "../contexts/upload-queue-context";
 
 // Imports for sharing key functionality (kept for potential future use)
 import { recoverRsaKeysIfNeeded } from "../utils/rsaKeyRecovery";
@@ -75,11 +73,12 @@ function PrivateStorageContent() {
     setVaultKeyStatus,
     setVaultMetadataStatus,
   } = useVaultData();
+  const { enqueueUploads, hasPendingUploads, tryAcquireUploadExclusion } =
+    useUploadQueue();
   const hasCurrentVaultSnapshot =
     !!userEmail &&
     vaultState.userEmail === userEmail.trim().toLowerCase() &&
     !vaultState.isHydrating;
-  const [uploading, setUploading] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showMetadataReplaceConfirm, setShowMetadataReplaceConfirm] =
@@ -116,6 +115,12 @@ function PrivateStorageContent() {
       vaultState.metadataStatus === "decryption_error");
   const isVaultMetadataWriteSafe =
     hasCurrentUserVaultState && vaultState.metadataStatus === "ready";
+  const showPendingUploadsBeforeDeleteToast = useCallback(() => {
+    toast.info("Uploads are still pending", {
+      description:
+        "Wait for them to finish, or cancel them in the upload tray, before deleting all files.",
+    });
+  }, []);
 
   const showVaultMetadataBlockedToast = useCallback(() => {
     toast.error("Vault metadata could not be verified", {
@@ -161,7 +166,7 @@ function PrivateStorageContent() {
           return;
         }
 
-        // Make the verified account available to the persistent providers
+        // Make the verified account available to the global providers
         // before Drive work so local vault data can render at once.
         setUserInfo(email, email.split("@")[0]);
 
@@ -450,34 +455,30 @@ function PrivateStorageContent() {
     }
 
     if (
-      (hasDecryptionError || vaultState.metadataStatus === "decryption_error") &&
+      (hasDecryptionError ||
+        vaultState.metadataStatus === "decryption_error") &&
       !options.skipMetadataReplaceWarning
     ) {
       openMetadataReplaceConfirm(filesToUpload);
       return;
     }
 
-    setUploading(true);
-    let successCount = 0;
-
-    for (const file of filesToUpload) {
-      const result = await uploadAndSyncFile(file, userEmail, currentFolderId, {
-        allowMetadataReplacement:
-          options.skipMetadataReplaceWarning &&
-          vaultState.metadataStatus === "decryption_error",
+    try {
+      enqueueUploads(
+        filesToUpload.map((file) => ({
+          file,
+          userEmail,
+          folderId: currentFolderId,
+          allowMetadataReplacement:
+            options.skipMetadataReplaceWarning &&
+            vaultState.metadataStatus === "decryption_error",
+        })),
+      );
+    } catch (error) {
+      toast.error("Files could not be added to uploads", {
+        description:
+          error instanceof Error ? error.message : "Choose the files again.",
       });
-      if (result) successCount++;
-    }
-
-    setUploading(false);
-
-    if (successCount > 0) {
-      await refreshVaultFromLocal(userEmail, {
-        metadataStatus: "ready",
-      });
-      setRefreshFileListKey((prev) => prev + 1);
-      setDecryptionError(false);
-      await refreshAll(); // Refresh storage after upload
     }
   };
 
@@ -532,39 +533,50 @@ function PrivateStorageContent() {
   const performDeleteAllFiles = async () => {
     if (!userEmail) return;
 
-    if (!ensureGoogleDrivePermissionForAction("storage")) {
+    const releaseUploadExclusion = tryAcquireUploadExclusion(userEmail);
+    if (!releaseUploadExclusion) {
+      showPendingUploadsBeforeDeleteToast();
       setShowDeleteConfirm(false);
       return;
     }
 
-    if (!isVaultMetadataWriteSafe) {
-      showVaultMetadataBlockedToast();
-      setShowDeleteConfirm(false);
-      return;
-    }
+    try {
+      if (!ensureGoogleDrivePermissionForAction("storage")) {
+        setShowDeleteConfirm(false);
+        return;
+      }
 
-    // Check for encryption key before allowing deletion
-    const hasVaultAccess = hasMnemonic();
-    setHasVaultKey(hasVaultAccess);
-    setVaultKeyStatus(userEmail, hasVaultAccess);
-    if (!hasVaultAccess) {
-      toast.error("Recovery & Access required", {
-        description:
-          "Recover access to this vault before deleting encrypted files.",
-      });
-      setShowDeleteConfirm(false);
-      openRecoveryAccess();
-      return;
-    }
+      if (!isVaultMetadataWriteSafe) {
+        showVaultMetadataBlockedToast();
+        setShowDeleteConfirm(false);
+        return;
+      }
 
-    setIsDeleting(true);
-    const success = await deleteAllAndSyncFiles(userEmail);
-    setIsDeleting(false);
-    setShowDeleteConfirm(false);
-    if (success) {
-      await refreshVaultFromLocal(userEmail, { metadataStatus: "ready" });
-      setRefreshFileListKey((prev) => prev + 1);
-      await refreshAll(); // Refresh storage after delete
+      // Check for encryption key before allowing deletion
+      const hasVaultAccess = hasMnemonic();
+      setHasVaultKey(hasVaultAccess);
+      setVaultKeyStatus(userEmail, hasVaultAccess);
+      if (!hasVaultAccess) {
+        toast.error("Recovery & Access required", {
+          description:
+            "Recover access to this vault before deleting encrypted files.",
+        });
+        setShowDeleteConfirm(false);
+        openRecoveryAccess();
+        return;
+      }
+
+      setIsDeleting(true);
+      const success = await deleteAllAndSyncFiles(userEmail);
+      setIsDeleting(false);
+      setShowDeleteConfirm(false);
+      if (success) {
+        await refreshVaultFromLocal(userEmail, { metadataStatus: "ready" });
+        setRefreshFileListKey((prev) => prev + 1);
+        await refreshAll(); // Refresh storage after delete
+      }
+    } finally {
+      releaseUploadExclusion();
     }
   };
 
@@ -577,7 +589,6 @@ function PrivateStorageContent() {
         multiple
         className="hidden"
         onChange={handleFileChangeAndUpload}
-        disabled={uploading}
       />
 
       <div
@@ -621,7 +632,7 @@ function PrivateStorageContent() {
                   ? openRecoveryAccess
                   : handleUploadTriggerInternal
               }
-              disabled={uploading || isLoadingUserFiles}
+              disabled={isLoadingUserFiles}
             >
               <Upload className="h-4 w-4 mr-2" />
               {hasVaultKey === false ? "Set up access" : "Upload"}
@@ -668,7 +679,13 @@ function PrivateStorageContent() {
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
                   <DropdownMenuItem
-                    onClick={() => setShowDeleteConfirm(true)}
+                    onClick={() => {
+                      if (hasPendingUploads(userEmail)) {
+                        showPendingUploadsBeforeDeleteToast();
+                        return;
+                      }
+                      setShowDeleteConfirm(true);
+                    }}
                     className="text-destructive focus:text-destructive"
                   >
                     <Trash2 className="h-4 w-4 mr-2" />
@@ -747,8 +764,8 @@ function PrivateStorageContent() {
                   </DialogTitle>
                   <DialogDescription className="mt-2 leading-relaxed">
                     ZeroDrive found your encrypted file list in Google Drive,
-                    but this browser could not open it with the current
-                    recovery phrase.
+                    but this browser could not open it with the current recovery
+                    phrase.
                   </DialogDescription>
                 </div>
               </div>
@@ -795,7 +812,7 @@ function PrivateStorageContent() {
                 variant="destructive"
                 disabled={
                   metadataReplaceInput.trim().toUpperCase() !==
-                    metadataReplaceCode || uploading
+                  metadataReplaceCode
                 }
                 onClick={handleMetadataReplaceConfirm}
               >

@@ -17,7 +17,7 @@ export const termsOfService = [
   {
     heading: "Your recovery phrase",
     content:
-      "Your recovery phrase protects your vault access. ZeroDrive cannot reset it, recover it, or use it to open your files for you. If you lose the phrase and no compatible key backup is available, your encrypted files may become unrecoverable. You are responsible for saving the recovery phrase somewhere safe before relying on ZeroDrive for important files.",
+      "Your recovery phrase protects your vault access. ZeroDrive cannot reset it, recover it, or use it to open your files for you. The hosted app may keep the phrase in browser session storage, bound to the signed-in account, so reloading the same tab does not lock your vault. It is cleared during the normal sign-out and account-switch flows, but browser session restoration behavior varies. If you lose the phrase and no compatible key backup is available, your encrypted files may become unrecoverable. You are responsible for using a trusted device and browser and for saving the recovery phrase somewhere safe before relying on ZeroDrive for important files.",
   },
   {
     heading: "Encryption and zero-knowledge limits",

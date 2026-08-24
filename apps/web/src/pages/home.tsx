@@ -673,7 +673,7 @@ function HomeContent() {
                   className="flex w-full items-center gap-3 border-b px-5 py-2.5 text-left last:border-b-0 hover:bg-muted/50"
                 >
                   <img
-                    src={getFileIconPath(file.mimeType)}
+                    src={getFileIconPath(file.mimeType, file.name)}
                     alt=""
                     className="h-5 w-5 flex-shrink-0"
                   />

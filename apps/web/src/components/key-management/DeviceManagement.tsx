@@ -3,10 +3,15 @@ import {
   Check,
   KeyRound,
   Loader2,
+  LockKeyhole,
   MonitorSmartphone,
   ShieldCheck,
   X,
 } from "lucide-react";
+import { Button } from "../ui/button";
+import { prepareForAuthSessionClear } from "../../utils/authEvents";
+import { clearStoredKey } from "../../utils/cryptoUtils";
+import { clearMnemonic } from "../../utils/mnemonicManager";
 import {
   getVaultAccessKind,
   type VaultAccessKind,
@@ -19,6 +24,7 @@ interface DeviceManagementProps {
 export function DeviceManagement({ refreshKey = 0 }: DeviceManagementProps) {
   const [accessKind, setAccessKind] = useState<VaultAccessKind>("none");
   const [isChecking, setIsChecking] = useState(true);
+  const [isLocking, setIsLocking] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -43,6 +49,20 @@ export function DeviceManagement({ refreshKey = 0 }: DeviceManagementProps) {
 
   const hasKey = accessKind !== "none";
 
+  const lockVault = async () => {
+    if (isLocking) return;
+    setIsLocking(true);
+    try {
+      // Let queued work stop while it can still clean up with the active key.
+      await prepareForAuthSessionClear();
+      clearMnemonic();
+      clearStoredKey();
+      setAccessKind("none");
+    } finally {
+      setIsLocking(false);
+    }
+  };
+
   return (
     <aside className="border">
       <div className="border-b p-5">
@@ -51,7 +71,8 @@ export function DeviceManagement({ refreshKey = 0 }: DeviceManagementProps) {
           <h2 className="text-sm font-semibold">This browser tab</h2>
         </div>
         <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
-          Encryption keys are kept only for the current browser session.
+          Vault access stays active in this tab, including after a reload, until
+          you sign out, lock the vault, or the tab session ends.
         </p>
       </div>
 
@@ -75,7 +96,7 @@ export function DeviceManagement({ refreshKey = 0 }: DeviceManagementProps) {
                   <X className="h-4 w-4" />
                 )}
               </span>
-              <div>
+              <div className="min-w-0 flex-1">
                 <p className="text-sm font-medium">
                   {hasKey
                     ? accessKind === "recovery_phrase"
@@ -91,6 +112,23 @@ export function DeviceManagement({ refreshKey = 0 }: DeviceManagementProps) {
                     : "Recover an existing key or create a new one to access encrypted files."}
                 </p>
               </div>
+              {hasKey && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="flex-shrink-0"
+                  disabled={isLocking}
+                  onClick={() => void lockVault()}
+                >
+                  {isLocking ? (
+                    <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <LockKeyhole className="mr-2 h-3.5 w-3.5" />
+                  )}
+                  Lock vault
+                </Button>
+              )}
             </div>
 
             <div className="space-y-3 border-t pt-4">

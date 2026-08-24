@@ -1,6 +1,6 @@
 <h2 id="recovery-phrase">The recovery phrase</h2>
 
-The recovery phrase is not a normal password. It is the long-term route back to your encryption keys. ZeroDrive does not store it, log it, or send it to the backend. The web app keeps it only in memory for the current tab, so a hard refresh or a new tab requires it again.
+The recovery phrase is not a normal password. It is the long-term route back to your encryption keys. ZeroDrive does not log it or send it to the backend. The hosted web app keeps it in the current tab's browser session storage, bound to the signed-in account, so reloading that tab stays unlocked. A new tab or browser session normally requires it again.
 
 A password proves who you are to a service. A recovery phrase is more sensitive than that. It helps recreate the keys that open encrypted data. If someone else gets it, they may be able to unlock your files. If nobody has it, ZeroDrive cannot recreate your access for you.
 
@@ -10,7 +10,7 @@ Store it in a trusted password manager, write it down and keep it somewhere safe
 
 <h2 id="browser-session">Browser session keys</h2>
 
-ZeroDrive uses Capsule v1 inside your browser to encrypt and decrypt files. The active recovery phrase exists only in memory for the current tab. Encrypted sharing-key backups can be stored in Google Drive so the app can restore the recipient keys needed for historical shares on another device.
+ZeroDrive uses Capsule v1 inside your browser to encrypt and decrypt files. While the app is running, the active recovery phrase is available in memory. An account-bound copy in the tab's session storage restores access after a reload. Normal logout and account-switch flows clear it, although some browsers can restore session storage when restoring a closed browser session. Encrypted sharing-key backups can be stored in Google Drive so the app can restore the recipient keys needed for historical shares on another device.
 
 This means the browser tab is doing real security work. When a file is opened, the browser may temporarily hold the readable file and the key needed to decrypt it.
 
