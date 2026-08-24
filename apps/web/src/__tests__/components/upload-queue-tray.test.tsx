@@ -51,6 +51,8 @@ describe("UploadQueueTray", () => {
         ],
       },
       enqueueUploads: jest.fn(),
+      hasPendingUploads: jest.fn().mockReturnValue(false),
+      tryAcquireUploadExclusion: jest.fn().mockReturnValue(jest.fn()),
       waitForTask: jest.fn(),
       retry,
       cancel,

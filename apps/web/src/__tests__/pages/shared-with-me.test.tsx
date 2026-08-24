@@ -220,6 +220,8 @@ describe("SharedWithMePage", () => {
     mockUseUploadQueue.mockReturnValue({
       snapshot: { running: true, activeCount: 0, tasks: [] },
       enqueueUploads: mockEnqueueUploads,
+      hasPendingUploads: jest.fn().mockReturnValue(false),
+      tryAcquireUploadExclusion: jest.fn().mockReturnValue(jest.fn()),
       waitForTask: mockWaitForTask,
       retry: jest.fn(),
       cancel: jest.fn(),

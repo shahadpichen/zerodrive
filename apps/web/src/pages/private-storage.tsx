@@ -73,7 +73,8 @@ function PrivateStorageContent() {
     setVaultKeyStatus,
     setVaultMetadataStatus,
   } = useVaultData();
-  const { enqueueUploads } = useUploadQueue();
+  const { enqueueUploads, hasPendingUploads, tryAcquireUploadExclusion } =
+    useUploadQueue();
   const hasCurrentVaultSnapshot =
     !!userEmail &&
     vaultState.userEmail === userEmail.trim().toLowerCase() &&
@@ -114,6 +115,12 @@ function PrivateStorageContent() {
       vaultState.metadataStatus === "decryption_error");
   const isVaultMetadataWriteSafe =
     hasCurrentUserVaultState && vaultState.metadataStatus === "ready";
+  const showPendingUploadsBeforeDeleteToast = useCallback(() => {
+    toast.info("Uploads are still pending", {
+      description:
+        "Wait for them to finish, or cancel them in the upload tray, before deleting all files.",
+    });
+  }, []);
 
   const showVaultMetadataBlockedToast = useCallback(() => {
     toast.error("Vault metadata could not be verified", {
@@ -159,7 +166,7 @@ function PrivateStorageContent() {
           return;
         }
 
-        // Make the verified account available to the persistent providers
+        // Make the verified account available to the global providers
         // before Drive work so local vault data can render at once.
         setUserInfo(email, email.split("@")[0]);
 
@@ -526,39 +533,50 @@ function PrivateStorageContent() {
   const performDeleteAllFiles = async () => {
     if (!userEmail) return;
 
-    if (!ensureGoogleDrivePermissionForAction("storage")) {
+    const releaseUploadExclusion = tryAcquireUploadExclusion(userEmail);
+    if (!releaseUploadExclusion) {
+      showPendingUploadsBeforeDeleteToast();
       setShowDeleteConfirm(false);
       return;
     }
 
-    if (!isVaultMetadataWriteSafe) {
-      showVaultMetadataBlockedToast();
-      setShowDeleteConfirm(false);
-      return;
-    }
+    try {
+      if (!ensureGoogleDrivePermissionForAction("storage")) {
+        setShowDeleteConfirm(false);
+        return;
+      }
 
-    // Check for encryption key before allowing deletion
-    const hasVaultAccess = hasMnemonic();
-    setHasVaultKey(hasVaultAccess);
-    setVaultKeyStatus(userEmail, hasVaultAccess);
-    if (!hasVaultAccess) {
-      toast.error("Recovery & Access required", {
-        description:
-          "Recover access to this vault before deleting encrypted files.",
-      });
-      setShowDeleteConfirm(false);
-      openRecoveryAccess();
-      return;
-    }
+      if (!isVaultMetadataWriteSafe) {
+        showVaultMetadataBlockedToast();
+        setShowDeleteConfirm(false);
+        return;
+      }
 
-    setIsDeleting(true);
-    const success = await deleteAllAndSyncFiles(userEmail);
-    setIsDeleting(false);
-    setShowDeleteConfirm(false);
-    if (success) {
-      await refreshVaultFromLocal(userEmail, { metadataStatus: "ready" });
-      setRefreshFileListKey((prev) => prev + 1);
-      await refreshAll(); // Refresh storage after delete
+      // Check for encryption key before allowing deletion
+      const hasVaultAccess = hasMnemonic();
+      setHasVaultKey(hasVaultAccess);
+      setVaultKeyStatus(userEmail, hasVaultAccess);
+      if (!hasVaultAccess) {
+        toast.error("Recovery & Access required", {
+          description:
+            "Recover access to this vault before deleting encrypted files.",
+        });
+        setShowDeleteConfirm(false);
+        openRecoveryAccess();
+        return;
+      }
+
+      setIsDeleting(true);
+      const success = await deleteAllAndSyncFiles(userEmail);
+      setIsDeleting(false);
+      setShowDeleteConfirm(false);
+      if (success) {
+        await refreshVaultFromLocal(userEmail, { metadataStatus: "ready" });
+        setRefreshFileListKey((prev) => prev + 1);
+        await refreshAll(); // Refresh storage after delete
+      }
+    } finally {
+      releaseUploadExclusion();
     }
   };
 
@@ -661,7 +679,13 @@ function PrivateStorageContent() {
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
                   <DropdownMenuItem
-                    onClick={() => setShowDeleteConfirm(true)}
+                    onClick={() => {
+                      if (hasPendingUploads(userEmail)) {
+                        showPendingUploadsBeforeDeleteToast();
+                        return;
+                      }
+                      setShowDeleteConfirm(true);
+                    }}
                     className="text-destructive focus:text-destructive"
                   >
                     <Trash2 className="h-4 w-4 mr-2" />

@@ -41,26 +41,57 @@ const mockUseApp = useApp as jest.Mock;
 const mockUseVaultData = useVaultData as jest.Mock;
 
 function QueueHarness({ page }: { page: string }) {
-  const { snapshot, enqueueUploads } = useUploadQueue();
+  const {
+    snapshot,
+    enqueueUploads,
+    hasPendingUploads,
+    tryAcquireUploadExclusion,
+  } = useUploadQueue();
+  const exclusionReleaseRef = React.useRef<(() => void) | null>(null);
+  const [enqueueResult, setEnqueueResult] = React.useState("idle");
+
+  const enqueueTestFile = () => {
+    try {
+      enqueueUploads([
+        {
+          file: new File(["plaintext"], "notes.txt", {
+            type: "text/plain",
+          }),
+          userEmail: "owner@example.com",
+        },
+      ]);
+      setEnqueueResult("queued");
+    } catch {
+      setEnqueueResult("blocked");
+    }
+  };
+
   return (
     <div>
       <p>{page}</p>
       <p data-testid="statuses">
         {snapshot.tasks.map((task) => task.status).join(",") || "empty"}
       </p>
+      <p data-testid="pending">
+        {String(hasPendingUploads("owner@example.com"))}
+      </p>
+      <p data-testid="enqueue-result">{enqueueResult}</p>
+      <button onClick={enqueueTestFile}>Upload</button>
       <button
-        onClick={() =>
-          enqueueUploads([
-            {
-              file: new File(["plaintext"], "notes.txt", {
-                type: "text/plain",
-              }),
-              userEmail: "owner@example.com",
-            },
-          ])
-        }
+        onClick={() => {
+          exclusionReleaseRef.current =
+            tryAcquireUploadExclusion("owner@example.com");
+        }}
       >
-        Upload
+        Acquire exclusion
+      </button>
+      <button
+        onClick={() => {
+          exclusionReleaseRef.current?.();
+          exclusionReleaseRef.current = null;
+        }}
+      >
+        Release exclusion
       </button>
     </div>
   );
@@ -114,6 +145,7 @@ describe("UploadQueueProvider", () => {
     fireEvent.click(screen.getByRole("button", { name: "Upload" }));
     await waitFor(() => {
       expect(screen.getByTestId("statuses")).toHaveTextContent("preparing");
+      expect(screen.getByTestId("pending")).toHaveTextContent("true");
     });
 
     const beforeUnload = new Event("beforeunload", {
@@ -134,7 +166,24 @@ describe("UploadQueueProvider", () => {
     finishPreparing?.();
     await waitFor(() => {
       expect(screen.getByTestId("statuses")).toHaveTextContent("complete");
+      expect(screen.getByTestId("pending")).toHaveTextContent("false");
     });
+  });
+
+  it("prevents an upload from being enqueued during an exclusive vault operation", () => {
+    render(
+      <UploadQueueProvider>
+        <QueueHarness page="Storage" />
+      </UploadQueueProvider>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Acquire exclusion" }));
+    fireEvent.click(screen.getByRole("button", { name: "Upload" }));
+
+    expect(screen.getByTestId("enqueue-result")).toHaveTextContent("blocked");
+    expect(screen.getByTestId("statuses")).toHaveTextContent("empty");
+
+    fireEvent.click(screen.getByRole("button", { name: "Release exclusion" }));
   });
 
   it("cancels failed tasks and runs cleanup when the auth session is cleared", async () => {

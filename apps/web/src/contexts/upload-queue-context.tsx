@@ -55,6 +55,8 @@ type VaultUploadSnapshot = UploadQueueSnapshot<
 interface UploadQueueContextValue {
   snapshot: VaultUploadSnapshot;
   enqueueUploads(inputs: readonly EnqueueVaultUploadInput[]): string[];
+  hasPendingUploads(userEmail: string): boolean;
+  tryAcquireUploadExclusion(userEmail: string): (() => void) | null;
   waitForTask(taskId: string): Promise<VaultUploadTask>;
   retry(taskId: string): boolean;
   cancel(taskId: string): Promise<boolean>;
@@ -78,6 +80,24 @@ const TERMINAL_STATUSES = new Set<UploadQueueTaskStatus>([
   "canceled",
 ]);
 
+function snapshotHasPendingUploads(
+  snapshot: VaultUploadSnapshot,
+  userEmail: string,
+): boolean {
+  const normalizedUserEmail = userEmail.trim().toLowerCase();
+  if (!normalizedUserEmail) return false;
+
+  return snapshot.tasks.some((task) => {
+    if (task.metadata?.userEmail.trim().toLowerCase() !== normalizedUserEmail) {
+      return false;
+    }
+    return (
+      UNFINISHED_STATUSES.has(task.status) ||
+      (task.status === "failed" && task.error?.retryable === true)
+    );
+  });
+}
+
 export function UploadQueueProvider({
   children,
 }: {
@@ -87,6 +107,10 @@ export function UploadQueueProvider({
   const { refreshVaultFromLocal } = useVaultData();
   const sourceFilesRef = useRef(new Map<string, File>());
   const previousStatusesRef = useRef(new Map<string, UploadQueueTaskStatus>());
+  const uploadExclusionsRef = useRef(new Set<string>());
+  // Issue #50 intentionally keeps v1 in memory: the provider survives SPA
+  // navigation, while beforeunload protects refresh/close. Durable IndexedDB
+  // sources and resumable uploads are a separate follow-up.
   const [queue] = useState<VaultUploadQueue>(() => {
     const adapter = createVaultUploadQueueAdapter({
       get: (sourceId) => sourceFilesRef.current.get(sourceId),
@@ -207,9 +231,25 @@ export function UploadQueueProvider({
 
   const enqueueUploads = useCallback(
     (inputs: readonly EnqueueVaultUploadInput[]) => {
+      const normalizedInputs = inputs.map((input) => ({
+        input,
+        userEmail: input.userEmail.trim().toLowerCase(),
+      }));
+      if (
+        normalizedInputs.some(({ userEmail }) =>
+          uploadExclusionsRef.current.has(userEmail),
+        )
+      ) {
+        throw new Error(
+          "Storage is deleting files. Wait for it to finish before adding more files.",
+        );
+      }
+
       const taskIds: string[] = [];
-      for (const input of inputs) {
-        const normalizedUserEmail = input.userEmail.trim().toLowerCase();
+      for (const {
+        input,
+        userEmail: normalizedUserEmail,
+      } of normalizedInputs) {
         const sessionUser = getSessionUser()?.trim().toLowerCase();
         if (sessionUser && sessionUser !== normalizedUserEmail) {
           throw new Error(
@@ -255,6 +295,34 @@ export function UploadQueueProvider({
     [queue],
   );
 
+  const hasPendingUploads = useCallback(
+    (userEmail: string) =>
+      snapshotHasPendingUploads(queue.getSnapshot(), userEmail),
+    [queue],
+  );
+
+  const tryAcquireUploadExclusion = useCallback(
+    (userEmail: string) => {
+      const normalizedUserEmail = userEmail.trim().toLowerCase();
+      if (
+        !normalizedUserEmail ||
+        uploadExclusionsRef.current.has(normalizedUserEmail) ||
+        snapshotHasPendingUploads(queue.getSnapshot(), normalizedUserEmail)
+      ) {
+        return null;
+      }
+
+      uploadExclusionsRef.current.add(normalizedUserEmail);
+      let released = false;
+      return () => {
+        if (released) return;
+        released = true;
+        uploadExclusionsRef.current.delete(normalizedUserEmail);
+      };
+    },
+    [queue],
+  );
+
   const waitForTask = useCallback(
     (taskId: string) =>
       new Promise<VaultUploadTask>((resolve, reject) => {
@@ -281,6 +349,8 @@ export function UploadQueueProvider({
   const value: UploadQueueContextValue = {
     snapshot,
     enqueueUploads,
+    hasPendingUploads,
+    tryAcquireUploadExclusion,
     waitForTask,
     retry: (taskId) => queue.retry(taskId),
     cancel: (taskId) => queue.cancel(taskId),
