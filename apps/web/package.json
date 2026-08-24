@@ -29,6 +29,7 @@
     "clsx": "^2.1.1",
     "dexie": "^4.0.8",
     "gapi-script": "^1.2.0",
+    "heic-to": "1.5.2",
     "idb": "^8.0.3",
     "lucide-react": "^0.436.0",
     "mammoth": "^1.11.0",

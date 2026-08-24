@@ -322,7 +322,7 @@ export const FilePreviewDialog: React.FC<FilePreviewDialogProps> = ({
       default:
         return (
           <div className="flex flex-col items-center justify-center py-12 space-y-4">
-            <img src={getFileIconPath(mimeType)} alt="" className="w-16 h-16" />
+            <img src={getFileIconPath(mimeType, fileName)} alt="" className="w-16 h-16" />
             <div className="text-center space-y-2">
               <p className="font-medium">
                 Preview not available for this file type

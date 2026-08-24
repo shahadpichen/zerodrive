@@ -833,7 +833,7 @@ const ShareFilesPage: React.FC = () => {
           {hasSelectedFile ? (
             <div className="flex items-center gap-4 border p-4">
               <img
-                src={getFileIconPath(selectedMimeType)}
+                src={getFileIconPath(selectedMimeType, selectedFileName)}
                 alt=""
                 className="h-10 w-10 object-contain"
               />
@@ -940,7 +940,7 @@ const ShareFilesPage: React.FC = () => {
                       className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-muted/40"
                     >
                       <img
-                        src={getFileIconPath(stored.mimeType)}
+                        src={getFileIconPath(stored.mimeType, stored.name)}
                         alt=""
                         className="h-8 w-8 flex-shrink-0 object-contain"
                       />
@@ -1125,7 +1125,7 @@ const ShareFilesPage: React.FC = () => {
             <dd className="flex min-w-0 items-center gap-3 text-sm">
               {hasSelectedFile && (
                 <img
-                  src={getFileIconPath(selectedMimeType)}
+                  src={getFileIconPath(selectedMimeType, selectedFileName)}
                   alt=""
                   className="h-6 w-6 object-contain"
                 />

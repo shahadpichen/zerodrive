@@ -653,7 +653,7 @@ const SharedWithMePage: React.FC = () => {
                 >
                   <div className="flex min-w-0 flex-1 items-center gap-3">
                     <img
-                      src={getFileIconPath(file.mimeType)}
+                      src={getFileIconPath(file.mimeType, file.name)}
                       alt=""
                       className="h-9 w-9 flex-shrink-0 object-contain"
                     />

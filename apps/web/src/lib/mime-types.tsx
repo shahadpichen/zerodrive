@@ -62,22 +62,22 @@ const fileIconPathMap: Record<string, string> = {
   "image/gif": "/010-gif.png",
   "image/webp": "/009-img.png",
   "image/svg+xml": "/009-img.png",
-  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "/001-excel.png",
+  "image/heic": "/009-img.png",
+  "image/heif": "/009-img.png",
+  "image/heic-sequence": "/009-img.png",
+  "image/heif-sequence": "/009-img.png",
+  "application/heic": "/009-img.png",
+  "application/heif": "/009-img.png",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":
+    "/001-excel.png",
   "application/vnd.ms-excel": "/001-excel.png",
-  "application/vnd.openxmlformats-officedocument.presentationml.presentation": "/ppt.png",
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation":
+    "/ppt.png",
   "application/vnd.ms-powerpoint": "/ppt.png",
-  "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "/005-txt-file.png",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+    "/005-txt-file.png",
   "application/msword": "/005-txt-file.png",
 };
-
-export function getFileIconPath(mimeType: string): string {
-  if (fileIconPathMap[mimeType]) return fileIconPathMap[mimeType];
-  if (mimeType.startsWith("image/")) return "/009-img.png";
-  if (mimeType.startsWith("video/")) return "/008-video.png";
-  if (mimeType.startsWith("audio/")) return "/003-audio.png";
-  if (mimeType.startsWith("text/")) return "/005-txt-file.png";
-  return "/005-txt-file.png";
-}
 
 export const mimeTypeCategories: Record<MimeTypeCategory, string[]> = {
   Images: [
@@ -86,6 +86,12 @@ export const mimeTypeCategories: Record<MimeTypeCategory, string[]> = {
     "image/gif",
     "image/webp",
     "image/svg+xml",
+    "image/heic",
+    "image/heif",
+    "image/heic-sequence",
+    "image/heif-sequence",
+    "application/heic",
+    "application/heif",
   ],
   PDFs: ["application/pdf"],
   Text: ["text/plain", "application/json"],
@@ -102,3 +108,87 @@ export const mimeTypeCategories: Record<MimeTypeCategory, string[]> = {
   ],
   Others: [],
 };
+
+const imageFileExtensions = new Set([
+  "bmp",
+  "gif",
+  "heic",
+  "heif",
+  "jpeg",
+  "jpg",
+  "png",
+  "svg",
+  "webp",
+]);
+
+function getFileExtension(fileName?: string): string | undefined {
+  const normalizedName = fileName?.trim().toLowerCase();
+  const extensionSeparator = normalizedName?.lastIndexOf(".") ?? -1;
+
+  if (!normalizedName || extensionSeparator < 0) return undefined;
+  return normalizedName.slice(extensionSeparator + 1);
+}
+
+export function isHeicFile(mimeType: string, fileName?: string): boolean {
+  const normalizedMimeType = mimeType.trim().toLowerCase();
+  const extension = getFileExtension(fileName);
+  const hasHeicMimeType = [
+    "application/heic",
+    "application/heif",
+    "image/heic",
+    "image/heic-sequence",
+    "image/heif",
+    "image/heif-sequence",
+  ].includes(normalizedMimeType);
+  const hasGenericMimeType =
+    normalizedMimeType === "" ||
+    normalizedMimeType === "application/octet-stream";
+
+  return (
+    hasHeicMimeType ||
+    (hasGenericMimeType && (extension === "heic" || extension === "heif"))
+  );
+}
+
+export function getMimeTypeCategory(
+  mimeType: string,
+  fileName?: string,
+): MimeTypeCategory {
+  const normalizedMimeType = mimeType.trim().toLowerCase();
+  const exactCategory = (
+    Object.entries(mimeTypeCategories) as [MimeTypeCategory, string[]][]
+  ).find(([, mimeTypes]) => mimeTypes.includes(normalizedMimeType))?.[0];
+
+  if (exactCategory) return exactCategory;
+  if (normalizedMimeType.startsWith("image/")) return "Images";
+  if (normalizedMimeType.startsWith("video/")) return "Videos";
+  if (normalizedMimeType.startsWith("audio/")) return "Audio";
+  if (normalizedMimeType.startsWith("text/")) return "Text";
+
+  const extension = getFileExtension(fileName);
+  if (
+    (!normalizedMimeType ||
+      normalizedMimeType === "application/octet-stream") &&
+    extension &&
+    imageFileExtensions.has(extension)
+  ) {
+    return "Images";
+  }
+
+  return "Others";
+}
+
+export function getFileIconPath(mimeType: string, fileName?: string): string {
+  const normalizedMimeType = mimeType.trim().toLowerCase();
+
+  if (fileIconPathMap[normalizedMimeType]) {
+    return fileIconPathMap[normalizedMimeType];
+  }
+
+  const category = getMimeTypeCategory(normalizedMimeType, fileName);
+  if (category === "Images") return "/009-img.png";
+  if (category === "Videos") return "/008-video.png";
+  if (category === "Audio") return "/003-audio.png";
+  if (category === "Text") return "/005-txt-file.png";
+  return "/005-txt-file.png";
+}

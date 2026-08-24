@@ -2,6 +2,7 @@ import { decryptFile } from "./decryptFile";
 import { getStoredKey } from "./cryptoUtils";
 import { hasMnemonic } from "./mnemonicManager";
 import { googleDriveFetch } from "./googleDriveRequest";
+import { isHeicFile } from "../lib/mime-types";
 
 // Extension-to-MIME fallback for files with missing/incorrect MIME types
 const EXTENSION_MIME_MAP: Record<string, string> = {
@@ -12,6 +13,8 @@ const EXTENSION_MIME_MAP: Record<string, string> = {
   ".webp": "image/webp",
   ".svg": "image/svg+xml",
   ".bmp": "image/bmp",
+  ".heic": "image/heic",
+  ".heif": "image/heif",
   ".mp4": "video/mp4",
   ".webm": "video/webm",
   ".mov": "video/quicktime",
@@ -25,7 +28,8 @@ const EXTENSION_MIME_MAP: Record<string, string> = {
   ".html": "text/html",
   ".css": "text/css",
   ".js": "text/javascript",
-  ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  ".docx":
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
   ".doc": "application/msword",
   ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   ".xls": "application/vnd.ms-excel",
@@ -51,7 +55,7 @@ export function isPreviewable(mimeType: string, fileName?: string): boolean {
  */
 export function getPreviewType(
   mimeType: string,
-  fileName?: string
+  fileName?: string,
 ):
   | "image"
   | "video"
@@ -61,6 +65,8 @@ export function getPreviewType(
   | "docx"
   | "spreadsheet"
   | "unsupported" {
+  if (isHeicFile(mimeType, fileName)) return "image";
+
   // Use extension-based fallback if mimeType is empty or generic
   const effective =
     !mimeType || mimeType === "application/octet-stream"
@@ -78,12 +84,14 @@ export function getPreviewType(
   )
     return "text";
   if (
-    effective === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
+    effective ===
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
     effective === "application/msword"
   )
     return "docx";
   if (
-    effective === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" ||
+    effective ===
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" ||
     effective === "application/vnd.ms-excel"
   )
     return "spreadsheet";
@@ -114,12 +122,12 @@ export async function decryptFileForPreview(
     `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`,
     {
       method: "GET",
-    }
+    },
   );
 
   if (!response.ok) {
     throw new Error(
-      `Failed to download file: ${response.statusText || `HTTP error: ${response.status}`}`
+      `Failed to download file: ${response.statusText || `HTTP error: ${response.status}`}`,
     );
   }
 
@@ -133,12 +141,29 @@ export async function decryptFileForPreview(
     revision,
   });
   const typedBlob = decrypted.contentBlob;
-  const blobUrl = URL.createObjectURL(typedBlob);
+  let previewBlob = typedBlob;
+
+  if (isHeicFile(decrypted.mimeType || mimeType, fileName)) {
+    try {
+      const { heicTo } = await import("heic-to/csp");
+      previewBlob = await heicTo({
+        blob: typedBlob,
+        type: "image/jpeg",
+        quality: 0.92,
+      });
+    } catch {
+      throw new Error(
+        "This HEIC image could not be prepared for preview. Download it to open the original on your device.",
+      );
+    }
+  }
+
+  const blobUrl = URL.createObjectURL(previewBlob);
 
   return {
     blobUrl,
-    blob: typedBlob,
-    mimeType: decrypted.mimeType,
+    blob: previewBlob,
+    mimeType: previewBlob.type || decrypted.mimeType,
   };
 }
 

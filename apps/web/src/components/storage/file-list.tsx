@@ -26,8 +26,8 @@ import {
 } from "../ui/dropdown-menu";
 import {
   MimeTypeCategory,
-  mimeTypeCategories,
   getFileIconPath,
+  getMimeTypeCategory,
 } from "../../lib/mime-types";
 import { getStoredKey } from "../../utils/cryptoUtils";
 import {
@@ -252,18 +252,9 @@ export const FileList: React.FC<FileListProps> = ({
     let results = allUserFiles;
 
     if (filter !== "All Files") {
-      if (filter === "Others") {
-        results = results.filter(
-          (file) =>
-            !Object.values(mimeTypeCategories).flat().includes(file.mimeType),
-        );
-      } else {
-        results = results.filter((file) =>
-          mimeTypeCategories[filter as MimeTypeCategory]?.includes(
-            file.mimeType,
-          ),
-        );
-      }
+      results = results.filter(
+        (file) => getMimeTypeCategory(file.mimeType, file.name) === filter,
+      );
     }
 
     if (searchQuery) {
@@ -543,7 +534,7 @@ export const FileList: React.FC<FileListProps> = ({
                     >
                       <div className="flex items-center gap-1.5 overflow-hidden flex-grow min-w-0 max-w-full">
                         <img
-                          src={getFileIconPath(file.mimeType)}
+                          src={getFileIconPath(file.mimeType, file.name)}
                           alt=""
                           className="w-5 h-5 flex-shrink-0"
                         />
@@ -661,11 +652,9 @@ export const FileList: React.FC<FileListProps> = ({
   };
   const currentSortLabel = sortLabels[`${sortKey}-${sortDir}`];
 
-  const typeLabel = (mimeType: string): string => {
-    const entry = (
-      Object.entries(mimeTypeCategories) as [MimeTypeCategory, string[]][]
-    ).find(([, list]) => list.includes(mimeType));
-    return entry ? entry[0] : "File";
+  const typeLabel = (mimeType: string, fileName: string): string => {
+    const category = getMimeTypeCategory(mimeType, fileName);
+    return category === "Others" ? "File" : category;
   };
 
   const isEmpty = visibleFolders.length === 0 && filteredFiles.length === 0;
@@ -908,7 +897,7 @@ export const FileList: React.FC<FileListProps> = ({
               </button>
 
               <img
-                src={getFileIconPath(file.mimeType)}
+                src={getFileIconPath(file.mimeType, file.name)}
                 alt=""
                 className="w-12 h-12"
               />
@@ -1029,7 +1018,7 @@ export const FileList: React.FC<FileListProps> = ({
                     <td className="py-2.5 pr-3">
                       <div className="flex items-center gap-2.5">
                         <img
-                          src={getFileIconPath(file.mimeType)}
+                          src={getFileIconPath(file.mimeType, file.name)}
                           alt=""
                           className="h-5 w-5"
                         />
@@ -1037,7 +1026,7 @@ export const FileList: React.FC<FileListProps> = ({
                       </div>
                     </td>
                     <td className="py-2.5 pr-3 text-muted-foreground">
-                      {typeLabel(file.mimeType)}
+                      {typeLabel(file.mimeType, file.name)}
                     </td>
                     <td className="py-2.5 pr-3 text-muted-foreground">
                       {new Date(file.uploadedDate).toLocaleDateString()}
