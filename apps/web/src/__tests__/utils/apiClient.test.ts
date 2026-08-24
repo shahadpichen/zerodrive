@@ -39,7 +39,7 @@ describe("ApiClient", () => {
     mockRefreshToken.mockResolvedValue(false);
     (global.fetch as jest.Mock).mockClear();
     delete (window as any).location;
-    (window as any).location = { href: "" };
+    (window as any).location = { href: "", pathname: "/protected" };
   });
 
   describe("Custom Error Classes", () => {
@@ -281,8 +281,12 @@ describe("ApiClient", () => {
         }),
       });
 
-      await expect(apiClient.get("/test")).rejects.toThrow(ApiError);
-      await expect(apiClient.get("/test")).rejects.toThrow("Invalid input");
+      const request = apiClient.get("/test");
+      await expect(request).rejects.toMatchObject({
+        name: "ApiError",
+        message: "Invalid input",
+        code: "BAD_REQUEST",
+      });
     });
 
     it("should handle 401 and attempt token refresh", async () => {
@@ -377,6 +381,27 @@ describe("ApiClient", () => {
       expect(window.location.href).toBe("/");
     });
 
+    it("should not reload the public landing page when token refresh fails", async () => {
+      (window as any).location = { href: "", pathname: "/" };
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: false,
+        status: 401,
+        headers: new Headers({ "content-type": "application/json" }),
+        json: async () => ({
+          success: false,
+          error: { code: "UNAUTHORIZED", message: "Token expired" },
+        }),
+      });
+      mockRefreshToken.mockResolvedValue(false);
+
+      await expect(apiClient.get("/auth/me")).rejects.toThrow(
+        "Session expired",
+      );
+
+      expect(mockAuthLogout).toHaveBeenCalledTimes(1);
+      expect(window.location.href).toBe("");
+    });
+
     it("should handle non-JSON response", async () => {
       (global.fetch as jest.Mock).mockResolvedValueOnce({
         ok: true,
@@ -384,10 +409,10 @@ describe("ApiClient", () => {
         text: async () => "<html>Error page</html>",
       });
 
-      const response = await apiClient.get("/test");
-
-      expect(response.success).toBe(false);
-      expect(response.error?.code).toBe("INVALID_RESPONSE");
+      await expect(apiClient.get("/test")).rejects.toMatchObject({
+        name: "ApiError",
+        code: "INVALID_RESPONSE",
+      });
     });
 
     it("should handle network errors", async () => {
@@ -402,9 +427,11 @@ describe("ApiClient", () => {
       jest.useFakeTimers();
 
       (global.fetch as jest.Mock).mockImplementationOnce(
-        () =>
-          new Promise((resolve) => {
-            setTimeout(() => resolve({ ok: true }), 60000);
+        (_url: string, options: RequestInit) =>
+          new Promise((_resolve, reject) => {
+            options.signal?.addEventListener("abort", () => {
+              reject(new DOMException("Aborted", "AbortError"));
+            });
           }),
       );
 
@@ -428,8 +455,12 @@ describe("ApiClient", () => {
         }),
       });
 
-      await expect(apiClient.get("/test")).rejects.toThrow(ApiError);
-      await expect(apiClient.get("/test")).rejects.toThrow("Validation failed");
+      const request = apiClient.get("/test");
+      await expect(request).rejects.toMatchObject({
+        name: "ApiError",
+        message: "Validation failed",
+        code: "VALIDATION_ERROR",
+      });
     });
   });
 
@@ -556,7 +587,9 @@ describe("ApiClient", () => {
         }),
       });
 
-      const result = sharedFilesApi.getById("share-123");
+      // This is an API request, not a synchronous Testing Library query.
+      // eslint-disable-next-line testing-library/no-await-sync-query
+      const result = await sharedFilesApi.getById("share-123");
 
       expect(result).toEqual({ id: "share-123", file_name: "test.txt" });
     });
@@ -572,7 +605,9 @@ describe("ApiClient", () => {
         }),
       });
 
-      const result = sharedFilesApi.getById("nonexistent");
+      // This is an API request, not a synchronous Testing Library query.
+      // eslint-disable-next-line testing-library/no-await-sync-query
+      const result = await sharedFilesApi.getById("nonexistent");
 
       expect(result).toBeNull();
     });

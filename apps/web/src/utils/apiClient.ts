@@ -216,7 +216,12 @@ class HttpClient {
           // Refresh failed, logout and redirect
           logger.warn("Token refresh failed, logging out...");
           await authLogout();
-          window.location.href = "/";
+          // Avoid reloading the landing page when an authentication probe finds
+          // an expired cookie. Public-route callers can render their signed-out
+          // state after this request rejects.
+          if (window.location.pathname !== "/") {
+            window.location.href = "/";
+          }
           throw new ApiError(
             "Session expired, please log in again",
             "UNAUTHORIZED",

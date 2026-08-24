@@ -2,8 +2,6 @@ import React from "react";
 import { Link } from "react-router-dom";
 import Header from "../components/landing-page/header";
 import Footer from "../components/landing-page/footer";
-import { Badge } from "../components/ui/badge";
-import { Button } from "../components/ui/button";
 import {
   Card,
   CardDescription,

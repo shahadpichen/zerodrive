@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Home, ChevronRight } from "lucide-react";
+import { ChevronRight } from "lucide-react";
 import { Button } from "../ui/button";
 import { useFolderContext } from "./folder-context";
 import { moveFile } from "../../utils/folderOperations";
