@@ -49,6 +49,7 @@ import {
   assertCanWriteVaultMetadata,
   showVaultMetadataWriteBlockedToast,
 } from "../../utils/vaultMetadataWriteGuard";
+import { googleDriveFetch } from "../../utils/googleDriveRequest";
 
 interface FileListProps {
   view?: "compact" | "recent" | "full";
@@ -316,23 +317,11 @@ export const FileList: React.FC<FileListProps> = ({
         return;
       }
 
-      // Check authentication via backend token
-      const { getGoogleAccessToken } = await import("../../utils/gapiInit");
-      const token = await getGoogleAccessToken();
-      if (!token) {
-        toast.error("Authentication error", {
-          description: "Please sign in again",
-        });
-        setDownloadingFileId(null);
-        return;
-      }
-
       toast.loading(`Downloading: ${fileName}...`);
-      const response = await fetch(
+      const response = await googleDriveFetch(
         `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`,
         {
           method: "GET",
-          headers: new Headers({ Authorization: `Bearer ${token}` }),
         },
       );
 
@@ -430,16 +419,10 @@ export const FileList: React.FC<FileListProps> = ({
 
       deleteToastId = toast.loading(`Deleting ${fileName}...`);
 
-      const { getGoogleAccessToken } = await import("../../utils/gapiInit");
-      const token = await getGoogleAccessToken();
-      if (!token) {
-        throw new Error("Authentication error");
-      }
-      const response = await fetch(
+      const response = await googleDriveFetch(
         `https://www.googleapis.com/drive/v3/files/${fileId}`,
         {
           method: "DELETE",
-          headers: new Headers({ Authorization: `Bearer ${token}` }),
         },
       );
       if (!response.ok && response.status !== 404) {

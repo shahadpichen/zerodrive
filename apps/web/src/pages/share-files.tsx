@@ -51,6 +51,7 @@ import { getMnemonic } from "../utils/mnemonicManager";
 import { recoverRsaKeysIfNeeded } from "../utils/rsaKeyRecovery";
 import { createSharingKeyBackupCapsule } from "../utils/capsuleAdapter";
 import { ensureGoogleDrivePermissionForAction } from "../utils/googleDrivePermissions";
+import { googleDriveFetch } from "../utils/googleDriveRequest";
 
 type PageState =
   | "checking"
@@ -552,18 +553,10 @@ const ShareFilesPage: React.FC = () => {
     if (!storedFile) throw new Error("Choose a file before continuing.");
 
     setShareStage("preparing");
-    const { getGoogleAccessToken } = await import("../utils/gapiInit");
-    const token = await getGoogleAccessToken();
-    if (!token) {
-      throw new Error(
-        "Google Drive is not connected. Sign in again and retry.",
-      );
-    }
-
-    const response = await fetch(
+    const response = await googleDriveFetch(
       `https://www.googleapis.com/drive/v3/files/${storedFile.id}?alt=media`,
       {
-        headers: { Authorization: `Bearer ${token}` },
+        method: "GET",
       },
     );
     if (!response.ok) {

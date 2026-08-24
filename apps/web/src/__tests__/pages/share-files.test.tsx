@@ -365,9 +365,15 @@ describe("ShareFilesPage", () => {
     fireEvent.click(screen.getByRole("button", { name: /encrypt and share/i }));
 
     expect(await screen.findByText("File shared")).toBeInTheDocument();
-    expect(global.fetch).toHaveBeenCalledWith(
-      "https://www.googleapis.com/drive/v3/files/drive-file-123?alt=media",
-      { headers: { Authorization: "Bearer google-token" } },
+    const driveDownloadCall = (global.fetch as jest.Mock).mock.calls.find(
+      ([url]) =>
+        url ===
+        "https://www.googleapis.com/drive/v3/files/drive-file-123?alt=media",
+    );
+    expect(driveDownloadCall).toBeDefined();
+    expect(driveDownloadCall?.[1].method).toBe("GET");
+    expect(driveDownloadCall?.[1].headers.get("Authorization")).toBe(
+      "Bearer google-token",
     );
     expect(mockDecryptFile).toHaveBeenCalledTimes(1);
     expect(mockDecryptFile.mock.calls[0][0]).toBe(encryptedBlob);

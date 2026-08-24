@@ -95,15 +95,16 @@ describe('FolderOperations', () => {
       expect(result?.userEmail).toBe(testUser);
       expect(result?.createdDate).toBeInstanceOf(Date);
 
-      expect(global.fetch).toHaveBeenCalledWith(
+      const fetchCall = (global.fetch as jest.Mock).mock.calls[0];
+      expect(fetchCall[0]).toBe(
         'https://www.googleapis.com/drive/v3/files?fields=id,name',
-        expect.objectContaining({
-          method: 'POST',
-          headers: expect.objectContaining({
-            Authorization: `Bearer ${mockToken}`,
-            'Content-Type': 'application/json',
-          }),
-        })
+      );
+      expect(fetchCall[1].method).toBe('POST');
+      expect(fetchCall[1].headers.get('Authorization')).toBe(
+        `Bearer ${mockToken}`,
+      );
+      expect(fetchCall[1].headers.get('Content-Type')).toBe(
+        'application/json',
       );
 
       expect(mockAddFolder).toHaveBeenCalledWith(
@@ -150,7 +151,8 @@ describe('FolderOperations', () => {
       expect(toast.error).toHaveBeenCalledWith(
         'Failed to create folder',
         expect.objectContaining({
-          description: 'User not authenticated.',
+          description:
+            'Google Drive is not connected. Sign in again and retry.',
         })
       );
       expect(mockAddFolder).not.toHaveBeenCalled();

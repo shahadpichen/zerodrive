@@ -12,6 +12,7 @@ import {
   getCsrfToken,
   getGoogleTokenFromStorage,
   storeGoogleTokens,
+  GOOGLE_TOKEN_REFRESH_BUFFER_MS,
 } from "../../utils/authService";
 
 // Mock fetch globally
@@ -380,6 +381,42 @@ describe("AuthService", () => {
           }),
           body: "{}",
         }),
+      );
+    });
+
+    it("refreshes a Google token before a long Drive operation when it is close to expiry", async () => {
+      document.cookie = "zerodrive_csrf=test-csrf-token";
+      sessionStorage.setItem(
+        "google-tokens",
+        JSON.stringify({
+          accessToken: "almost-expired-access-token",
+          expiresAt: new Date(
+            Date.now() + GOOGLE_TOKEN_REFRESH_BUFFER_MS / 2,
+          ).toISOString(),
+          scope: "drive.file",
+          userEmail: "user@example.com",
+        }),
+      );
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          success: true,
+          data: {
+            accessToken: "refreshed-before-operation",
+            expiresAt: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+          },
+        }),
+      });
+
+      await expect(
+        getGoogleTokenFromStorage("user@example.com", {
+          minValidityMs: GOOGLE_TOKEN_REFRESH_BUFFER_MS,
+        }),
+      ).resolves.toBe("refreshed-before-operation");
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        expect.stringContaining("/auth/google/refresh"),
+        expect.any(Object),
       );
     });
   });

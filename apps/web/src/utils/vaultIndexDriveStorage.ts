@@ -1,4 +1,5 @@
 import logger from "./logger";
+import { googleDriveFetch } from "./googleDriveRequest";
 
 export const HIDDEN_VAULT_INDEX_FILE_NAME = "zerodrive-vault-index.zd";
 export const LEGACY_VAULT_INDEX_FILE_NAME = "db-list.json";
@@ -96,10 +97,12 @@ async function listVaultIndexFiles(
     spaces: location === "hidden_app_data" ? "appDataFolder" : "drive",
   });
 
-  const response = await fetch(`${DRIVE_FILES_URL}?${params.toString()}`, {
-    method: "GET",
-    headers: { Authorization: `Bearer ${token}` },
-  });
+  const response = await googleDriveFetch(
+    `${DRIVE_FILES_URL}?${params.toString()}`,
+    {
+      method: "GET",
+    },
+  );
 
   if (!response.ok) {
     throw createDriveRequestError(
@@ -153,11 +156,10 @@ export async function downloadVaultIndexBlob(
   token: string,
   file: VaultIndexDriveFile,
 ): Promise<Blob> {
-  const response = await fetch(
+  const response = await googleDriveFetch(
     `${DRIVE_FILES_URL}/${encodeURIComponent(file.id)}?alt=media`,
     {
       method: "GET",
-      headers: { Authorization: `Bearer ${token}` },
     },
   );
 
@@ -175,11 +177,10 @@ async function deleteVaultIndexFile(
   token: string,
   fileId: string,
 ): Promise<void> {
-  const response = await fetch(
+  const response = await googleDriveFetch(
     `${DRIVE_FILES_URL}/${encodeURIComponent(fileId)}`,
     {
       method: "DELETE",
-      headers: { Authorization: `Bearer ${token}` },
     },
   );
 
@@ -220,9 +221,8 @@ async function uploadHiddenVaultIndexBlob(
       : `${DRIVE_UPLOAD_URL}?uploadType=multipart&fields=id`;
   const method = existingFile !== null ? "PATCH" : "POST";
 
-  const response = await fetch(uploadUrl, {
+  const response = await googleDriveFetch(uploadUrl, {
     method,
-    headers: { Authorization: `Bearer ${token}` },
     body: form,
   });
 

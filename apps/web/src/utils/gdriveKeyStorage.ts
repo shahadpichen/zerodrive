@@ -1,20 +1,48 @@
-import { gapi } from "gapi-script";
 import logger from "./logger";
-import { getGoogleAccessToken } from "./gapiInit";
+import {
+  GoogleDriveRequestError,
+  googleDriveFetch,
+  readGoogleDriveError,
+} from "./googleDriveRequest";
 
 // const FOLDER_NAME = "ZeroDrive_Key_Backup"; // No longer using a visible custom folder
 const RSA_KEY_FILE_NAME = "zerodrive_rsa_key_backup.json"; // Stored in appDataFolder
 
-/**
- * Ensures the Google Drive API (v3) client is loaded.
- */
-async function ensureDriveApiLoaded() {
-  // Cast to any to bypass TypeScript check if drive client is not initially defined
-  if (!(gapi.client as any).drive) {
-    logger.log("Loading Google Drive API client...");
-    await gapi.client.load("drive", "v3");
-    logger.log("Google Drive API client loaded.");
+interface DriveFileReference {
+  id: string;
+  name?: string;
+}
+
+async function listDriveFiles(
+  query: string,
+  spaces: "appDataFolder" | "drive",
+): Promise<DriveFileReference[]> {
+  const params = new URLSearchParams({
+    q: query,
+    fields: "files(id,name)",
+    spaces,
+  });
+  const response = await googleDriveFetch(
+    `https://www.googleapis.com/drive/v3/files?${params.toString()}`,
+    { method: "GET" },
+  );
+
+  if (!response.ok) {
+    throw await readGoogleDriveError(
+      response,
+      "Google Drive key backup lookup failed",
+    );
   }
+
+  const result = (await response.json()) as { files?: DriveFileReference[] };
+  return result.files ?? [];
+}
+
+function isGoogleDriveAuthError(error: unknown): boolean {
+  return (
+    error instanceof GoogleDriveRequestError &&
+    (error.status === 401 || error.status === 403)
+  );
 }
 
 /**
@@ -32,24 +60,13 @@ export async function uploadEncryptedRsaKeyToDrive(
     ? `zerodrive_rsa_key_backup_v${keyVersion}.json`
     : RSA_KEY_FILE_NAME;
   try {
-    await ensureDriveApiLoaded();
-    const token = await getGoogleAccessToken();
-    if (!token) {
-      throw new Error("User not authenticated for Google Drive upload.");
-    }
-
     // Check if the file already exists in appDataFolder (hidden from user)
     const query = `name='${fileName}' and trashed=false`;
-    const listResponse = await (gapi.client as any).drive.files.list({
-      q: query,
-      fields: "files(id)",
-      spaces: "appDataFolder", // Store in hidden appDataFolder for security
-      access_token: token,
-    });
+    const existingFiles = await listDriveFiles(query, "appDataFolder");
 
     let fileIdToUpdate: string | null = null;
-    if (listResponse.result.files && listResponse.result.files.length > 0) {
-      fileIdToUpdate = listResponse.result.files[0].id!;
+    if (existingFiles.length > 0) {
+      fileIdToUpdate = existingFiles[0].id;
       logger.log(
         `Found existing RSA key backup file '${fileName}' in appDataFolder. Will update it.`,
       );
@@ -77,11 +94,8 @@ export async function uploadEncryptedRsaKeyToDrive(
 
     const method = fileIdToUpdate ? "PATCH" : "POST";
 
-    const response = await fetch(uploadUrl, {
+    const response = await googleDriveFetch(uploadUrl, {
       method: method,
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
       body: form,
     });
 
@@ -128,12 +142,6 @@ export async function downloadEncryptedRsaKeyFromDrive(
     ? `zerodrive_rsa_key_backup_v${keyVersion}.json`
     : RSA_KEY_FILE_NAME;
 
-  await ensureDriveApiLoaded();
-  const token = await getGoogleAccessToken();
-  if (!token) {
-    throw new Error("User not authenticated for Google Drive download.");
-  }
-
   let fileId: string | null = null;
   let foundLocation: string = "";
 
@@ -141,19 +149,17 @@ export async function downloadEncryptedRsaKeyFromDrive(
   try {
     logger.log(`Searching for RSA key backup in appDataFolder...`);
     const query = `name='${fileName}' and trashed=false`;
-    const listResponse = await (gapi.client as any).drive.files.list({
-      q: query,
-      fields: "files(id, name)",
-      spaces: "appDataFolder",
-      access_token: token,
-    });
+    const files = await listDriveFiles(query, "appDataFolder");
 
-    if (listResponse.result.files && listResponse.result.files.length > 0) {
-      fileId = listResponse.result.files[0].id!;
+    if (files.length > 0) {
+      fileId = files[0].id;
       foundLocation = "appDataFolder (hidden)";
       logger.log(`Found RSA key backup in appDataFolder with ID: ${fileId}`);
     }
   } catch (appDataError) {
+    if (isGoogleDriveAuthError(appDataError)) {
+      throw appDataError;
+    }
     logger.warn(`Could not search appDataFolder:`, appDataError);
   }
 
@@ -162,19 +168,17 @@ export async function downloadEncryptedRsaKeyFromDrive(
     try {
       logger.log(`Searching for RSA key backup in root Google Drive...`);
       const query = `name='${fileName}' and 'root' in parents and trashed=false`;
-      const listResponse = await (gapi.client as any).drive.files.list({
-        q: query,
-        fields: "files(id, name)",
-        spaces: "drive", // Search in regular Drive space
-        access_token: token,
-      });
+      const files = await listDriveFiles(query, "drive");
 
-      if (listResponse.result.files && listResponse.result.files.length > 0) {
-        fileId = listResponse.result.files[0].id!;
+      if (files.length > 0) {
+        fileId = files[0].id;
         foundLocation = "root Google Drive";
         logger.log(`Found RSA key backup in root Drive with ID: ${fileId}`);
       }
     } catch (rootError) {
+      if (isGoogleDriveAuthError(rootError)) {
+        throw rootError;
+      }
       logger.warn(`Could not search root Google Drive:`, rootError);
     }
   }
@@ -189,11 +193,10 @@ export async function downloadEncryptedRsaKeyFromDrive(
   // Download the file
   try {
     logger.log(`Downloading RSA key backup from ${foundLocation}...`);
-    const fetchResponse = await fetch(
+    const fetchResponse = await googleDriveFetch(
       `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`,
       {
         method: "GET",
-        headers: new Headers({ Authorization: `Bearer ${token}` }),
       },
     );
 
