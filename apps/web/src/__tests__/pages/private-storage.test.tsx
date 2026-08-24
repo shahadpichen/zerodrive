@@ -357,7 +357,7 @@ describe("PrivateStorage metadata replacement warning", () => {
     });
 
     expect(mockToastInfo).toHaveBeenCalledWith(
-      "Checking vault metadata",
+      "Checking the encrypted file list",
       expect.any(Object),
     );
     expect(
@@ -423,7 +423,7 @@ describe("PrivateStorage metadata replacement warning", () => {
 
     await waitFor(() => {
       expect(mockToastError).toHaveBeenCalledWith(
-        "Vault metadata could not be verified",
+        "Encrypted file list could not be verified",
         expect.objectContaining({
           description: expect.stringContaining(
             "Refresh Storage before uploading",
@@ -533,7 +533,7 @@ describe("PrivateStorage metadata replacement warning", () => {
       expect(mockSetVaultMetadataStatus).toHaveBeenCalledWith(
         "owner@example.com",
         "error",
-        "Drive unavailable",
+        "The encrypted file list could not be verified.",
       );
     });
   });
@@ -614,9 +614,12 @@ describe("PrivateStorage metadata replacement warning", () => {
       screen.getByRole("button", { name: /delete all files/i }),
     );
 
-    expect(mockToastInfo).toHaveBeenCalledWith("Uploads are still pending", {
-      description: expect.stringContaining("upload tray"),
-    });
+    expect(mockToastInfo).toHaveBeenCalledWith(
+      "Uploads are still pending",
+      expect.objectContaining({
+        description: expect.stringContaining("upload tray"),
+      }),
+    );
     expect(deleteAllAndSyncFiles).not.toHaveBeenCalled();
     expect(
       screen.queryByText(/permanently delete all files/i),
@@ -668,8 +671,11 @@ describe("PrivateStorage metadata replacement warning", () => {
       "owner@example.com",
     );
     expect(deleteAllAndSyncFiles).not.toHaveBeenCalled();
-    expect(mockToastInfo).toHaveBeenCalledWith("Uploads are still pending", {
-      description: expect.stringContaining("upload tray"),
-    });
+    expect(mockToastInfo).toHaveBeenCalledWith(
+      "Uploads are still pending",
+      expect.objectContaining({
+        description: expect.stringContaining("upload tray"),
+      }),
+    );
   });
 });

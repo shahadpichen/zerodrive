@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { FileList } from "../components/storage/file-list";
 import { Button } from "../components/ui/button";
-import { toast } from "sonner";
+import { userNotifications as toast } from "../utils/userNotifications";
 import { useApp } from "../contexts/app-context";
 
 import { hasMnemonic } from "../utils/mnemonicManager";
@@ -119,13 +119,15 @@ function PrivateStorageContent() {
     toast.info("Uploads are still pending", {
       description:
         "Wait for them to finish, or cancel them in the upload tray, before deleting all files.",
+      id: "storage:delete-all:uploads-pending",
     });
   }, []);
 
   const showVaultMetadataBlockedToast = useCallback(() => {
-    toast.error("Vault metadata could not be verified", {
+    toast.error("Encrypted file list could not be verified", {
       description:
         "Refresh Storage before uploading so ZeroDrive does not replace an existing encrypted file list with stale local data.",
+      id: "storage:file-list-unverified",
     });
   }, []);
 
@@ -158,6 +160,7 @@ function PrivateStorageContent() {
           console.error("No user email found in JWT");
           toast.error("Authentication error", {
             description: "No user information found. Please sign in again.",
+            id: "storage:authentication",
           });
           // Clear auth and redirect
           const { logout } = await import("../utils/authService");
@@ -215,7 +218,7 @@ function PrivateStorageContent() {
           toast.error("Google Drive connection failed", {
             description:
               "Could not connect to Google Drive. Try signing out and back in to reconnect.",
-            duration: 10000,
+            id: "storage:drive-connection",
             action: {
               label: "Sign Out",
               onClick: async () => {
@@ -256,9 +259,7 @@ function PrivateStorageContent() {
               setVaultMetadataStatus(
                 email,
                 "error",
-                metadataError instanceof Error
-                  ? metadataError.message
-                  : "Could not verify vault metadata",
+                "The encrypted file list could not be verified.",
               );
               throw metadataError; // Re-throw other errors
             }
@@ -272,12 +273,13 @@ function PrivateStorageContent() {
         });
 
         // Check for sharing keys and attempt recovery if needed
-        await recoverRsaKeysIfNeeded(email, false);
+        await recoverRsaKeysIfNeeded(email);
       } catch (error) {
         console.error("Error loading user info or storage:", error);
         toast.error("Failed to load storage", {
           description:
             "An error occurred while loading your storage. Please try refreshing the page.",
+          id: "storage:load",
         });
       } finally {
         setIsLoadingUserFiles(false);
@@ -319,13 +321,16 @@ function PrivateStorageContent() {
     if (!ensureGoogleDrivePermissionForAction("storage")) return;
 
     if (!userEmail) {
-      toast.error("User information not available to refresh files.");
+      toast.error("User information not available to refresh files.", {
+        id: "storage:refresh",
+      });
       return;
     }
     setIsRefreshingFiles(true);
     setIsVerifyingVaultMetadata(true);
     setVaultMetadataStatus(userEmail, "verifying");
-    const refreshToastId = toast.loading("Refreshing file list...");
+    const refreshToastId = "storage:refresh";
+    toast.loading("Refreshing encrypted file list…", { id: refreshToastId });
     try {
       try {
         await fetchAndStoreFileMetadata();
@@ -335,8 +340,9 @@ function PrivateStorageContent() {
           setDecryptionError(true); // Set error flag for banner
           setVaultMetadataStatus(userEmail, "decryption_error");
           console.error("Decryption error:", metadataError);
-          toast.error("Failed to decrypt metadata file.", {
-            description: "Please ensure you have the correct encryption key.",
+          toast.error("Encrypted file list could not be opened", {
+            description:
+              "Open Recovery & Access and enter the phrase used for this vault.",
             id: refreshToastId,
           });
           setIsRefreshingFiles(false);
@@ -351,20 +357,24 @@ function PrivateStorageContent() {
       });
       setRefreshFileListKey((prev) => prev + 1);
       await refreshAll(); // Refresh storage
-      toast.success("File list refreshed successfully.", {
+      toast.success("Storage refreshed", {
         id: refreshToastId,
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       setVaultMetadataStatus(
         userEmail,
         "error",
-        error.message || "Could not verify vault metadata",
+        "The encrypted file list could not be verified.",
       );
       console.error("Error refreshing files:", error);
-      toast.error("Failed to refresh file list.", {
-        description: error.message || "Could not sync with Google Drive.",
-        id: refreshToastId,
-      });
+      toast.errorFrom(
+        error,
+        {
+          title: "Storage could not be refreshed",
+          description: "Check your Google Drive connection and retry.",
+        },
+        { id: refreshToastId },
+      );
     } finally {
       setIsVerifyingVaultMetadata(false);
       setIsRefreshingFiles(false);
@@ -375,9 +385,10 @@ function PrivateStorageContent() {
     if (!ensureGoogleDrivePermissionForAction("upload")) return;
 
     if (isVaultSafetyCheckPending) {
-      toast.info("Checking vault metadata", {
+      toast.info("Checking the encrypted file list", {
         description:
           "Wait for ZeroDrive to finish checking your encrypted file list before uploading.",
+        id: "storage:file-list-check",
       });
       return;
     }
@@ -389,6 +400,7 @@ function PrivateStorageContent() {
       toast.info("Set up Recovery & Access first", {
         description:
           "Create a new recovery phrase or enter your existing one before uploading files.",
+        id: "storage:vault-access",
       });
       openRecoveryAccess();
       return;
@@ -429,9 +441,10 @@ function PrivateStorageContent() {
     if (!ensureGoogleDrivePermissionForAction("upload")) return;
 
     if (isVaultSafetyCheckPending) {
-      toast.info("Checking vault metadata", {
+      toast.info("Checking the encrypted file list", {
         description:
           "Wait for ZeroDrive to finish checking your encrypted file list before uploading.",
+        id: "storage:file-list-check",
       });
       return;
     }
@@ -444,6 +457,7 @@ function PrivateStorageContent() {
       toast.info("Set up Recovery & Access first", {
         description:
           "Create a new recovery phrase or enter your existing one before uploading files.",
+        id: "storage:vault-access",
       });
       openRecoveryAccess();
       return;
@@ -475,10 +489,15 @@ function PrivateStorageContent() {
         })),
       );
     } catch (error) {
-      toast.error("Files could not be added to uploads", {
-        description:
-          error instanceof Error ? error.message : "Choose the files again.",
-      });
+      toast.errorFrom(
+        error,
+        {
+          title: "Files could not be added to uploads",
+          description:
+            "Choose the files again after the current Storage action finishes.",
+        },
+        { id: "storage:enqueue" },
+      );
     }
   };
 
@@ -560,6 +579,7 @@ function PrivateStorageContent() {
         toast.error("Recovery & Access required", {
           description:
             "Recover access to this vault before deleting encrypted files.",
+          id: "storage:delete-all:vault-access",
         });
         setShowDeleteConfirm(false);
         openRecoveryAccess();

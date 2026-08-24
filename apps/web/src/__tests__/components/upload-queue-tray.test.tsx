@@ -40,7 +40,7 @@ describe("UploadQueueTray", () => {
             attempts: 1,
             error: {
               code: "NETWORK_INTERRUPTED",
-              message: "The connection was interrupted.",
+              message: "raw google response body with object identifier",
               stage: "upload",
               retryable: true,
               attempt: 1,
@@ -72,8 +72,13 @@ describe("UploadQueueTray", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("notes.txt")).toBeInTheDocument();
     expect(
-      screen.getByText(/failed · the connection was interrupted/i),
+      screen.getByText(
+        /failed · the connection was interrupted\. retry when you are online/i,
+      ),
     ).toBeInTheDocument();
+    expect(
+      screen.queryByText(/raw google response body/i),
+    ).not.toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "Close finished uploads" }),
     ).not.toBeInTheDocument();

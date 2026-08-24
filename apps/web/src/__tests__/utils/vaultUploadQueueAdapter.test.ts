@@ -221,7 +221,6 @@ describe("vault upload queue adapter", () => {
       userEmail: "owner@example.com",
       allowMetadataReplacement: false,
       recoveryPhraseSession: expect.objectContaining({ generation: 1 }),
-      showToast: false,
     });
     expect(sourceFiles.has(taskId)).toBe(false);
   });

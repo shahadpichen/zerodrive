@@ -1,4 +1,4 @@
-import { toast } from "sonner";
+import { userNotifications as toast } from "./userNotifications";
 import {
   addFolder,
   getFoldersForUser,
@@ -22,7 +22,8 @@ export const createFolder = async (
   parentId: string | null,
   userEmail: string,
 ): Promise<FolderMeta | null> => {
-  const createToastId = toast.loading(`Creating folder "${folderName}"...`);
+  const createToastId = `storage:create-folder:${userEmail}:${parentId ?? "root"}:${folderName}`;
+  toast.loading(`Creating folder "${folderName}"…`, { id: createToastId });
 
   try {
     requireActiveRecoveryPhrase();
@@ -72,12 +73,16 @@ export const createFolder = async (
 
     toast.success(`Folder "${folderName}" created`, { id: createToastId });
     return newFolder;
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[Folder] Failed to create folder:", error);
-    toast.error("Failed to create folder", {
-      description: error.message,
-      id: createToastId,
-    });
+    toast.errorFrom(
+      error,
+      {
+        title: "Folder could not be created",
+        description: "Check the folder name and retry.",
+      },
+      { id: createToastId },
+    );
     return null;
   }
 };
@@ -88,7 +93,8 @@ export const deleteFolder = async (
   userEmail: string,
   force: boolean = false,
 ): Promise<boolean> => {
-  const deleteToastId = toast.loading(`Deleting folder "${folderName}"...`);
+  const deleteToastId = `storage:delete-folder:${folderId}`;
+  toast.loading(`Deleting folder "${folderName}"…`, { id: deleteToastId });
 
   try {
     requireActiveRecoveryPhrase();
@@ -135,12 +141,16 @@ export const deleteFolder = async (
 
     toast.success(`Folder "${folderName}" deleted`, { id: deleteToastId });
     return true;
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[Folder] Failed to delete folder:", error);
-    toast.error("Failed to delete folder", {
-      description: error.message,
-      id: deleteToastId,
-    });
+    toast.errorFrom(
+      error,
+      {
+        title: "Folder could not be deleted",
+        description: "Refresh Storage and retry.",
+      },
+      { id: deleteToastId },
+    );
     return false;
   }
 };
@@ -154,7 +164,8 @@ export const renameFolder = async (
   const trimmed = newName.trim();
   if (!trimmed || trimmed === oldName) return false;
 
-  const renameToastId = toast.loading(`Renaming "${oldName}"...`);
+  const renameToastId = `storage:rename-folder:${folderId}`;
+  toast.loading(`Renaming "${oldName}"…`, { id: renameToastId });
 
   try {
     requireActiveRecoveryPhrase();
@@ -188,12 +199,16 @@ export const renameFolder = async (
 
     toast.success(`Renamed to "${trimmed}"`, { id: renameToastId });
     return true;
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[Folder] Failed to rename folder:", error);
-    toast.error("Failed to rename folder", {
-      description: error.message,
-      id: renameToastId,
-    });
+    toast.errorFrom(
+      error,
+      {
+        title: "Folder could not be renamed",
+        description: "Check the new name and retry.",
+      },
+      { id: renameToastId },
+    );
     return false;
   }
 };
@@ -204,7 +219,8 @@ export const moveFile = async (
   newFolderId: string | null,
   userEmail: string,
 ): Promise<boolean> => {
-  const moveToastId = toast.loading(`Moving "${fileName}"...`);
+  const moveToastId = `storage:move:${fileId}`;
+  toast.loading(`Moving "${fileName}"…`, { id: moveToastId });
 
   try {
     requireActiveRecoveryPhrase();
@@ -242,12 +258,16 @@ export const moveFile = async (
 
     toast.success(`Moved "${fileName}"`, { id: moveToastId });
     return true;
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[Folder] Failed to move file:", error);
-    toast.error("Failed to move file", {
-      description: error.message,
-      id: moveToastId,
-    });
+    toast.errorFrom(
+      error,
+      {
+        title: "File could not be moved",
+        description: "Refresh Storage and retry.",
+      },
+      { id: moveToastId },
+    );
     return false;
   }
 };

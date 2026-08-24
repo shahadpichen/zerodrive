@@ -42,7 +42,7 @@ import {
 import { useOptionalVaultData } from "../contexts/vault-data-context";
 import { useUploadQueue } from "../contexts/upload-queue-context";
 import { rememberVaultMetadataStatus } from "../utils/vaultMetadataWriteGuard";
-import { toast } from "sonner";
+import { userNotifications as toast } from "../utils/userNotifications";
 import { inspectSharedMetadataCapsule } from "../utils/capsuleAdapter";
 import { ensureGoogleDrivePermissionForAction } from "../utils/googleDrivePermissions";
 import type { UserKeyPair } from "../utils/fileSharing";
@@ -235,19 +235,29 @@ const SharedWithMePage: React.FC = () => {
   );
 
   const loadSharedFiles = useCallback(async (showConfirmation = false) => {
+    const notificationId = "inbox:refresh";
     setIsLoading(true);
     setLoadError("");
+    if (showConfirmation) {
+      toast.loading("Refreshing shared inbox…", { id: notificationId });
+    }
     try {
       const result = await apiClient.sharedFiles.getForUser();
       setSharedFiles((result.files || []).map(mapSharedFile));
-      if (showConfirmation) toast.success("Inbox refreshed");
+      if (showConfirmation) {
+        toast.success("Shared inbox refreshed", { id: notificationId });
+      }
     } catch (error) {
       console.error("[SharedWithMe] Failed to load files:", error);
-      setLoadError(
-        error instanceof Error
-          ? error.message
-          : "Your shared files could not be loaded.",
-      );
+      const fallback = {
+        title: "Shared inbox could not be refreshed",
+        description: "Check your connection and retry.",
+      };
+      if (showConfirmation) {
+        toast.errorFrom(error, fallback, { id: notificationId });
+      } else {
+        setLoadError(fallback.title);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -329,7 +339,7 @@ const SharedWithMePage: React.FC = () => {
         if (!mnemonic) {
           setKeyState("primary-missing");
         } else {
-          await recoverRsaKeysIfNeeded(email, true);
+          await recoverRsaKeysIfNeeded(email);
           const [localKeyPair, allKeyPairs] = await Promise.all([
             getUserKeyPair(email, mnemonic),
             getUserKeyPairs(email, mnemonic),
@@ -468,7 +478,9 @@ const SharedWithMePage: React.FC = () => {
 
       if (action === "download") {
         downloadDecryptedFile(decrypted.decryptedFile, decrypted.fileName);
-        toast.success(`${decrypted.fileName} downloaded`);
+        toast.success(`${decrypted.fileName} downloaded`, {
+          id: `inbox:download:${file.id}`,
+        });
       } else {
         setProcessing({ fileId: file.id, action, stage: "saving" });
         const fileForVault = new File(
@@ -487,13 +499,18 @@ const SharedWithMePage: React.FC = () => {
       );
     } catch (error) {
       console.error("[SharedWithMe] File action failed:", error);
-      toast.error(
+      toast.errorFrom(
+        error,
         action === "download"
-          ? "File could not be downloaded"
-          : "File could not be saved",
-        {
-          description: error instanceof Error ? error.message : "Unknown error",
-        },
+          ? {
+              title: "File could not be downloaded",
+              description: "Retry from the shared inbox.",
+            }
+          : {
+              title: "File could not be saved",
+              description: "Refresh Storage access and retry.",
+            },
+        { id: `inbox:${action}:${file.id}` },
       );
     } finally {
       setProcessing(null);

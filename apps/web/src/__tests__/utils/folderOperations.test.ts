@@ -7,21 +7,18 @@ import {
   createFolder,
   deleteFolder,
   moveFile,
-} from '../../utils/folderOperations';
-import { toast } from 'sonner';
-import { rememberVaultMetadataStatus } from '../../utils/vaultMetadataWriteGuard';
-import {
-  clearMnemonic,
-  setMnemonic,
-} from '../../utils/mnemonicManager';
+} from "../../utils/folderOperations";
+import { toast } from "sonner";
+import { rememberVaultMetadataStatus } from "../../utils/vaultMetadataWriteGuard";
+import { clearMnemonic, setMnemonic } from "../../utils/mnemonicManager";
 
 // Mock all dependencies
-jest.mock('../../utils/dexieDB');
-jest.mock('../../utils/gapiInit');
-jest.mock('../../utils/logger');
-jest.mock('sonner', () => ({
+jest.mock("../../utils/dexieDB");
+jest.mock("../../utils/gapiInit");
+jest.mock("../../utils/logger");
+jest.mock("sonner", () => ({
   toast: {
-    loading: jest.fn(() => 'toast-id'),
+    loading: jest.fn(() => "toast-id"),
     success: jest.fn(),
     error: jest.fn(),
   },
@@ -38,7 +35,7 @@ const mockGetAllFilesForUser = jest.fn();
 const mockSendToGoogleDrive = jest.fn();
 const mockGetFileByIdForUser = jest.fn();
 
-jest.mock('../../utils/dexieDB', () => ({
+jest.mock("../../utils/dexieDB", () => ({
   addFolder: (...args: any[]) => mockAddFolder(...args),
   getFoldersForUser: (...args: any[]) => mockGetFoldersForUser(...args),
   getFilesInFolder: (...args: any[]) => mockGetFilesInFolder(...args),
@@ -50,15 +47,15 @@ jest.mock('../../utils/dexieDB', () => ({
 }));
 
 const mockGetGoogleAccessToken = jest.fn();
-jest.mock('../../utils/gapiInit', () => ({
+jest.mock("../../utils/gapiInit", () => ({
   getGoogleAccessToken: (...args: any[]) => mockGetGoogleAccessToken(...args),
 }));
 
-describe('FolderOperations', () => {
-  const testUser = 'test@example.com';
-  const mockToken = 'mock-google-token';
-  const mockFolderId = 'folder-123';
-  const mockFolderName = 'Test Folder';
+describe("FolderOperations", () => {
+  const testUser = "test@example.com";
+  const mockToken = "mock-google-token";
+  const mockFolderId = "folder-123";
+  const mockFolderName = "Test Folder";
 
   beforeEach(() => {
     sessionStorage.clear();
@@ -78,8 +75,8 @@ describe('FolderOperations', () => {
     clearMnemonic();
   });
 
-  describe('createFolder', () => {
-    it('should create folder successfully at root level', async () => {
+  describe("createFolder", () => {
+    it("should create folder successfully at root level", async () => {
       // Mock successful Drive API response
       (global.fetch as jest.Mock).mockResolvedValueOnce({
         ok: true,
@@ -97,15 +94,13 @@ describe('FolderOperations', () => {
 
       const fetchCall = (global.fetch as jest.Mock).mock.calls[0];
       expect(fetchCall[0]).toBe(
-        'https://www.googleapis.com/drive/v3/files?fields=id,name',
+        "https://www.googleapis.com/drive/v3/files?fields=id,name",
       );
-      expect(fetchCall[1].method).toBe('POST');
-      expect(fetchCall[1].headers.get('Authorization')).toBe(
+      expect(fetchCall[1].method).toBe("POST");
+      expect(fetchCall[1].headers.get("Authorization")).toBe(
         `Bearer ${mockToken}`,
       );
-      expect(fetchCall[1].headers.get('Content-Type')).toBe(
-        'application/json',
-      );
+      expect(fetchCall[1].headers.get("Content-Type")).toBe("application/json");
 
       expect(mockAddFolder).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -113,25 +108,29 @@ describe('FolderOperations', () => {
           name: mockFolderName,
           parentId: null,
           userEmail: testUser,
-        })
+        }),
       );
 
       expect(mockSendToGoogleDrive).toHaveBeenCalled();
       expect(toast.success).toHaveBeenCalledWith(
         `Folder "${mockFolderName}" created`,
-        expect.any(Object)
+        expect.any(Object),
       );
     });
 
-    it('should create folder successfully with parent folder', async () => {
-      const parentFolderId = 'parent-folder-123';
+    it("should create folder successfully with parent folder", async () => {
+      const parentFolderId = "parent-folder-123";
 
       (global.fetch as jest.Mock).mockResolvedValueOnce({
         ok: true,
         json: async () => ({ id: mockFolderId, name: mockFolderName }),
       });
 
-      const result = await createFolder(mockFolderName, parentFolderId, testUser);
+      const result = await createFolder(
+        mockFolderName,
+        parentFolderId,
+        testUser,
+      );
 
       expect(result).not.toBeNull();
       expect(result?.parentId).toBe(parentFolderId);
@@ -142,27 +141,26 @@ describe('FolderOperations', () => {
       expect(requestBody.parents).toEqual([parentFolderId]);
     });
 
-    it('should return null when user is not authenticated', async () => {
+    it("should return null when user is not authenticated", async () => {
       mockGetGoogleAccessToken.mockResolvedValue(null);
 
       const result = await createFolder(mockFolderName, null, testUser);
 
       expect(result).toBeNull();
       expect(toast.error).toHaveBeenCalledWith(
-        'Failed to create folder',
+        "Reconnect Google Drive",
         expect.objectContaining({
-          description:
-            'Google Drive is not connected. Sign in again and retry.',
-        })
+          description: "Sign in again, then retry this operation.",
+        }),
       );
       expect(mockAddFolder).not.toHaveBeenCalled();
     });
 
-    it('should return null when Drive API returns error', async () => {
+    it("should return null when Drive API returns error", async () => {
       (global.fetch as jest.Mock).mockResolvedValueOnce({
         ok: false,
         json: async () => ({
-          error: { message: 'Insufficient permissions' },
+          error: { message: "Insufficient permissions" },
         }),
       });
 
@@ -173,7 +171,7 @@ describe('FolderOperations', () => {
       expect(mockAddFolder).not.toHaveBeenCalled();
     });
 
-    it('should return null when Drive API returns no ID', async () => {
+    it("should return null when Drive API returns no ID", async () => {
       (global.fetch as jest.Mock).mockResolvedValueOnce({
         ok: true,
         json: async () => ({ name: mockFolderName }), // Missing id
@@ -184,8 +182,8 @@ describe('FolderOperations', () => {
       expect(result).toBeNull();
     });
 
-    it('should handle folder creation with special characters in name', async () => {
-      const specialName = 'Test Folder @#$% 2024';
+    it("should handle folder creation with special characters in name", async () => {
+      const specialName = "Test Folder @#$% 2024";
 
       (global.fetch as jest.Mock).mockResolvedValueOnce({
         ok: true,
@@ -198,13 +196,13 @@ describe('FolderOperations', () => {
       expect(toast.success).toHaveBeenCalled();
     });
 
-    it('should return null when metadata sync fails', async () => {
+    it("should return null when metadata sync fails", async () => {
       (global.fetch as jest.Mock).mockResolvedValueOnce({
         ok: true,
         json: async () => ({ id: mockFolderId, name: mockFolderName }),
       });
 
-      mockSendToGoogleDrive.mockRejectedValue(new Error('Sync failed'));
+      mockSendToGoogleDrive.mockRejectedValue(new Error("Sync failed"));
 
       const result = await createFolder(mockFolderName, null, testUser);
 
@@ -212,8 +210,8 @@ describe('FolderOperations', () => {
       expect(toast.error).toHaveBeenCalled();
     });
 
-    it('should handle network errors gracefully', async () => {
-      (global.fetch as jest.Mock).mockRejectedValue(new Error('Network error'));
+    it("should handle network errors gracefully", async () => {
+      (global.fetch as jest.Mock).mockRejectedValue(new Error("Network error"));
 
       const result = await createFolder(mockFolderName, null, testUser);
 
@@ -221,20 +219,20 @@ describe('FolderOperations', () => {
       expect(toast.error).toHaveBeenCalled();
     });
 
-    it('should handle empty folder name', async () => {
+    it("should handle empty folder name", async () => {
       (global.fetch as jest.Mock).mockResolvedValueOnce({
         ok: true,
-        json: async () => ({ id: mockFolderId, name: '' }),
+        json: async () => ({ id: mockFolderId, name: "" }),
       });
 
-      const result = await createFolder('', null, testUser);
+      const result = await createFolder("", null, testUser);
 
-      expect(result?.name).toBe('');
+      expect(result?.name).toBe("");
     });
   });
 
-  describe('deleteFolder', () => {
-    it('should delete empty folder successfully', async () => {
+  describe("deleteFolder", () => {
+    it("should delete empty folder successfully", async () => {
       mockGetFilesInFolder.mockResolvedValue([]);
 
       (global.fetch as jest.Mock).mockResolvedValueOnce({
@@ -249,33 +247,38 @@ describe('FolderOperations', () => {
       expect(mockSendToGoogleDrive).toHaveBeenCalled();
       expect(toast.success).toHaveBeenCalledWith(
         `Folder "${mockFolderName}" deleted`,
-        expect.any(Object)
+        expect.any(Object),
       );
     });
 
-    it('should return false when folder has files and force is false', async () => {
+    it("should return false when folder has files and force is false", async () => {
       const filesInFolder = [
-        { id: 'file-1', name: 'test1.txt', userEmail: testUser },
-        { id: 'file-2', name: 'test2.txt', userEmail: testUser },
+        { id: "file-1", name: "test1.txt", userEmail: testUser },
+        { id: "file-2", name: "test2.txt", userEmail: testUser },
       ];
       mockGetFilesInFolder.mockResolvedValue(filesInFolder);
 
-      const result = await deleteFolder(mockFolderId, mockFolderName, testUser, false);
+      const result = await deleteFolder(
+        mockFolderId,
+        mockFolderName,
+        testUser,
+        false,
+      );
 
       expect(result).toBe(false);
       expect(toast.error).toHaveBeenCalledWith(
-        'Folder is not empty',
+        "Folder is not empty",
         expect.objectContaining({
-          description: 'Move or delete 2 file(s) first',
-        })
+          description: "Move or delete 2 file(s) first",
+        }),
       );
       expect(mockDeleteFolderFromDB).not.toHaveBeenCalled();
     });
 
-    it('should move files to root and delete folder when force is true', async () => {
+    it("should move files to root and delete folder when force is true", async () => {
       const filesInFolder = [
-        { id: 'file-1', name: 'test1.txt', userEmail: testUser },
-        { id: 'file-2', name: 'test2.txt', userEmail: testUser },
+        { id: "file-1", name: "test1.txt", userEmail: testUser },
+        { id: "file-2", name: "test2.txt", userEmail: testUser },
       ];
       mockGetFilesInFolder.mockResolvedValue(filesInFolder);
 
@@ -284,16 +287,21 @@ describe('FolderOperations', () => {
         status: 204,
       });
 
-      const result = await deleteFolder(mockFolderId, mockFolderName, testUser, true);
+      const result = await deleteFolder(
+        mockFolderId,
+        mockFolderName,
+        testUser,
+        true,
+      );
 
       expect(result).toBe(true);
       expect(mockMoveFileToFolder).toHaveBeenCalledTimes(2);
-      expect(mockMoveFileToFolder).toHaveBeenCalledWith('file-1', null);
-      expect(mockMoveFileToFolder).toHaveBeenCalledWith('file-2', null);
+      expect(mockMoveFileToFolder).toHaveBeenCalledWith("file-1", null);
+      expect(mockMoveFileToFolder).toHaveBeenCalledWith("file-2", null);
       expect(mockDeleteFolderFromDB).toHaveBeenCalled();
     });
 
-    it('should return false when user is not authenticated', async () => {
+    it("should return false when user is not authenticated", async () => {
       mockGetFilesInFolder.mockResolvedValue([]);
       mockGetGoogleAccessToken.mockResolvedValue(null);
 
@@ -303,13 +311,13 @@ describe('FolderOperations', () => {
       expect(toast.error).toHaveBeenCalled();
     });
 
-    it('should return false when Drive API delete fails', async () => {
+    it("should return false when Drive API delete fails", async () => {
       mockGetFilesInFolder.mockResolvedValue([]);
 
       (global.fetch as jest.Mock).mockResolvedValueOnce({
         ok: false,
         status: 500,
-        statusText: 'Internal Server Error',
+        statusText: "Internal Server Error",
       });
 
       const result = await deleteFolder(mockFolderId, mockFolderName, testUser);
@@ -319,13 +327,13 @@ describe('FolderOperations', () => {
       expect(mockDeleteFolderFromDB).not.toHaveBeenCalled();
     });
 
-    it('should handle 404 error and delete from local DB', async () => {
+    it("should handle 404 error and delete from local DB", async () => {
       mockGetFilesInFolder.mockResolvedValue([]);
 
       (global.fetch as jest.Mock).mockResolvedValueOnce({
         ok: false,
         status: 404,
-        statusText: 'Not Found',
+        statusText: "Not Found",
       });
 
       const result = await deleteFolder(mockFolderId, mockFolderName, testUser);
@@ -333,7 +341,7 @@ describe('FolderOperations', () => {
       expect(result).toBe(false);
     });
 
-    it('should return false when metadata sync fails', async () => {
+    it("should return false when metadata sync fails", async () => {
       mockGetFilesInFolder.mockResolvedValue([]);
 
       (global.fetch as jest.Mock).mockResolvedValueOnce({
@@ -341,7 +349,7 @@ describe('FolderOperations', () => {
         status: 204,
       });
 
-      mockSendToGoogleDrive.mockRejectedValue(new Error('Sync failed'));
+      mockSendToGoogleDrive.mockRejectedValue(new Error("Sync failed"));
 
       const result = await deleteFolder(mockFolderId, mockFolderName, testUser);
 
@@ -349,9 +357,9 @@ describe('FolderOperations', () => {
       expect(toast.error).toHaveBeenCalled();
     });
 
-    it('should handle network errors', async () => {
+    it("should handle network errors", async () => {
       mockGetFilesInFolder.mockResolvedValue([]);
-      (global.fetch as jest.Mock).mockRejectedValue(new Error('Network error'));
+      (global.fetch as jest.Mock).mockRejectedValue(new Error("Network error"));
 
       const result = await deleteFolder(mockFolderId, mockFolderName, testUser);
 
@@ -359,30 +367,35 @@ describe('FolderOperations', () => {
       expect(toast.error).toHaveBeenCalled();
     });
 
-    it('should handle folder with single file', async () => {
+    it("should handle folder with single file", async () => {
       mockGetFilesInFolder.mockResolvedValue([
-        { id: 'file-1', name: 'test.txt', userEmail: testUser },
+        { id: "file-1", name: "test.txt", userEmail: testUser },
       ]);
 
-      const result = await deleteFolder(mockFolderId, mockFolderName, testUser, false);
+      const result = await deleteFolder(
+        mockFolderId,
+        mockFolderName,
+        testUser,
+        false,
+      );
 
       expect(result).toBe(false);
       expect(toast.error).toHaveBeenCalledWith(
-        'Folder is not empty',
+        "Folder is not empty",
         expect.objectContaining({
-          description: 'Move or delete 1 file(s) first',
-        })
+          description: "Move or delete 1 file(s) first",
+        }),
       );
     });
   });
 
-  describe('moveFile', () => {
-    const fileId = 'file-123';
-    const fileName = 'test.txt';
-    const currentFolderId = 'folder-current';
-    const newFolderId = 'folder-new';
+  describe("moveFile", () => {
+    const fileId = "file-123";
+    const fileName = "test.txt";
+    const currentFolderId = "folder-current";
+    const newFolderId = "folder-new";
 
-    it('should move file to new folder successfully', async () => {
+    it("should move file to new folder successfully", async () => {
       mockGetFileByIdForUser.mockResolvedValue({
         id: fileId,
         name: fileName,
@@ -404,17 +417,17 @@ describe('FolderOperations', () => {
       expect(fetchCall[0]).toContain(fileId);
       expect(fetchCall[0]).toContain(`removeParents=${currentFolderId}`);
       expect(fetchCall[0]).toContain(`addParents=${newFolderId}`);
-      expect(fetchCall[1].method).toBe('PATCH');
+      expect(fetchCall[1].method).toBe("PATCH");
 
       expect(mockMoveFileToFolder).toHaveBeenCalledWith(fileId, newFolderId);
       expect(mockSendToGoogleDrive).toHaveBeenCalled();
       expect(toast.success).toHaveBeenCalledWith(
         `Moved "${fileName}"`,
-        expect.any(Object)
+        expect.any(Object),
       );
     });
 
-    it('should move file from root to folder', async () => {
+    it("should move file from root to folder", async () => {
       mockGetFileByIdForUser.mockResolvedValue({
         id: fileId,
         name: fileName,
@@ -433,10 +446,10 @@ describe('FolderOperations', () => {
 
       const fetchCall = (global.fetch as jest.Mock).mock.calls[0];
       expect(fetchCall[0]).toContain(`addParents=${newFolderId}`);
-      expect(fetchCall[0]).not.toContain('removeParents');
+      expect(fetchCall[0]).not.toContain("removeParents");
     });
 
-    it('should move file from folder to root', async () => {
+    it("should move file from folder to root", async () => {
       mockGetFileByIdForUser.mockResolvedValue({
         id: fileId,
         name: fileName,
@@ -455,12 +468,12 @@ describe('FolderOperations', () => {
 
       const fetchCall = (global.fetch as jest.Mock).mock.calls[0];
       expect(fetchCall[0]).toContain(`removeParents=${currentFolderId}`);
-      expect(fetchCall[0]).not.toContain('addParents');
+      expect(fetchCall[0]).not.toContain("addParents");
 
       expect(mockMoveFileToFolder).toHaveBeenCalledWith(fileId, null);
     });
 
-    it('should return false when user is not authenticated', async () => {
+    it("should return false when user is not authenticated", async () => {
       mockGetGoogleAccessToken.mockResolvedValue(null);
 
       const result = await moveFile(fileId, fileName, newFolderId, testUser);
@@ -469,21 +482,21 @@ describe('FolderOperations', () => {
       expect(toast.error).toHaveBeenCalled();
     });
 
-    it('should return false when file is not found', async () => {
+    it("should return false when file is not found", async () => {
       mockGetFileByIdForUser.mockResolvedValue(null);
 
       const result = await moveFile(fileId, fileName, newFolderId, testUser);
 
       expect(result).toBe(false);
       expect(toast.error).toHaveBeenCalledWith(
-        'Failed to move file',
+        "File could not be moved",
         expect.objectContaining({
-          description: 'File not found',
-        })
+          description: "Refresh Storage and retry.",
+        }),
       );
     });
 
-    it('should return false when Drive API fails', async () => {
+    it("should return false when Drive API fails", async () => {
       mockGetFileByIdForUser.mockResolvedValue({
         id: fileId,
         name: fileName,
@@ -494,7 +507,7 @@ describe('FolderOperations', () => {
       (global.fetch as jest.Mock).mockResolvedValueOnce({
         ok: false,
         status: 403,
-        statusText: 'Forbidden',
+        statusText: "Forbidden",
       });
 
       const result = await moveFile(fileId, fileName, newFolderId, testUser);
@@ -504,7 +517,7 @@ describe('FolderOperations', () => {
       expect(mockMoveFileToFolder).not.toHaveBeenCalled();
     });
 
-    it('should handle file already at root being moved to root', async () => {
+    it("should handle file already at root being moved to root", async () => {
       mockGetFileByIdForUser.mockResolvedValue({
         id: fileId,
         name: fileName,
@@ -520,7 +533,7 @@ describe('FolderOperations', () => {
       expect(mockMoveFileToFolder).toHaveBeenCalledWith(fileId, null);
     });
 
-    it('should return false when metadata sync fails', async () => {
+    it("should return false when metadata sync fails", async () => {
       mockGetFileByIdForUser.mockResolvedValue({
         id: fileId,
         name: fileName,
@@ -533,7 +546,7 @@ describe('FolderOperations', () => {
         status: 200,
       });
 
-      mockSendToGoogleDrive.mockRejectedValue(new Error('Sync failed'));
+      mockSendToGoogleDrive.mockRejectedValue(new Error("Sync failed"));
 
       const result = await moveFile(fileId, fileName, newFolderId, testUser);
 
@@ -541,7 +554,7 @@ describe('FolderOperations', () => {
       expect(toast.error).toHaveBeenCalled();
     });
 
-    it('should handle network errors', async () => {
+    it("should handle network errors", async () => {
       mockGetFileByIdForUser.mockResolvedValue({
         id: fileId,
         name: fileName,
@@ -549,7 +562,7 @@ describe('FolderOperations', () => {
         userEmail: testUser,
       });
 
-      (global.fetch as jest.Mock).mockRejectedValue(new Error('Network error'));
+      (global.fetch as jest.Mock).mockRejectedValue(new Error("Network error"));
 
       const result = await moveFile(fileId, fileName, newFolderId, testUser);
 
@@ -557,8 +570,8 @@ describe('FolderOperations', () => {
       expect(toast.error).toHaveBeenCalled();
     });
 
-    it('should handle files with special characters in name', async () => {
-      const specialFileName = 'test @#$% file.txt';
+    it("should handle files with special characters in name", async () => {
+      const specialFileName = "test @#$% file.txt";
 
       mockGetFileByIdForUser.mockResolvedValue({
         id: fileId,
@@ -572,19 +585,24 @@ describe('FolderOperations', () => {
         status: 200,
       });
 
-      const result = await moveFile(fileId, specialFileName, newFolderId, testUser);
+      const result = await moveFile(
+        fileId,
+        specialFileName,
+        newFolderId,
+        testUser,
+      );
 
       expect(result).toBe(true);
       expect(toast.success).toHaveBeenCalledWith(
         `Moved "${specialFileName}"`,
-        expect.any(Object)
+        expect.any(Object),
       );
     });
   });
 
-  describe('Edge Cases', () => {
-    it('should handle createFolder with very long folder name', async () => {
-      const longName = 'a'.repeat(1000);
+  describe("Edge Cases", () => {
+    it("should handle createFolder with very long folder name", async () => {
+      const longName = "a".repeat(1000);
 
       (global.fetch as jest.Mock).mockResolvedValueOnce({
         ok: true,
@@ -596,7 +614,7 @@ describe('FolderOperations', () => {
       expect(result?.name).toBe(longName);
     });
 
-    it('should handle deleteFolder with many files when force is true', async () => {
+    it("should handle deleteFolder with many files when force is true", async () => {
       const manyFiles = Array.from({ length: 100 }, (_, i) => ({
         id: `file-${i}`,
         name: `test${i}.txt`,
@@ -609,34 +627,39 @@ describe('FolderOperations', () => {
         status: 204,
       });
 
-      const result = await deleteFolder(mockFolderId, mockFolderName, testUser, true);
+      const result = await deleteFolder(
+        mockFolderId,
+        mockFolderName,
+        testUser,
+        true,
+      );
 
       expect(result).toBe(true);
       expect(mockMoveFileToFolder).toHaveBeenCalledTimes(100);
     });
 
-    it('should handle concurrent folder operations', async () => {
+    it("should handle concurrent folder operations", async () => {
       (global.fetch as jest.Mock).mockResolvedValue({
         ok: true,
-        json: async () => ({ id: 'folder-concurrent', name: 'Test' }),
+        json: async () => ({ id: "folder-concurrent", name: "Test" }),
       });
 
       const results = await Promise.all([
-        createFolder('Folder 1', null, testUser),
-        createFolder('Folder 2', null, testUser),
-        createFolder('Folder 3', null, testUser),
+        createFolder("Folder 1", null, testUser),
+        createFolder("Folder 2", null, testUser),
+        createFolder("Folder 3", null, testUser),
       ]);
 
       expect(results.every((r) => r !== null)).toBe(true);
     });
 
-    it('should reject folder creation without a verified account', async () => {
+    it("should reject folder creation without a verified account", async () => {
       (global.fetch as jest.Mock).mockResolvedValueOnce({
         ok: true,
         json: async () => ({ id: mockFolderId, name: mockFolderName }),
       });
 
-      const result = await createFolder(mockFolderName, null, '');
+      const result = await createFolder(mockFolderName, null, "");
 
       expect(result).toBeNull();
       expect(global.fetch).not.toHaveBeenCalled();

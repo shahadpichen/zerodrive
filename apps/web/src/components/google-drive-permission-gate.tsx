@@ -16,7 +16,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from "./ui/dialog";
-import { AUTH_SESSION_CLEARED_EVENT, GOOGLE_DRIVE_PERMISSION_EVENT } from "../utils/authEvents";
+import {
+  AUTH_SESSION_CLEARED_EVENT,
+  GOOGLE_DRIVE_PERMISSION_EVENT,
+} from "../utils/authEvents";
 import {
   describeMissingGoogleDriveScopes,
   getMissingStoredGoogleDriveScopes,
@@ -102,13 +105,7 @@ export function GoogleDrivePermissionProvider({
       openDialog,
       closeDialog,
     }),
-    [
-      closeDialog,
-      hasMissingRequiredScopes,
-      missingScopes,
-      openDialog,
-      refresh,
-    ],
+    [closeDialog, hasMissingRequiredScopes, missingScopes, openDialog, refresh],
   );
 
   return (
@@ -126,8 +123,8 @@ export function GoogleDrivePermissionProvider({
           <DialogHeader>
             <DialogTitle>Google Drive permission is incomplete</DialogTitle>
             <DialogDescription>
-              ZeroDrive cannot use Storage or send encrypted shares until
-              Google Drive access is granted.
+              ZeroDrive cannot use Storage or send encrypted shares until Google
+              Drive access is granted.
             </DialogDescription>
           </DialogHeader>
 
@@ -136,15 +133,13 @@ export function GoogleDrivePermissionProvider({
             <div className="grid gap-3 border p-4 text-foreground sm:grid-cols-2">
               <div className="flex items-start gap-3">
                 <HardDrive className="mt-0.5 h-4 w-4 text-muted-foreground" />
-                <p>
-                  Encrypted file copies are saved in your own Google Drive.
-                </p>
+                <p>Encrypted file copies are saved in your own Google Drive.</p>
               </div>
               <div className="flex items-start gap-3">
                 <ShieldCheck className="mt-0.5 h-4 w-4 text-muted-foreground" />
                 <p>
-                  Hidden encrypted vault metadata lets ZeroDrive list your
-                  files safely.
+                  Hidden encrypted vault metadata lets ZeroDrive list your files
+                  safely.
                 </p>
               </div>
             </div>
@@ -213,22 +208,18 @@ export function GoogleDrivePermissionGate({
   requirePermission?: boolean;
   promptIfMissing?: boolean;
 }) {
-  const permission = useGoogleDrivePermissions();
+  const { hasMissingRequiredScopes, openDialog, refresh } =
+    useGoogleDrivePermissions();
 
   useEffect(() => {
-    permission.refresh();
-    if (promptIfMissing && permission.hasMissingRequiredScopes) {
-      permission.openDialog();
+    refresh();
+    if (promptIfMissing && hasMissingRequiredScopes) {
+      openDialog();
     }
     // Run on mount and when a route renders with newly changed scope state.
-  }, [
-    permission.hasMissingRequiredScopes,
-    permission.openDialog,
-    permission.refresh,
-    promptIfMissing,
-  ]);
+  }, [hasMissingRequiredScopes, openDialog, promptIfMissing, refresh]);
 
-  if (!requirePermission || !permission.hasMissingRequiredScopes) {
+  if (!requirePermission || !hasMissingRequiredScopes) {
     return <>{children}</>;
   }
 
@@ -242,7 +233,7 @@ export function GoogleDrivePermissionGate({
         Drive permission before using this section.
       </p>
       <div className="mt-5 flex flex-col justify-center gap-2 sm:flex-row">
-        <Button type="button" variant="outline" onClick={permission.openDialog}>
+        <Button type="button" variant="outline" onClick={openDialog}>
           More details
         </Button>
         <Button type="button" onClick={login}>

@@ -6,7 +6,13 @@ import reportWebVitals from "./reportWebVitals";
 import { ThemeProvider } from "./components/theme-provider";
 import { Toaster } from "./components/ui/sonner";
 
-const root = ReactDOM.createRoot(document.getElementById("root"));
+const rootElement = document.getElementById("root");
+
+if (!rootElement) {
+  throw new Error("Unable to start ZeroDrive because the app root is missing.");
+}
+
+const root = ReactDOM.createRoot(rootElement);
 root.render(
   <React.StrictMode>
     <ThemeProvider defaultTheme="light">

@@ -384,7 +384,7 @@ describe("DexieDB - Google Drive Sync", () => {
       });
 
       await expect(sendToGoogleDrive([testFile])).rejects.toThrow();
-      expect(toast.error).toHaveBeenCalled();
+      expect(toast.error).not.toHaveBeenCalled();
     });
 
     it("should throw error when upload fails", async () => {
@@ -405,7 +405,7 @@ describe("DexieDB - Google Drive Sync", () => {
       await expect(sendToGoogleDrive([testFile])).rejects.toThrow();
     });
 
-    it("should show success toast on successful sync", async () => {
+    it("keeps successful background sync silent", async () => {
       // Mock successful search
       (global.fetch as jest.Mock).mockResolvedValueOnce({
         ok: true,
@@ -426,10 +426,7 @@ describe("DexieDB - Google Drive Sync", () => {
 
       await sendToGoogleDrive([testFile]);
 
-      expect(toast.success).toHaveBeenCalledWith(
-        "Metadata successfully synchronized.",
-        expect.any(Object),
-      );
+      expect(toast.success).not.toHaveBeenCalled();
     });
   });
 
@@ -663,9 +660,7 @@ describe("DexieDB - Google Drive Sync", () => {
         expect.any(Blob),
         expect.any(String),
       );
-      expect(toast.success).toHaveBeenCalledWith(
-        "Vault index moved to hidden app storage.",
-      );
+      expect(toast.success).not.toHaveBeenCalled();
     });
 
     it("loads a legacy visible db-list.json without migrating when only a legacy JSON key is active", async () => {

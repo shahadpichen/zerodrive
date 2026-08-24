@@ -12,7 +12,6 @@ import {
   type UploadQueueSnapshot,
   type UploadQueueTaskStatus,
 } from "@zerodrivehq/upload-queue";
-import { toast } from "sonner";
 import { useApp } from "./app-context";
 import { useVaultData } from "./vault-data-context";
 import {
@@ -141,7 +140,6 @@ export function UploadQueueProvider({
         previousStatusesRef.current.set(task.id, task.status);
 
         if (task.status === "complete" && task.result) {
-          toast.success(`${task.name} saved to Storage`);
           setDecryptionError(false);
           void refreshVaultFromLocal(task.result.userEmail, {
             metadataStatus: "ready",
@@ -151,15 +149,6 @@ export function UploadQueueProvider({
               // The upload is already committed. A later page refresh will
               // hydrate the same IndexedDB state if this UI refresh fails.
             });
-        } else if (task.status === "failed") {
-          toast.error(`${task.name} could not be uploaded`, {
-            description:
-              task.error?.message ?? "Open the upload tray to retry the file.",
-            action: {
-              label: "Retry",
-              onClick: () => queue.retry(task.id),
-            },
-          });
         }
       }
     });
@@ -282,13 +271,6 @@ export function UploadQueueProvider({
         }
       }
       queue.start();
-      if (taskIds.length > 0) {
-        toast.success(
-          taskIds.length === 1
-            ? "File added to uploads"
-            : `${taskIds.length} files added to uploads`,
-        );
-      }
       return taskIds;
     },
     [queue],

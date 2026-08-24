@@ -28,7 +28,7 @@ import {
   DialogTrigger,
 } from "../ui/dialog";
 import { deleteAndSyncFile } from "../../utils/fileOperations";
-import { toast } from "sonner";
+import { userNotifications as toast } from "../../utils/userNotifications";
 
 interface DataTableProps<TData, TValue> {
   columns: ColumnDef<TData, TValue>[];
@@ -71,13 +71,13 @@ export function DataTable<TData, TValue>({
       id: (row.original as any).id,
       name: (row.original as any).name, // Assuming 'name' is available on the row data
     }));
-    let deleteToastId: string | number | undefined;
+    const deleteToastId = "storage:delete-selected";
     let allSucceeded = true;
 
     try {
-      deleteToastId = toast.loading(
-        `Deleting ${filesToDelete.length} selected file(s)...`,
-      );
+      toast.loading(`Deleting ${filesToDelete.length} selected files…`, {
+        id: deleteToastId,
+      });
 
       const { getUserEmail } = await import("../../utils/authService");
       const userEmail = await getUserEmail();
@@ -87,7 +87,9 @@ export function DataTable<TData, TValue>({
       }
 
       for (const file of filesToDelete) {
-        const success = await deleteAndSyncFile(file.id, file.name, userEmail);
+        const success = await deleteAndSyncFile(file.id, file.name, userEmail, {
+          notifications: false,
+        });
         if (!success) {
           allSucceeded = false;
           // deleteAndSyncFile shows individual errors, but we track overall success
@@ -95,18 +97,15 @@ export function DataTable<TData, TValue>({
       }
 
       if (allSucceeded && filesToDelete.length > 0) {
-        toast.success(
-          `Deleted ${filesToDelete.length} file(s) and synced metadata.`,
-          {
-            id: deleteToastId,
-          },
-        );
+        toast.success(`Deleted ${filesToDelete.length} files`, {
+          id: deleteToastId,
+        });
       } else if (filesToDelete.length > 0) {
         // Handle partial success or complete failure
-        toast.warning(
-          `Finished deleting. Some files may not have been removed. Check console for errors. Metadata synced. `,
-          { id: deleteToastId },
-        );
+        toast.warning("Some files could not be deleted", {
+          id: deleteToastId,
+          description: "Refresh Storage and retry the files that remain.",
+        });
       } else {
         // No files were selected or deleted
         toast.info("No files selected for deletion.", { id: deleteToastId });
@@ -116,12 +115,16 @@ export function DataTable<TData, TValue>({
       // Consider using meta?.refetch?.() if available instead of reload
       window.location.reload();
       setRowSelection({}); // Clear selection after operation
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Error deleting selected files:", error);
-      toast.error("Failed to delete selected files", {
-        description: error.message || "Unknown error",
-        id: deleteToastId,
-      });
+      toast.errorFrom(
+        error,
+        {
+          title: "Selected files could not be deleted",
+          description: "Refresh Storage and retry.",
+        },
+        { id: deleteToastId },
+      );
     } finally {
       setIsDeleting(false);
       setOpen(false);

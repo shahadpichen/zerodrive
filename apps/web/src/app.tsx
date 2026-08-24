@@ -19,7 +19,6 @@ import { KeyManagementPage } from "./pages/key-management-page";
 import ShareFilesPage from "./pages/share-files";
 import SharedWithMePage from "./pages/shared-with-me";
 import { isAuthenticated as checkAuth } from "./utils/authService";
-import { useRsaKeyRecovery } from "./hooks/useRsaKeyRecovery";
 import { AuthenticatedLayout } from "./components/layout/authenticated-layout";
 import AnalyticsDashboard from "./pages/analytics-dashboard";
 import { AppProvider } from "./contexts/app-context";
@@ -78,9 +77,6 @@ function App() {
     checkEnvironmentVariables();
   }, []);
 
-  // Recover the account's sharing identity when the tab-session phrase is active.
-  useRsaKeyRecovery();
-
   return (
     <AppProvider>
       <VaultDataProvider>
@@ -91,22 +87,20 @@ function App() {
                 <Routes>
                   <Route path="/" element={<RootRoute />} />
                   <Route path="/oauth/callback" element={<OAuthCallback />} />
-                  <Route
-                    path="/home"
-                    element={
-                      <ProtectedRoute>
+                  <Route element={<ProtectedRoute />}>
+                    <Route
+                      path="/home"
+                      element={
                         <GoogleDrivePermissionGate requirePermission={false}>
                           <LegalAcceptanceGate requireAcceptance={false}>
                             <Home />
                           </LegalAcceptanceGate>
                         </GoogleDrivePermissionGate>
-                      </ProtectedRoute>
-                    }
-                  />
-                  <Route
-                    path="/storage"
-                    element={
-                      <ProtectedRoute>
+                      }
+                    />
+                    <Route
+                      path="/storage"
+                      element={
                         <AuthenticatedLayout>
                           <GoogleDrivePermissionGate requirePermission>
                             <LegalAcceptanceGate requireAcceptance>
@@ -114,31 +108,23 @@ function App() {
                             </LegalAcceptanceGate>
                           </GoogleDrivePermissionGate>
                         </AuthenticatedLayout>
-                      </ProtectedRoute>
-                    }
-                  />
-                  <Route
-                    path="/recovery-access"
-                    element={
-                      <ProtectedRoute>
+                      }
+                    />
+                    <Route
+                      path="/recovery-access"
+                      element={
                         <AuthenticatedLayout>
                           <KeyManagementPage />
                         </AuthenticatedLayout>
-                      </ProtectedRoute>
-                    }
-                  />
-                  <Route
-                    path="/key-management"
-                    element={
-                      <ProtectedRoute>
-                        <KeyManagementRedirect />
-                      </ProtectedRoute>
-                    }
-                  />
-                  <Route
-                    path="/share"
-                    element={
-                      <ProtectedRoute>
+                      }
+                    />
+                    <Route
+                      path="/key-management"
+                      element={<KeyManagementRedirect />}
+                    />
+                    <Route
+                      path="/share"
+                      element={
                         <AuthenticatedLayout>
                           <GoogleDrivePermissionGate requirePermission>
                             <LegalAcceptanceGate requireAcceptance>
@@ -146,13 +132,11 @@ function App() {
                             </LegalAcceptanceGate>
                           </GoogleDrivePermissionGate>
                         </AuthenticatedLayout>
-                      </ProtectedRoute>
-                    }
-                  />
-                  <Route
-                    path="/shared-with-me"
-                    element={
-                      <ProtectedRoute>
+                      }
+                    />
+                    <Route
+                      path="/shared-with-me"
+                      element={
                         <AuthenticatedLayout>
                           <GoogleDrivePermissionGate requirePermission={false}>
                             <LegalAcceptanceGate requireAcceptance>
@@ -160,19 +144,17 @@ function App() {
                             </LegalAcceptanceGate>
                           </GoogleDrivePermissionGate>
                         </AuthenticatedLayout>
-                      </ProtectedRoute>
-                    }
-                  />
-                  <Route
-                    path="/admin/analytics"
-                    element={
-                      <ProtectedRoute>
+                      }
+                    />
+                    <Route
+                      path="/admin/analytics"
+                      element={
                         <AuthenticatedLayout>
                           <AnalyticsDashboard />
                         </AuthenticatedLayout>
-                      </ProtectedRoute>
-                    }
-                  />
+                      }
+                    />
+                  </Route>
                   <Route path="/privacy" element={<Privacy />} />
                   <Route path="/terms" element={<Terms />} />
                   <Route path="/docs" element={<Docs />} />

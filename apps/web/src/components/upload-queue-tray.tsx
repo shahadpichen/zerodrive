@@ -40,6 +40,32 @@ const NON_RETRYABLE_ERROR_CODES = new Set([
   "VAULT_ACCESS_CHANGED",
 ]);
 
+const uploadErrorDescription = (code?: string): string => {
+  switch (code) {
+    case "UPLOAD_SOURCE_MISSING":
+      return "Choose this file again to restart the upload.";
+    case "UPLOAD_ACCOUNT_CHANGED":
+      return "The signed-in account changed. Choose this file again.";
+    case "VAULT_ACCESS_CHANGED":
+      return "Vault access changed. Remove this upload and choose the file again.";
+    case "DRIVE_ACCESS_REQUIRED":
+      return "Reconnect Google Drive, then retry this upload.";
+    case "NETWORK_INTERRUPTED":
+      return "The connection was interrupted. Retry when you are online.";
+    case "UPLOAD_METADATA_MISSING":
+      return "Upload details are unavailable. Choose this file again.";
+    case "UPLOAD_PREPARE_FAILED":
+      return "The file could not be prepared. Remove it and choose it again.";
+    case "UPLOAD_UPLOAD_FAILED":
+    case "DRIVE_REQUEST_FAILED":
+      return "Google Drive could not complete this upload. Retry it.";
+    case "UPLOAD_COMMIT_FAILED":
+      return "The encrypted copy reached Google Drive, but Storage could not be updated. Retry it.";
+    default:
+      return "The upload could not be completed. Retry it or choose the file again.";
+  }
+};
+
 const statusLabel = (status: UploadQueueTaskStatus): string => {
   switch (status) {
     case "waiting":
@@ -181,8 +207,8 @@ export function UploadQueueTray() {
                       </p>
                       <p className="text-[11px] text-muted-foreground">
                         {statusLabel(task.status)}
-                        {failed && task.error?.message
-                          ? ` · ${task.error.message}`
+                        {failed
+                          ? ` · ${uploadErrorDescription(task.error?.code)}`
                           : ""}
                       </p>
                     </div>

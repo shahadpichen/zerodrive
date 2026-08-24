@@ -7,14 +7,12 @@
  * account changes, or when the tab session ends.
  */
 
-import { toast } from "sonner";
 import { clearRememberedVaultMetadataStatuses } from "./vaultMetadataWriteGuard";
 
 export const RECOVERY_PHRASE_MEMORY_EVENT =
   "zerodrive-recovery-phrase-memory-changed";
 
-const RECOVERY_PHRASE_SESSION_KEY =
-  "zerodrive-recovery-phrase-tab-session";
+const RECOVERY_PHRASE_SESSION_KEY = "zerodrive-recovery-phrase-tab-session";
 
 interface StoredRecoveryPhraseSession {
   version: 1;
@@ -57,7 +55,9 @@ function readStoredMnemonic(): StoredRecoveryPhraseSession | null {
     );
     if (!serialized) return null;
 
-    const stored = JSON.parse(serialized) as Partial<StoredRecoveryPhraseSession>;
+    const stored = JSON.parse(
+      serialized,
+    ) as Partial<StoredRecoveryPhraseSession>;
     const currentEmail = readCurrentSessionEmail();
     const storedEmail =
       typeof stored.userEmail === "string"
@@ -225,23 +225,4 @@ export function assertRecoveryPhraseSessionCurrent(
   if (getMnemonic() !== session.phrase) {
     throw new RecoveryPhraseChangedError();
   }
-}
-
-/**
- * Check if mnemonic is available and show user-friendly prompt if not
- * @param featureName Optional name of feature requiring mnemonic (for better error message)
- * @returns true if mnemonic is available, false otherwise
- */
-export function requireMnemonicWithPrompt(featureName?: string): boolean {
-  if (hasMnemonic()) {
-    return true;
-  }
-
-  const feature = featureName || 'this feature';
-  toast.error('Mnemonic Required', {
-    description: `Please enter your recovery phrase in Recovery & Access to use ${feature}.`,
-    duration: 5000,
-  });
-
-  return false;
 }

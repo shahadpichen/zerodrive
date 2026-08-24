@@ -356,7 +356,6 @@ export function createVaultUploadQueueAdapter(
             userEmail: metadata.userEmail,
             allowMetadataReplacement: metadata.allowMetadataReplacement,
             recoveryPhraseSession,
-            showToast: false,
           });
         });
         assertRecoveryPhraseSessionCurrent(recoveryPhraseSession);
@@ -399,7 +398,6 @@ export function createVaultUploadQueueAdapter(
                 userEmail: metadata.userEmail,
                 allowMetadataReplacement: metadata.allowMetadataReplacement,
                 recoveryPhraseSession: phraseSession,
-                showToast: false,
               });
             });
           } catch (error) {

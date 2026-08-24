@@ -34,7 +34,7 @@ import {
   hasMnemonic,
   requireActiveRecoveryPhrase,
 } from "../../utils/mnemonicManager";
-import { toast } from "sonner";
+import { userNotifications as toast } from "../../utils/userNotifications";
 import { ConfirmationDialog } from "./confirmation-dialog";
 import { Button } from "../ui/button";
 import { FilePreviewDialog } from "./file-preview-dialog";
@@ -49,8 +49,12 @@ import {
   assertCanWriteVaultMetadata,
   showVaultMetadataWriteBlockedToast,
 } from "../../utils/vaultMetadataWriteGuard";
-import { googleDriveFetch } from "../../utils/googleDriveRequest";
+import {
+  googleDriveFetch,
+  readGoogleDriveError,
+} from "../../utils/googleDriveRequest";
 import { withVaultMetadataCommitLock } from "../../utils/vaultMetadataCommitCoordinator";
+import logger from "../../utils/logger";
 
 interface FileListProps {
   view?: "compact" | "recent" | "full";
@@ -207,7 +211,7 @@ export const FileList: React.FC<FileListProps> = ({
         setFilteredFiles(displayFiles);
       } catch (error) {
         console.error(`[FileList - ${view}] Error fetching files:`, error);
-        toast.error("Failed to load files");
+        toast.error("Failed to load files", { id: "storage:file-list-load" });
         setAllUserFiles([]);
         setFilteredFiles([]);
         setFolders([]);
@@ -296,6 +300,7 @@ export const FileList: React.FC<FileListProps> = ({
   }, [shouldShowVaultLoadingState]);
 
   const downloadAndDecryptFile = async (fileId: string, fileName: string) => {
+    const notificationId = `storage:download:${fileId}`;
     setDownloadingFileId(fileId);
 
     try {
@@ -304,12 +309,12 @@ export const FileList: React.FC<FileListProps> = ({
         toast.error("Recovery & Access required", {
           description:
             "Enter your recovery phrase before opening encrypted files.",
+          id: notificationId,
         });
-        setDownloadingFileId(null);
         return;
       }
 
-      toast.loading(`Downloading: ${fileName}...`);
+      toast.loading(`Downloading ${fileName}…`, { id: notificationId });
       const response = await googleDriveFetch(
         `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`,
         {
@@ -318,76 +323,49 @@ export const FileList: React.FC<FileListProps> = ({
       );
 
       if (!response.ok) {
-        toast.error("Failed to download file", {
-          description: response.statusText || `HTTP error: ${response.status}`,
-        });
-        setDownloadingFileId(null);
-        return;
+        throw await readGoogleDriveError(
+          response,
+          "Google Drive could not download the encrypted file",
+        );
       }
 
       const fileBlob = await response.blob();
 
-      toast.loading("Decrypting file...");
+      toast.loading("Opening encrypted file…", { id: notificationId });
+      const fileMetadata = allUserFiles.find((file) => file.id === fileId);
+      const decrypted = await decryptFile(
+        fileBlob,
+        fileMetadata || {
+          name: fileName,
+        },
+      );
 
-      try {
-        const fileMetadata = allUserFiles.find((file) => file.id === fileId);
-        const decrypted = await decryptFile(
-          fileBlob,
-          fileMetadata || {
-            name: fileName,
-          },
-        );
+      const url = URL.createObjectURL(decrypted.contentBlob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = decrypted.fileName;
+      document.body.appendChild(a);
+      a.click();
 
-        const url = URL.createObjectURL(decrypted.contentBlob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = decrypted.fileName;
-        document.body.appendChild(a);
-        a.click();
+      toast.success("File downloaded", { id: notificationId });
 
-        toast.success("File successfully decrypted and downloaded");
-
-        setTimeout(() => {
-          document.body.removeChild(a);
-          URL.revokeObjectURL(url);
-        }, 1000);
-      } catch (decryptionError: unknown) {
-        console.error("Decryption error:", decryptionError);
-
-        const errorMessage =
-          decryptionError instanceof Error
-            ? decryptionError.message
-            : "Unknown decryption error";
-
-        if (errorMessage.includes("key doesn't match")) {
-          toast.error("Wrong encryption key", {
-            description:
-              "The key you're using doesn't match the one used to encrypt this file.",
-          });
-        } else if (errorMessage.includes("No encryption key found")) {
-          toast.error("Encryption key missing", {
-            description: "Please upload your encryption key first.",
-          });
-        } else if (errorMessage.includes("Invalid encryption key format")) {
-          toast.error("Invalid encryption key", {
-            description:
-              "Your stored encryption key appears to be corrupted. Please upload a new one.",
-          });
-        } else {
-          toast.error("Decryption failed", {
-            description: errorMessage,
-          });
-        }
-      }
+      setTimeout(() => {
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }, 1000);
     } catch (error: unknown) {
-      console.error("Error during file download or decryption:", error);
-      toast.error("Error during file download", {
-        description:
-          error instanceof Error ? error.message : "An unknown error occurred",
-      });
+      logger.error("[Storage] File download failed", error);
+      toast.errorFrom(
+        error,
+        {
+          title: "File could not be downloaded",
+          description:
+            "Retry the download. Your encrypted copy was not changed.",
+        },
+        { id: notificationId },
+      );
     } finally {
       setDownloadingFileId(null);
-      toast.dismiss();
     }
   };
 
@@ -397,7 +375,8 @@ export const FileList: React.FC<FileListProps> = ({
     if (!hasMnemonic()) {
       toast.error("Recovery & Access required", {
         description:
-          "Enter your recovery phrase before changing encrypted Storage metadata.",
+          "Enter your recovery phrase before changing the encrypted file list.",
+        id: `storage:delete:${fileToDelete.id}`,
       });
       setShowDeleteConfirm(false);
       setFileToDelete(null);
@@ -405,14 +384,14 @@ export const FileList: React.FC<FileListProps> = ({
     }
 
     const { id: fileId, name: fileName } = fileToDelete;
-    let deleteToastId: string | number | undefined;
+    const deleteToastId = `storage:delete:${fileToDelete.id}`;
     let deleteSuccess = false;
 
     try {
       requireActiveRecoveryPhrase();
       assertCanWriteVaultMetadata(userEmail);
 
-      deleteToastId = toast.loading(`Deleting ${fileName}...`);
+      toast.loading(`Deleting ${fileName}…`, { id: deleteToastId });
 
       const response = await googleDriveFetch(
         `https://www.googleapis.com/drive/v3/files/${fileId}`,
@@ -432,22 +411,27 @@ export const FileList: React.FC<FileListProps> = ({
           await sendToGoogleDrive(files, folders, { userEmail });
           return { updatedFiles: files, updatedFolders: folders };
         });
-      toast.info(`Removed ${fileName} locally.`, { id: deleteToastId });
+      toast.loading("Updating the encrypted file list…", {
+        id: deleteToastId,
+      });
       setAllUserFiles(updatedFiles);
       setFilteredFiles(updatedFiles);
       replaceVaultData?.(userEmail, updatedFiles, updatedFolders);
 
-      toast.success(`Deleted ${fileName} and synced metadata.`, {
+      toast.success(`${fileName} deleted`, {
         id: deleteToastId,
       });
       deleteSuccess = true;
     } catch (error: unknown) {
       console.error("Error during delete process:", error);
-      toast.error(`Failed to delete ${fileName}`, {
-        description:
-          error instanceof Error ? error.message : "An unknown error occurred",
-        id: deleteToastId,
-      });
+      toast.errorFrom(
+        error,
+        {
+          title: `${fileName} could not be deleted`,
+          description: "Refresh Storage and retry the deletion.",
+        },
+        { id: deleteToastId },
+      );
       deleteSuccess = false;
     } finally {
       setFileToDelete(null);

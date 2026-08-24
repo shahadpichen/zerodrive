@@ -8,5 +8,5 @@ module.exports = {
   ],
 
   // Ensure setup file is used
-  setupFilesAfterEnv: ['<rootDir>/src/setupTests.js'],
+  setupFilesAfterEnv: ['<rootDir>/src/setupTests.ts'],
 };

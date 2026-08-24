@@ -4,11 +4,11 @@
  * if mnemonic is available and keys are missing from IndexedDB
  */
 
-import { useEffect, useRef } from 'react';
-import { hasMnemonic } from '../utils/mnemonicManager';
-import { recoverRsaKeysIfNeeded } from '../utils/rsaKeyRecovery';
-import { getAuthenticatedUser } from '../utils/authService';
-import logger from '../utils/logger';
+import { useEffect, useRef } from "react";
+import { hasMnemonic } from "../utils/mnemonicManager";
+import { recoverRsaKeysIfNeeded } from "../utils/rsaKeyRecovery";
+import { getAuthenticatedUser } from "../utils/authService";
+import logger from "../utils/logger";
 
 /**
  * Hook that automatically recovers RSA keys on mount if:
@@ -35,35 +35,50 @@ export function useRsaKeyRecovery() {
         // sensitive browser state when another tab changed accounts.
         const authenticatedUser = await getAuthenticatedUser();
         if (!authenticatedUser?.email) {
-          logger.log('[useRsaKeyRecovery] User not authenticated, skipping automatic recovery');
+          logger.log(
+            "[useRsaKeyRecovery] User not authenticated, skipping automatic recovery",
+          );
           return;
         }
 
         // Only restore the phrase after the account binding above succeeds.
         if (!hasMnemonic()) {
-          logger.log('[useRsaKeyRecovery] Mnemonic not available, skipping automatic recovery');
+          logger.log(
+            "[useRsaKeyRecovery] Mnemonic not available, skipping automatic recovery",
+          );
           return;
         }
 
         const userEmail = authenticatedUser.email;
 
-        logger.log('[useRsaKeyRecovery] Starting automatic RSA key recovery check...');
+        logger.log(
+          "[useRsaKeyRecovery] Starting automatic RSA key recovery check...",
+        );
 
         // Attempt recovery (silent mode)
-        const result = await recoverRsaKeysIfNeeded(userEmail, true);
+        const result = await recoverRsaKeysIfNeeded(userEmail);
 
         if (result.recovered) {
-          logger.log('[useRsaKeyRecovery] Successfully recovered RSA keys automatically');
+          logger.log(
+            "[useRsaKeyRecovery] Successfully recovered RSA keys automatically",
+          );
         } else if (result.keysExisted) {
-          logger.log('[useRsaKeyRecovery] RSA keys already exist, no recovery needed');
+          logger.log(
+            "[useRsaKeyRecovery] RSA keys already exist, no recovery needed",
+          );
         } else {
-          logger.log('[useRsaKeyRecovery] No RSA keys to recover (user may not have enabled sharing yet)');
+          logger.log(
+            "[useRsaKeyRecovery] No RSA keys to recover (user may not have enabled sharing yet)",
+          );
         }
 
         // Mark as run regardless of result
         hasRunRef.current = true;
       } catch (error) {
-        logger.error('[useRsaKeyRecovery] Error during automatic recovery:', error);
+        logger.error(
+          "[useRsaKeyRecovery] Error during automatic recovery:",
+          error,
+        );
         // Mark as run even on error to avoid retry loops
         hasRunRef.current = true;
       }

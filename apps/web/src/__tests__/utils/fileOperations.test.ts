@@ -151,7 +151,8 @@ describe("file deletion operations", () => {
     await expect(deleteAllAndSyncFiles(userEmail)).resolves.toBe(true);
     expect(mockGoogleDriveFetch).not.toHaveBeenCalled();
     expect(toast.info).toHaveBeenCalledWith("No files found to delete.", {
-      id: "toast-id",
+      duration: 4000,
+      id: "storage:delete-all",
     });
   });
 });

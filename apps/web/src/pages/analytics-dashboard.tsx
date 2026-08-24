@@ -5,7 +5,7 @@ import type {
   AnalyticsDimensionBucket,
   AnalyticsSummary,
 } from "@zerodrive/shared-types";
-import { toast } from "sonner";
+import { userNotifications as toast } from "../utils/userNotifications";
 import apiClient, { ApiError } from "../utils/apiClient";
 import { Button } from "../components/ui/button";
 import {
@@ -177,7 +177,9 @@ export default function AnalyticsDashboard() {
         const [summaryResponse, dailyResponse, dimensionResponse] =
           await Promise.all([
             apiClient.get<AnalyticsSummary>(`/analytics/summary?days=${days}`),
-            apiClient.get<AnalyticsDailyStat[]>(`/analytics/daily?days=${days}`),
+            apiClient.get<AnalyticsDailyStat[]>(
+              `/analytics/daily?days=${days}`,
+            ),
             apiClient.get<AnalyticsDimensionBucket[]>(
               `/analytics/dimensions?days=${days}`,
             ),
@@ -189,8 +191,13 @@ export default function AnalyticsDashboard() {
         setDimensions(dimensionResponse.data || []);
       } catch (error) {
         if (!active) return;
-        if (error instanceof ApiError && [401, 403].includes(error.statusCode)) {
-          toast.error("Analytics administrator access is required");
+        if (
+          error instanceof ApiError &&
+          [401, 403].includes(error.statusCode)
+        ) {
+          toast.error("Analytics administrator access is required", {
+            id: "analytics:load",
+          });
           navigate("/home", { replace: true });
           return;
         }
@@ -198,6 +205,7 @@ export default function AnalyticsDashboard() {
           error instanceof ApiError && error.statusCode === 503
             ? "Analytics are disabled for this deployment"
             : "Analytics could not be loaded",
+          { id: "analytics:load" },
         );
       } finally {
         if (active) setLoading(false);
@@ -240,9 +248,9 @@ export default function AnalyticsDashboard() {
               Understand ZeroDrive without tracking its users.
             </h1>
             <p className="mt-5 max-w-2xl text-sm leading-7 text-muted-foreground md:text-base">
-              Daily aggregate counters from this deployment. These numbers
-              count events, not people, and cannot be used to inspect an
-              individual account or file.
+              Daily aggregate counters from this deployment. These numbers count
+              events, not people, and cannot be used to inspect an individual
+              account or file.
             </p>
           </div>
           <div className="flex flex-wrap gap-2" aria-label="Analytics period">
@@ -379,7 +387,10 @@ export default function AnalyticsDashboard() {
             <TableBody>
               {daily.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={8} className="h-24 text-center text-muted-foreground">
+                  <TableCell
+                    colSpan={8}
+                    className="h-24 text-center text-muted-foreground"
+                  >
                     No aggregate counters are available for this period.
                   </TableCell>
                 </TableRow>
@@ -389,7 +400,9 @@ export default function AnalyticsDashboard() {
                   <TableCell>{formatDate(stat.date)}</TableCell>
                   <TableCell className="text-right">{stat.logins}</TableCell>
                   <TableCell className="text-right">{stat.newUsers}</TableCell>
-                  <TableCell className="text-right">{stat.filesAdded}</TableCell>
+                  <TableCell className="text-right">
+                    {stat.filesAdded}
+                  </TableCell>
                   <TableCell className="text-right">{stat.shares}</TableCell>
                   <TableCell className="text-right">
                     {stat.sharesFinalized}
