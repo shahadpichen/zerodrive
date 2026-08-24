@@ -26,6 +26,40 @@ let googleTokenCache: {
 
 export const GOOGLE_TOKEN_REFRESH_BUFFER_MS = 2 * 60 * 1000;
 
+function readBrowserSessionAccountEmail(): string {
+  try {
+    const storedTokens = sessionStorage.getItem("google-tokens");
+    if (storedTokens) {
+      const parsed = JSON.parse(storedTokens) as { userEmail?: unknown };
+      if (typeof parsed.userEmail === "string" && parsed.userEmail.trim()) {
+        return parsed.userEmail.trim().toLowerCase();
+      }
+    }
+  } catch {
+    // Fall back to the explicit account marker below.
+  }
+
+  return (sessionStorage.getItem("session-user-email") ?? "")
+    .trim()
+    .toLowerCase();
+}
+
+async function bindSensitiveBrowserSessionToAuthenticatedUser(
+  authenticatedEmail: string,
+): Promise<void> {
+  const expectedEmail = authenticatedEmail.trim().toLowerCase();
+  const browserSessionEmail = readBrowserSessionAccountEmail();
+
+  if (browserSessionEmail && browserSessionEmail !== expectedEmail) {
+    logger.warn(
+      "[Auth] Browser session belongs to a different account; clearing sensitive local state",
+    );
+    await clearSensitiveBrowserSession();
+  }
+
+  sessionStorage.setItem("session-user-email", expectedEmail);
+}
+
 /**
  * Initiate login by redirecting to backend OAuth
  */
@@ -115,12 +149,16 @@ export async function isAuthenticated(): Promise<boolean> {
   const hasCookies = document.cookie.includes("zerodrive_csrf");
 
   if (!hasCookies) {
+    await clearSensitiveBrowserSession();
     return false;
   }
 
   try {
     const response = await apiClient.get<AuthenticatedUser>("/auth/me");
-    return response.success && !!response.data?.email;
+    const email = response.success ? response.data?.email : undefined;
+    if (!email) return false;
+    await bindSensitiveBrowserSessionToAuthenticatedUser(email);
+    return true;
   } catch (error) {
     logger.error("[Auth] Authentication check failed:", error);
     return false;
@@ -133,7 +171,10 @@ export async function isAuthenticated(): Promise<boolean> {
 export async function getUserEmail(): Promise<string | null> {
   try {
     const response = await apiClient.get<AuthenticatedUser>("/auth/me");
-    return response.data?.email || null;
+    const email = response.data?.email;
+    if (!email) return null;
+    await bindSensitiveBrowserSessionToAuthenticatedUser(email);
+    return email;
   } catch (error) {
     logger.error("Failed to get user email:", error);
     return null;
@@ -143,7 +184,9 @@ export async function getUserEmail(): Promise<string | null> {
 export async function getAuthenticatedUser(): Promise<AuthenticatedUser | null> {
   try {
     const response = await apiClient.get<AuthenticatedUser>("/auth/me");
-    return response.success && response.data ? response.data : null;
+    if (!response.success || !response.data?.email) return null;
+    await bindSensitiveBrowserSessionToAuthenticatedUser(response.data.email);
+    return response.data;
   } catch (error) {
     logger.error("Failed to get authenticated user:", error);
     return null;

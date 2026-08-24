@@ -2,8 +2,10 @@
 
 ZeroDrive writes personal files, vault indexes, shared files, shared metadata,
 and sharing-key backups with `@zerodrivehq/capsule` v1. Capsule creation and
-opening happen in the frontend. The recovery phrase remains in frontend memory
-for the active tab and is never sent to the API. Capsule’s legacy readers keep
+opening happen in the frontend. The recovery phrase remains in the frontend
+browser-tab session and is never sent to the API. It is held in memory while
+the app runs and in account-bound `sessionStorage` so the same tab can retain
+vault access across a reload. Capsule’s legacy readers keep
 historical ZeroDrive objects readable; the application writes no legacy format.
 
 ZeroDrive provides recipient-exclusive, authenticated encryption. It does not
@@ -27,11 +29,14 @@ reduce bulk probing but do not provide private contact discovery. Avoid treating
 directory membership as confidential until a capability-based or OPRF-based
 discovery protocol replaces direct email lookup.
 
-Browser key material is cleared on logout and account changes. A hard refresh
-or new tab requires recovery-phrase entry again. Google refresh
-tokens use HTTP-only cookies. An active same-origin XSS can still access
-decrypted files, short-lived access tokens, and keys currently in JavaScript
-memory, so CSP and dependency integrity remain part of the security boundary.
+Browser key material is cleared on logout and account changes. Reloading the
+same tab keeps vault access, while a new tab or a new browser session normally
+requires recovery-phrase entry again. Browser session restoration or tab
+duplication may also copy or restore
+`sessionStorage`, depending on the browser. Google refresh tokens use HTTP-only
+cookies. An active same-origin XSS can still access decrypted files,
+short-lived access tokens, and recovery material available to that tab, so CSP
+and dependency integrity remain part of the security boundary.
 
 ## Privacy-preserving analytics
 

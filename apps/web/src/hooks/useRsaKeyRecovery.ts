@@ -5,9 +5,9 @@
  */
 
 import { useEffect, useRef } from 'react';
-import { gapi } from 'gapi-script';
 import { hasMnemonic } from '../utils/mnemonicManager';
 import { recoverRsaKeysIfNeeded } from '../utils/rsaKeyRecovery';
+import { getAuthenticatedUser } from '../utils/authService';
 import logger from '../utils/logger';
 
 /**
@@ -30,30 +30,22 @@ export function useRsaKeyRecovery() {
 
     const attemptRecovery = async () => {
       try {
-        // Check if mnemonic is available
+        // Confirm the backend-authenticated account before restoring any
+        // account-bound phrase from this tab session. This also clears stale
+        // sensitive browser state when another tab changed accounts.
+        const authenticatedUser = await getAuthenticatedUser();
+        if (!authenticatedUser?.email) {
+          logger.log('[useRsaKeyRecovery] User not authenticated, skipping automatic recovery');
+          return;
+        }
+
+        // Only restore the phrase after the account binding above succeeds.
         if (!hasMnemonic()) {
           logger.log('[useRsaKeyRecovery] Mnemonic not available, skipping automatic recovery');
           return;
         }
 
-        // Check if user is authenticated and get email
-        const authInstance = gapi.auth2?.getAuthInstance();
-        if (!authInstance || !authInstance.isSignedIn.get()) {
-          logger.log('[useRsaKeyRecovery] User not authenticated, skipping automatic recovery');
-          return;
-        }
-
-        const profile = authInstance.currentUser.get().getBasicProfile();
-        if (!profile) {
-          logger.log('[useRsaKeyRecovery] User profile not available, skipping automatic recovery');
-          return;
-        }
-
-        const userEmail = profile.getEmail();
-        if (!userEmail) {
-          logger.log('[useRsaKeyRecovery] User email not available, skipping automatic recovery');
-          return;
-        }
+        const userEmail = authenticatedUser.email;
 
         logger.log('[useRsaKeyRecovery] Starting automatic RSA key recovery check...');
 

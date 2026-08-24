@@ -17,7 +17,7 @@ export const privacyPolicy = [
   {
     heading: "Recovery phrase and local browser storage",
     content:
-      "Your recovery phrase is used to recreate the keys needed to open your vault and restore encrypted key backups. The phrase is processed in your browser and is not sent to the ZeroDrive server. Some session data, encrypted key material, and cached UI state may be stored in browser storage so the app can work smoothly. Clearing browser data, using a new browser, or opening a new session may require you to enter your recovery phrase again.",
+      "Your recovery phrase is used to recreate the keys needed to open your vault and restore encrypted key backups. The phrase is processed in your browser and is not sent to the ZeroDrive server. To keep the vault unlocked when you reload the same tab, the hosted app stores the phrase in that tab's browser session storage and binds it to the signed-in account. ZeroDrive clears it when you sign out or switch accounts. A new tab, a different browser, clearing browser data, or ending the browser session normally requires the phrase again; some browsers may restore session storage when they restore a closed session. Code running under the same website origin, including a successful cross-site scripting attack or a compromised same-origin dependency, could access recovery material available to that tab.",
   },
   {
     heading: "Sharing and recipient privacy",

@@ -11,7 +11,7 @@ const notifyVaultKeyStorageChanged = () => {
 
 /**
  * Keep the derived legacy AES key in sessionStorage for historical ZeroDrive
- * objects. Capsule v1 writes use the in-memory recovery phrase directly.
+ * objects. Capsule v1 writes use the active tab-session recovery phrase.
  */
 export const storeKey = async (key: CryptoKey) => {
   // Export the encryption key to JWK format

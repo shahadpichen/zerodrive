@@ -18,6 +18,11 @@ import {
   AUTH_SESSION_CLEAR_REQUEST_EVENT,
   type AuthSessionClearRequestDetail,
 } from "../../utils/authEvents";
+import {
+  clearMnemonic,
+  getMnemonic,
+  setMnemonic,
+} from "../../utils/mnemonicManager";
 
 // Mock fetch globally
 global.fetch = jest.fn();
@@ -36,6 +41,7 @@ describe("AuthService", () => {
     jest.clearAllMocks();
     // Clear cookies
     document.cookie = "";
+    clearMnemonic();
   });
 
   describe("isAuthenticated", () => {
@@ -45,6 +51,20 @@ describe("AuthService", () => {
       const result = await isAuthenticated();
 
       expect(result).toBe(false);
+    });
+
+    it("clears tab-session recovery access when authentication is gone", async () => {
+      sessionStorage.setItem(
+        "google-tokens",
+        JSON.stringify({ userEmail: "user@example.com" }),
+      );
+      setMnemonic("tab session recovery phrase");
+      document.cookie = "";
+
+      await expect(isAuthenticated()).resolves.toBe(false);
+
+      expect(getMnemonic()).toBeNull();
+      expect(sessionStorage.getItem("google-tokens")).toBeNull();
     });
 
     it("should return true when /auth/me returns 200", async () => {
@@ -67,6 +87,32 @@ describe("AuthService", () => {
         expect.objectContaining({
           credentials: "include",
         }),
+      );
+    });
+
+    it("clears account-bound browser secrets before rendering another account", async () => {
+      sessionStorage.setItem(
+        "google-tokens",
+        JSON.stringify({ userEmail: "first@example.com" }),
+      );
+      setMnemonic("first account recovery phrase");
+      document.cookie = "zerodrive_csrf=test-csrf-token";
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: true,
+        status: 200,
+        headers: new Headers({ "content-type": "application/json" }),
+        json: async () => ({
+          success: true,
+          data: { email: "second@example.com", emailHash: "b".repeat(64) },
+        }),
+      });
+
+      await expect(isAuthenticated()).resolves.toBe(true);
+
+      expect(getMnemonic()).toBeNull();
+      expect(sessionStorage.getItem("google-tokens")).toBeNull();
+      expect(sessionStorage.getItem("session-user-email")).toBe(
+        "second@example.com",
       );
     });
 

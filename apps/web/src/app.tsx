@@ -78,7 +78,7 @@ function App() {
     checkEnvironmentVariables();
   }, []);
 
-  // Recover the account's sharing identity when the in-memory phrase is active.
+  // Recover the account's sharing identity when the tab-session phrase is active.
   useRsaKeyRecovery();
 
   return (
