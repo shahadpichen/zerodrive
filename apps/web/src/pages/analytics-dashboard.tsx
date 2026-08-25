@@ -76,7 +76,7 @@ function DailyBars({ stats }: { stats: AnalyticsDailyStat[] }) {
 
   return (
     <div className="overflow-x-auto pb-2">
-      <div className="flex h-56 min-w-[680px] items-end gap-2 border-b px-2 pt-4">
+      <div className="flex h-56 min-w-[680px] gap-2 border-b px-2 pt-4">
         {visible.map((day) => {
           const total =
             day.logins +
@@ -91,16 +91,19 @@ function DailyBars({ stats }: { stats: AnalyticsDailyStat[] }) {
           return (
             <div
               key={day.date}
-              className="group flex min-w-0 flex-1 flex-col items-center justify-end gap-2"
+              className="group flex h-full min-w-0 flex-1 flex-col items-center gap-2"
+              aria-label={`${formatDate(day.date)}: ${total} counted events`}
             >
               <span className="text-[10px] text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100">
                 {total}
               </span>
-              <div
-                className="w-full bg-card-foreground/85 transition-colors group-hover:bg-primary"
-                style={{ height: `${height}%` }}
-                title={`${formatDate(day.date)}: ${total} counted events`}
-              />
+              <div className="flex w-full flex-1 items-end">
+                <div
+                  className="w-full bg-card-foreground/85 transition-colors group-hover:bg-primary"
+                  style={{ height: `${height}%` }}
+                  title={`${formatDate(day.date)}: ${total} counted events`}
+                />
+              </div>
               <span className="whitespace-nowrap text-[9px] text-muted-foreground">
                 {formatDate(day.date)}
               </span>
@@ -237,7 +240,7 @@ export default function AnalyticsDashboard() {
   ] as const;
 
   return (
-    <main className="w-full space-y-10 p-6 md:p-10">
+    <main className="w-full space-y-10">
       <section className="border px-6 py-8 md:px-10 md:py-12">
         <div className="flex flex-col justify-between gap-8 lg:flex-row lg:items-end">
           <div className="max-w-3xl">

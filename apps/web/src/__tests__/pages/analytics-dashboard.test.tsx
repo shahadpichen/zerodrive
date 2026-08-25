@@ -94,6 +94,9 @@ describe("admin analytics dashboard", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("Successful logins")).toBeInTheDocument();
     expect(screen.getByText("Files added")).toBeInTheDocument();
+    expect(
+      screen.getByLabelText(/: 23 counted events$/),
+    ).toBeInTheDocument();
 
     await waitFor(() => {
       expect(screen.getByText("upload")).toBeInTheDocument();
