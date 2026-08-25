@@ -41,15 +41,23 @@ and dependency integrity remain part of the security boundary.
 ## Privacy-preserving analytics
 
 ZeroDrive does not load third-party analytics or advertising scripts. Product
-analytics are first-party daily counters stored in
+analytics are first-party aggregate counters stored in
 `analytics_daily_summary` and single-dimension aggregate buckets stored in
 `analytics_daily_dimensions`. They contain no event rows, account identifiers,
 emails, IP addresses, session identifiers, file identifiers, filenames,
-capabilities, or browser fingerprints. Authentication, sharing, invitation,
-and shared-file access counters are incremented by the backend. The frontend
-may report only the predefined file-added event because direct Google Drive
-uploads do not pass through the backend. Analytics are disabled by default,
-retained for at most 365 days when enabled, and never sent to a central service.
+capabilities, browser fingerprints, raw URLs, query strings, or referrers.
+Authentication, sharing, invitation, and shared-file access counters are
+incremented by the backend. The frontend may report only reviewed event and
+page keys because direct Google Drive uploads and public page navigation do not
+pass through authenticated backend routes. The database rejects unreviewed
+page buckets. Analytics are disabled by default and never sent to a central
+service.
+
+Exact daily counters are retained for the latest 400-day window. Before older
+daily rows are deleted, the API combines them into monthly counters in
+`analytics_monthly_summary` and `analytics_monthly_dimensions`. Monthly rows
+have no automatic expiry, so long-term trends remain available without keeping
+visitors, sessions, or individual navigation histories.
 
 Analytics reads require a valid Google-authenticated ZeroDrive session whose
 verified email appears in the deployment-only `ANALYTICS_ADMIN_EMAILS`

@@ -175,6 +175,12 @@ PostgreSQL database. To enable the private `/admin/analytics` dashboard, set
 shared password in the source code. Analytics API reads are authorized by the
 backend; hiding the dashboard link is not the security boundary.
 
+Page attention is recorded only under a reviewed page key. Raw URLs, query
+strings, referrers, visitor IDs, and sessions are not accepted by the analytics
+endpoint or stored in the database. Exact daily counters are retained for the
+latest 400-day window, then rolled into monthly aggregate rows with no automatic
+expiry. Monthly rows preserve long-term product trends, not user histories.
+
 ## Docker Configuration
 
 The `docker-compose.yml` includes:

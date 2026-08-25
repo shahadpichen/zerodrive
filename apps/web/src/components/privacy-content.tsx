@@ -32,7 +32,7 @@ export const privacyPolicy = [
   {
     heading: "Analytics, logs, and diagnostics",
     content:
-      "ZeroDrive does not use third-party advertising trackers or personal analytics. A deployment may enable first-party daily aggregate counters to understand whether core features are working. These counters are designed not to include emails, account identifiers, IP addresses, sessions, filenames, file IDs, browser fingerprints, or exact file sizes. Operational logs should avoid request bodies, cookies, tokens, object keys, capabilities, and email addresses.",
+      "ZeroDrive does not use third-party advertising trackers or personal analytics. A deployment may enable first-party aggregate counters to understand whether core features work and which reviewed product or documentation pages receive attention. The browser sends only a fixed page label such as Storage or Security documentation—not a raw URL, query string, referrer, visitor ID, or session ID. The counters are designed not to include emails, account identifiers, IP addresses, sessions, filenames, file IDs, browser fingerprints, or exact file sizes. Exact daily counters are kept for the latest 400-day window and then combined into permanent monthly totals, so long-term product trends remain without preserving anyone's browsing history. Low-volume breakdowns are hidden from analytics responses. Operational logs should avoid request bodies, cookies, tokens, object keys, capabilities, and email addresses.",
   },
   {
     heading: "What ZeroDrive cannot do",

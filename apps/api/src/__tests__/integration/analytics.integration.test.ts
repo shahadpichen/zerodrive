@@ -12,13 +12,18 @@ jest.mock("../../services/analytics");
 const mockGetAnalyticsSummary = jest.fn();
 const mockGetDailyStats = jest.fn();
 const mockGetDimensionStats = jest.fn();
+const mockGetMonthlyStats = jest.fn();
+const mockGetMonthlyDimensionStats = jest.fn();
 const mockTrackEvent = jest.fn();
 
 jest.mock("../../services/analytics", () => ({
-  getAnalyticsSummary: (...args: any[]) => mockGetAnalyticsSummary(...args),
-  getDailyStats: (...args: any[]) => mockGetDailyStats(...args),
-  getDimensionStats: (...args: any[]) => mockGetDimensionStats(...args),
-  trackEvent: (...args: any[]) => mockTrackEvent(...args),
+  getAnalyticsSummary: (...args: unknown[]) => mockGetAnalyticsSummary(...args),
+  getDailyStats: (...args: unknown[]) => mockGetDailyStats(...args),
+  getDimensionStats: (...args: unknown[]) => mockGetDimensionStats(...args),
+  getMonthlyStats: (...args: unknown[]) => mockGetMonthlyStats(...args),
+  getMonthlyDimensionStats: (...args: unknown[]) =>
+    mockGetMonthlyDimensionStats(...args),
+  trackEvent: (...args: unknown[]) => mockTrackEvent(...args),
   AnalyticsEvent: {
     FILE_ADDED_TO_DRIVE: "file_added_to_drive",
   },
@@ -50,6 +55,13 @@ describe("Analytics Routes Integration", () => {
     return `zerodrive_token=${generateToken(testUserEmail)}`;
   }
 
+  function utcDateOffset(days: number): string {
+    const date = new Date();
+    date.setUTCHours(0, 0, 0, 0);
+    date.setUTCDate(date.getUTCDate() + days);
+    return date.toISOString().slice(0, 10);
+  }
+
   describe("GET /api/analytics/summary", () => {
     it("returns the default 30-day anonymous summary", async () => {
       const mockSummary = {
@@ -69,7 +81,36 @@ describe("Analytics Routes Integration", () => {
       const daysDiff = Math.round(
         (endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24),
       );
-      expect(daysDiff).toBe(30);
+      expect(daysDiff).toBe(29);
+    });
+
+    it("accepts an explicit bounded date range", async () => {
+      mockGetAnalyticsSummary.mockResolvedValue({ totalEvents: 0 });
+
+      const response = await request(app)
+        .get("/api/analytics/summary")
+        .query({ from: "2026-07-01", to: "2026-07-12" })
+        .set("Cookie", [authCookie()]);
+
+      expect(response.status).toBe(200);
+      const [startDate, endDate] = mockGetAnalyticsSummary.mock.calls[0];
+      expect(startDate.toISOString()).toBe("2026-07-01T00:00:00.000Z");
+      expect(endDate.toISOString()).toBe("2026-07-12T00:00:00.000Z");
+    });
+
+    it.each([
+      { from: "2026-07-01" },
+      { from: "2026/07/01", to: "2026-07-12" },
+      { from: "2026-07-12", to: "2026-07-01" },
+      { from: "2026-02-30", to: "2026-03-02" },
+      { from: utcDateOffset(-400), to: utcDateOffset(0) },
+      { from: utcDateOffset(0), to: utcDateOffset(1) },
+    ])("rejects an unsafe date range %#", async (query) => {
+      const response = await request(app)
+        .get("/api/analytics/summary")
+        .query(query)
+        .set("Cookie", [authCookie()]);
+      expect(response.status).toBe(422);
     });
 
     it("uses a bounded custom day range", async () => {
@@ -155,8 +196,26 @@ describe("Analytics Routes Integration", () => {
 
       expect(response.status).toBe(200);
       expect(response.body.data).toEqual(buckets);
-      expect(mockGetDimensionStats).toHaveBeenCalledWith(30);
+      const [startDate, endDate] = mockGetDimensionStats.mock.calls[0];
+      expect(endDate.getTime() - startDate.getTime()).toBe(
+        29 * 24 * 60 * 60 * 1000,
+      );
       expect(response.headers["cache-control"]).toContain("no-store");
+    });
+
+    it("passes an exact calendar range to the dimension query", async () => {
+      mockGetDimensionStats.mockResolvedValue([]);
+
+      const response = await request(app)
+        .get("/api/analytics/dimensions")
+        .query({ from: "2026-07-01", to: "2026-07-12" })
+        .set("Cookie", [authCookie()]);
+
+      expect(response.status).toBe(200);
+      expect(mockGetDimensionStats).toHaveBeenCalledWith(
+        new Date("2026-07-01T00:00:00.000Z"),
+        new Date("2026-07-12T00:00:00.000Z"),
+      );
     });
   });
 
@@ -180,7 +239,10 @@ describe("Analytics Routes Integration", () => {
 
       expect(response.status).toBe(200);
       expect(response.body.data).toEqual(mockDailyStats);
-      expect(mockGetDailyStats).toHaveBeenCalledWith(14);
+      const [startDate, endDate] = mockGetDailyStats.mock.calls[0];
+      expect(endDate.getTime() - startDate.getTime()).toBe(
+        13 * 24 * 60 * 60 * 1000,
+      );
     });
 
     it.each(["0", "-10", "abc"])("rejects invalid days=%s", async (days) => {
@@ -199,6 +261,96 @@ describe("Analytics Routes Integration", () => {
       expect(response.status).toBe(401);
       expect(mockGetDailyStats).not.toHaveBeenCalled();
     });
+
+    it("passes an exact calendar range to the daily query", async () => {
+      mockGetDailyStats.mockResolvedValue([]);
+
+      const response = await request(app)
+        .get("/api/analytics/daily")
+        .query({ from: "2026-07-01", to: "2026-07-12" })
+        .set("Cookie", [authCookie()]);
+
+      expect(response.status).toBe(200);
+      expect(mockGetDailyStats).toHaveBeenCalledWith(
+        new Date("2026-07-01T00:00:00.000Z"),
+        new Date("2026-07-12T00:00:00.000Z"),
+      );
+    });
+  });
+
+  describe("GET /api/analytics/monthly", () => {
+    it("returns long-term monthly aggregates", async () => {
+      mockGetMonthlyStats.mockResolvedValue([
+        { month: "2025-01-01", pageViews: 12, totalEvents: 18 },
+      ]);
+      const response = await request(app)
+        .get("/api/analytics/monthly")
+        .query({ months: 120 })
+        .set("Cookie", [authCookie()]);
+
+      expect(response.status).toBe(200);
+      expect(mockGetMonthlyStats).toHaveBeenCalledWith(120);
+      expect(response.body.data[0].pageViews).toBe(12);
+    });
+
+    it("defaults to ten years of permanent monthly aggregates", async () => {
+      mockGetMonthlyStats.mockResolvedValue([]);
+
+      const response = await request(app)
+        .get("/api/analytics/monthly")
+        .set("Cookie", [authCookie()]);
+
+      expect(response.status).toBe(200);
+      expect(mockGetMonthlyStats).toHaveBeenCalledWith(120);
+    });
+
+    it.each(["0", "241", "abc", "1.5"])(
+      "rejects invalid months=%s",
+      async (months) => {
+        const response = await request(app)
+          .get("/api/analytics/monthly")
+          .query({ months })
+          .set("Cookie", [authCookie()]);
+
+        expect(response.status).toBe(422);
+        expect(mockGetMonthlyStats).not.toHaveBeenCalled();
+      },
+    );
+  });
+
+  describe("GET /api/analytics/monthly/dimensions", () => {
+    it("returns permanent monthly buckets", async () => {
+      mockGetMonthlyDimensionStats.mockResolvedValue([
+        {
+          metric: "page_view",
+          dimension: "page",
+          bucket: "docs",
+          count: 20,
+          suppressed: false,
+        },
+      ]);
+      const response = await request(app)
+        .get("/api/analytics/monthly/dimensions")
+        .query({ months: 120 })
+        .set("Cookie", [authCookie()]);
+
+      expect(response.status).toBe(200);
+      expect(mockGetMonthlyDimensionStats).toHaveBeenCalledWith(120);
+      expect(response.body.data[0].bucket).toBe("docs");
+    });
+
+    it.each(["0", "241", "abc", "1.5"])(
+      "rejects invalid months=%s",
+      async (months) => {
+        const response = await request(app)
+          .get("/api/analytics/monthly/dimensions")
+          .query({ months })
+          .set("Cookie", [authCookie()]);
+
+        expect(response.status).toBe(422);
+        expect(mockGetMonthlyDimensionStats).not.toHaveBeenCalled();
+      },
+    );
   });
 
   describe("POST /api/analytics/track", () => {

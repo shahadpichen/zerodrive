@@ -1,13 +1,23 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { CalendarDays } from "lucide-react";
+import { format, startOfDay, subDays } from "date-fns";
+import type { DateRange } from "react-day-picker";
 import type {
   AnalyticsDailyStat,
   AnalyticsDimensionBucket,
+  AnalyticsMonthlyStat,
   AnalyticsSummary,
 } from "@zerodrive/shared-types";
 import { userNotifications as toast } from "../utils/userNotifications";
 import apiClient, { ApiError } from "../utils/apiClient";
 import { Button } from "../components/ui/button";
+import { Calendar } from "../components/ui/calendar";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "../components/ui/popover";
 import {
   Card,
   CardContent,
@@ -24,15 +34,53 @@ import {
   TableRow,
 } from "../components/ui/table";
 
-type RangeDays = 7 | 30 | 90 | 365;
+const utcTodayParts = new Date()
+  .toISOString()
+  .slice(0, 10)
+  .split("-")
+  .map(Number);
+const today = startOfDay(
+  new Date(utcTodayParts[0], utcTodayParts[1] - 1, utcTodayParts[2]),
+);
+const initialRange: DateRange = { from: subDays(today, 29), to: today };
 
-const RANGES: RangeDays[] = [7, 30, 90, 365];
+const PAGE_LABELS: Readonly<Record<string, string>> = {
+  landing: "Landing page",
+  home: "Home",
+  storage: "Storage",
+  share: "Share files",
+  shared_with_me: "Shared with me",
+  recovery_access: "Recovery & Access",
+  docs: "Docs overview",
+  docs_how_it_works: "Docs · How it works",
+  docs_how_to_use: "Docs · How to use",
+  docs_keys_and_recovery: "Docs · Keys and recovery",
+  docs_secure_sharing: "Docs · Secure sharing",
+  docs_privacy_model: "Docs · Privacy model",
+  docs_security_model: "Docs · Security model",
+  docs_if_zerodrive_disappears: "Docs · If ZeroDrive disappears",
+  docs_self_hosting: "Docs · Self-hosting",
+  privacy: "Privacy Policy",
+  terms: "Terms of Service",
+};
 
 function formatDate(date: string): string {
   return new Intl.DateTimeFormat(undefined, {
     month: "short",
     day: "numeric",
   }).format(new Date(`${date.slice(0, 10)}T00:00:00`));
+}
+
+function formatRangeLabel(range: DateRange): string {
+  if (!range.from) return "Choose dates";
+  if (!range.to) return format(range.from, "d MMM yyyy");
+  return `${format(range.from, "d MMM yyyy")} – ${format(range.to, "d MMM yyyy")}`;
+}
+
+function toQuery(range: DateRange): string {
+  const from = range.from || today;
+  const to = range.to || from;
+  return `from=${format(from, "yyyy-MM-dd")}&to=${format(to, "yyyy-MM-dd")}`;
 }
 
 function LoadingState() {
@@ -56,6 +104,7 @@ function DailyBars({ stats }: { stats: AnalyticsDailyStat[] }) {
     ...visible.map(
       (day) =>
         day.logins +
+        day.pageViews +
         day.filesAdded +
         day.shares +
         day.downloads +
@@ -80,6 +129,7 @@ function DailyBars({ stats }: { stats: AnalyticsDailyStat[] }) {
         {visible.map((day) => {
           const total =
             day.logins +
+            day.pageViews +
             day.filesAdded +
             day.shares +
             day.downloads +
@@ -119,10 +169,12 @@ function DimensionList({
   title,
   description,
   buckets,
+  labelForBucket = (bucket) => bucket,
 }: {
   title: string;
   description: string;
   buckets: AnalyticsDimensionBucket[];
+  labelForBucket?: (bucket: string) => string;
 }) {
   const visibleCounts = buckets
     .map((bucket) => bucket.count || 0)
@@ -142,7 +194,7 @@ function DimensionList({
         {buckets.map((bucket) => (
           <div key={`${bucket.metric}-${bucket.dimension}-${bucket.bucket}`}>
             <div className="mb-1.5 flex items-center justify-between gap-4 text-xs">
-              <span className="truncate">{bucket.bucket}</span>
+              <span className="truncate">{labelForBucket(bucket.bucket)}</span>
               <span className="text-muted-foreground">
                 {bucket.suppressed ? "< 5" : bucket.count}
               </span>
@@ -166,10 +218,16 @@ function DimensionList({
 
 export default function AnalyticsDashboard() {
   const navigate = useNavigate();
-  const [days, setDays] = useState<RangeDays>(30);
+  const [range, setRange] = useState<DateRange>(initialRange);
+  const [draftRange, setDraftRange] = useState<DateRange>(initialRange);
+  const [rangeOpen, setRangeOpen] = useState(false);
   const [summary, setSummary] = useState<AnalyticsSummary | null>(null);
   const [daily, setDaily] = useState<AnalyticsDailyStat[]>([]);
   const [dimensions, setDimensions] = useState<AnalyticsDimensionBucket[]>([]);
+  const [monthly, setMonthly] = useState<AnalyticsMonthlyStat[]>([]);
+  const [monthlyDimensions, setMonthlyDimensions] = useState<
+    AnalyticsDimensionBucket[]
+  >([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -177,14 +235,27 @@ export default function AnalyticsDashboard() {
     const load = async () => {
       setLoading(true);
       try {
-        const [summaryResponse, dailyResponse, dimensionResponse] =
+        const query = toQuery(range);
+        const [
+          summaryResponse,
+          dailyResponse,
+          dimensionResponse,
+          monthlyResponse,
+          monthlyDimensionResponse,
+        ] =
           await Promise.all([
-            apiClient.get<AnalyticsSummary>(`/analytics/summary?days=${days}`),
+            apiClient.get<AnalyticsSummary>(`/analytics/summary?${query}`),
             apiClient.get<AnalyticsDailyStat[]>(
-              `/analytics/daily?days=${days}`,
+              `/analytics/daily?${query}`,
             ),
             apiClient.get<AnalyticsDimensionBucket[]>(
-              `/analytics/dimensions?days=${days}`,
+              `/analytics/dimensions?${query}`,
+            ),
+            apiClient.get<AnalyticsMonthlyStat[]>(
+              "/analytics/monthly?months=120",
+            ),
+            apiClient.get<AnalyticsDimensionBucket[]>(
+              "/analytics/monthly/dimensions?months=120",
             ),
           ]);
 
@@ -192,6 +263,8 @@ export default function AnalyticsDashboard() {
         setSummary(summaryResponse.data || null);
         setDaily(dailyResponse.data || []);
         setDimensions(dimensionResponse.data || []);
+        setMonthly(monthlyResponse.data || []);
+        setMonthlyDimensions(monthlyDimensionResponse.data || []);
       } catch (error) {
         if (!active) return;
         if (
@@ -218,7 +291,7 @@ export default function AnalyticsDashboard() {
     return () => {
       active = false;
     };
-  }, [days, navigate]);
+  }, [navigate, range]);
 
   const dimensionsByName = useMemo(() => {
     const grouped = new Map<string, AnalyticsDimensionBucket[]>();
@@ -229,45 +302,104 @@ export default function AnalyticsDashboard() {
     return grouped;
   }, [dimensions]);
 
+  const longTermPageViews = useMemo(
+    () =>
+      monthlyDimensions.filter(
+        (bucket) =>
+          bucket.metric === "page_view" && bucket.dimension === "page",
+      ),
+    [monthlyDimensions],
+  );
+
   if (loading && !summary) return <LoadingState />;
 
   const totals = summary?.totals;
   const cards = [
+    ["Page views", totals?.pageViews || 0, "Allowlisted page visits"],
     ["Successful logins", totals?.logins || 0, "Authentication events"],
     ["Files added", totals?.filesAdded || 0, "Client-reported Drive actions"],
     ["Shares created", totals?.shares || 0, "Encrypted share records"],
     ["Files accessed", totals?.downloads || 0, "Recipient access events"],
   ] as const;
 
+  const applyPresetRange = (days: number) => {
+    const next = { from: subDays(today, days - 1), to: today };
+    setDraftRange(next);
+    setRange(next);
+    setRangeOpen(false);
+  };
+
+  const applyDraftRange = () => {
+    if (!draftRange.from || !draftRange.to) return;
+    setRange(draftRange);
+    setRangeOpen(false);
+  };
+
   return (
     <main className="w-full space-y-10">
-      <section className="border px-6 py-8 md:px-10 md:py-12">
-        <div className="flex flex-col justify-between gap-8 lg:flex-row lg:items-end">
-          <div className="max-w-3xl">
-            <p className="mb-4 text-xs uppercase tracking-[0.22em] text-muted-foreground">
-              Private operator view
-            </p>
-            <h1 className="text-3xl leading-tight md:text-5xl">
-              Understand ZeroDrive without tracking its users.
-            </h1>
-            <p className="mt-5 max-w-2xl text-sm leading-7 text-muted-foreground md:text-base">
-              Daily aggregate counters from this deployment. These numbers count
-              events, not people, and cannot be used to inspect an individual
-              account or file.
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-2" aria-label="Analytics period">
-            {RANGES.map((range) => (
-              <Button
-                key={range}
-                size="sm"
-                variant={days === range ? "default" : "outline"}
-                onClick={() => setDays(range)}
-              >
-                {range === 365 ? "1 year" : `${range} days`}
+      <section className="mx-auto max-w-5xl py-8 text-center md:py-14">
+        <p className="mb-4 text-xs uppercase tracking-[0.22em] text-muted-foreground">
+          Private operator view
+        </p>
+        <h1 className="text-3xl leading-tight md:text-4xl">
+          Understand ZeroDrive <br/> without tracking its users.
+        </h1>
+        <p className="mx-auto mt-5 max-w-3xl text-sm leading-7 text-muted-foreground md:text-base">
+          Aggregate counters from this deployment. These numbers count events,
+          not people, and cannot be used to inspect an individual account or
+          file.
+        </p>
+
+        <div className="mt-8 flex justify-center" aria-label="Analytics period">
+          <Popover open={rangeOpen} onOpenChange={setRangeOpen}>
+            <PopoverTrigger asChild>
+              <Button variant="outline" className="min-w-[260px] justify-start">
+                <CalendarDays aria-hidden="true" />
+                {formatRangeLabel(range)}
               </Button>
-            ))}
-          </div>
+            </PopoverTrigger>
+            <PopoverContent align="center" className="w-auto p-4">
+              <div className="mb-4 flex flex-wrap gap-2">
+                {[7, 30, 90, 365].map((days) => (
+                  <Button
+                    key={days}
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => applyPresetRange(days)}
+                  >
+                    {days === 365 ? "1 year" : `${days} days`}
+                  </Button>
+                ))}
+              </div>
+              <Calendar
+                mode="range"
+                selected={draftRange}
+                onSelect={(next) =>
+                  setDraftRange(next || { from: undefined, to: undefined })
+                }
+                defaultMonth={draftRange.from}
+                fromDate={subDays(today, 399)}
+                toDate={today}
+                disabled={{ after: today, before: subDays(today, 399) }}
+                numberOfMonths={2}
+                showOutsideDays
+              />
+              <div className="mt-4 flex items-center justify-between gap-4 border-t pt-4">
+                <p className="text-xs text-muted-foreground">
+                  Exact daily data is available for 400 days.
+                </p>
+                <Button
+                  type="button"
+                  size="sm"
+                  disabled={!draftRange.from || !draftRange.to}
+                  onClick={applyDraftRange}
+                >
+                  Apply dates
+                </Button>
+              </div>
+            </PopoverContent>
+          </Popover>
         </div>
       </section>
 
@@ -295,18 +427,31 @@ export default function AnalyticsDashboard() {
       </Card>
 
       <section>
+        <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
+          Page attention
+        </p>
+        <h2 className="mb-5 mt-2 text-2xl">Where ZeroDrive is being used</h2>
+        <DimensionList
+          title="Page views"
+          description="Aggregate visits to reviewed product and documentation pages. No visitor, session, raw URL, query string, or referrer is stored."
+          buckets={dimensionsByName.get("page_view:page") || []}
+          labelForBucket={(bucket) => PAGE_LABELS[bucket] || bucket}
+        />
+      </section>
+
+      <section>
         <div className="mb-5 flex items-end justify-between gap-4">
           <div>
             <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
               Overview
             </p>
-            <h2 className="mt-2 text-2xl">Last {days} days</h2>
+            <h2 className="mt-2 text-2xl">{formatRangeLabel(range)}</h2>
           </div>
           <p className="text-xs text-muted-foreground">
             {summary?.totalEvents || 0} total counted events
           </p>
         </div>
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
           {cards.map(([label, value, description]) => (
             <Card key={label} className="shadow-none">
               <CardHeader className="pb-3">
@@ -370,7 +515,7 @@ export default function AnalyticsDashboard() {
         <CardHeader>
           <CardTitle>Daily counters</CardTitle>
           <CardDescription>
-            Aggregate records retained for a maximum of 365 days.
+            Exact daily records retained for the latest 400-day window.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -379,6 +524,7 @@ export default function AnalyticsDashboard() {
               <TableRow>
                 <TableHead>Date</TableHead>
                 <TableHead className="text-right">Logins</TableHead>
+                <TableHead className="text-right">Views</TableHead>
                 <TableHead className="text-right">New setup</TableHead>
                 <TableHead className="text-right">Files</TableHead>
                 <TableHead className="text-right">Shares</TableHead>
@@ -391,7 +537,7 @@ export default function AnalyticsDashboard() {
               {daily.length === 0 && (
                 <TableRow>
                   <TableCell
-                    colSpan={8}
+                    colSpan={9}
                     className="h-24 text-center text-muted-foreground"
                   >
                     No aggregate counters are available for this period.
@@ -402,6 +548,7 @@ export default function AnalyticsDashboard() {
                 <TableRow key={stat.date}>
                   <TableCell>{formatDate(stat.date)}</TableCell>
                   <TableCell className="text-right">{stat.logins}</TableCell>
+                  <TableCell className="text-right">{stat.pageViews}</TableCell>
                   <TableCell className="text-right">{stat.newUsers}</TableCell>
                   <TableCell className="text-right">
                     {stat.filesAdded}
@@ -421,6 +568,64 @@ export default function AnalyticsDashboard() {
         </CardContent>
       </Card>
 
+      <Card className="shadow-none">
+        <CardHeader>
+          <CardTitle>Long-term monthly history</CardTitle>
+          <CardDescription>
+            Daily counters are retained for 400 days. Older days are combined
+            into privacy-safe monthly totals and kept without automatic expiry.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Month</TableHead>
+                <TableHead className="text-right">Page views</TableHead>
+                <TableHead className="text-right">All events</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {monthly.length === 0 && (
+                <TableRow>
+                  <TableCell
+                    colSpan={3}
+                    className="h-24 text-center text-muted-foreground"
+                  >
+                    No monthly rollups yet. The first appears when daily data
+                    becomes older than 400 days.
+                  </TableCell>
+                </TableRow>
+              )}
+              {[...monthly].reverse().map((stat) => (
+                <TableRow key={stat.month}>
+                  <TableCell>
+                    {new Intl.DateTimeFormat(undefined, {
+                      month: "long",
+                      year: "numeric",
+                      timeZone: "UTC",
+                    }).format(new Date(`${stat.month}T00:00:00Z`))}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {stat.pageViews}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {stat.totalEvents}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+
+      <DimensionList
+        title="Archived page attention"
+        description="Page-view totals from monthly history older than the daily window, covering up to the last 10 years."
+        buckets={longTermPageViews}
+        labelForBucket={(bucket) => PAGE_LABELS[bucket] || bucket}
+      />
+
       <section className="border-2 px-6 py-7 md:px-8">
         <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
           Privacy boundary
@@ -429,8 +634,8 @@ export default function AnalyticsDashboard() {
         <p className="mt-3 max-w-4xl text-sm leading-7 text-muted-foreground">
           ZeroDrive does not keep raw analytics events, unique-user counts,
           sessions, emails, IP addresses, filenames, exact file sizes, object
-          keys, or sender identities. Buckets containing fewer than five events
-          are suppressed in this view.
+          keys, sender identities, raw URLs, query strings, or referrers.
+          Buckets containing fewer than five events are suppressed in this view.
         </p>
       </section>
     </main>

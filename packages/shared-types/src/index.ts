@@ -29,7 +29,34 @@ export interface AuthenticatedUser {
   capabilities: AuthCapabilities;
 }
 
+/**
+ * Deliberately reviewed analytics buckets. The analytics API accepts these
+ * product concepts only; it never accepts a raw path, query string, or URL.
+ */
+export const ANALYTICS_PAGE_KEYS = [
+  "landing",
+  "home",
+  "storage",
+  "share",
+  "shared_with_me",
+  "recovery_access",
+  "docs",
+  "docs_how_it_works",
+  "docs_how_to_use",
+  "docs_keys_and_recovery",
+  "docs_secure_sharing",
+  "docs_privacy_model",
+  "docs_security_model",
+  "docs_if_zerodrive_disappears",
+  "docs_self_hosting",
+  "privacy",
+  "terms",
+] as const;
+
+export type AnalyticsPageKey = (typeof ANALYTICS_PAGE_KEYS)[number];
+
 export interface AnalyticsTotals {
+  pageViews: number;
   logins: number;
   newUsers: number;
   limitedScopeLogins: number;
@@ -49,6 +76,7 @@ export interface AnalyticsSummary {
   totalEvents: number;
   totals: AnalyticsTotals;
   categories: {
+    navigation: number;
     auth: number;
     files: number;
     sharing: number;
@@ -58,6 +86,7 @@ export interface AnalyticsSummary {
 
 export interface AnalyticsDailyStat {
   date: string;
+  pageViews: number;
   logins: number;
   newUsers: number;
   limitedScopeLogins: number;
@@ -71,14 +100,25 @@ export interface AnalyticsDailyStat {
   sharesRevoked: number;
 }
 
+export interface AnalyticsMonthlyStat {
+  month: string;
+  pageViews: number;
+  totalEvents: number;
+}
+
 export interface AnalyticsDimensionBucket {
-  metric: "file_added_to_drive" | "file_shared" | "invitation_sent";
+  metric:
+    | "file_added_to_drive"
+    | "file_shared"
+    | "invitation_sent"
+    | "page_view";
   dimension:
     | "source"
     | "size_bucket"
     | "file_category"
     | "has_expiration"
-    | "has_custom_message";
+    | "has_custom_message"
+    | "page";
   bucket: string;
   count: number | null;
   suppressed: boolean;

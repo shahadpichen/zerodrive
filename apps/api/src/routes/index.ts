@@ -10,6 +10,7 @@ import presignedUrlsRouter from "./presignedUrls";
 import webhooksRouter from "./webhooks";
 import invitationsRouter from "./invitations";
 import analyticsRouter from "./analytics";
+import publicAnalyticsRouter from "./publicAnalytics";
 import { requireAuth } from "../middleware/auth";
 
 const router = Router();
@@ -58,6 +59,11 @@ router.get("/", (req, res) => {
         "GET /api/analytics/summary": "Get anonymous analytics summary",
         "GET /api/analytics/daily": "Get daily analytics stats",
         "GET /api/analytics/dimensions": "Get aggregate analytics buckets",
+        "GET /api/analytics/monthly": "Get long-term monthly analytics",
+        "GET /api/analytics/monthly/dimensions":
+          "Get long-term monthly analytics buckets",
+        "POST /api/analytics/page-view":
+          "Count an allowlisted aggregate page view",
       },
     },
     "ZeroDrive Backend API",
@@ -69,6 +75,10 @@ router.use("/auth", authRouter);
 
 // Mount webhook routes (public, external services)
 router.use("/webhooks", webhooksRouter);
+
+// Public so landing/docs views can be counted. This router accepts only a
+// closed page-key allowlist and never receives raw URLs or visitor identity.
+router.use("/analytics", publicAnalyticsRouter);
 
 // Apply authentication middleware to all routes below this point
 router.use(requireAuth);

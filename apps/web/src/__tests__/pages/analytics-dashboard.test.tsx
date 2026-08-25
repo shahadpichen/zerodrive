@@ -1,5 +1,11 @@
 import React from "react";
-import { render, screen, waitFor } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import AnalyticsDashboard from "../../pages/analytics-dashboard";
 import apiClient from "../../utils/apiClient";
@@ -28,6 +34,7 @@ describe("admin analytics dashboard", () => {
             rangeDays: 30,
             totalEvents: 18,
             totals: {
+              pageViews: 10,
               logins: 8,
               newUsers: 2,
               limitedScopeLogins: 1,
@@ -40,7 +47,13 @@ describe("admin analytics dashboard", () => {
               sharesFinalized: 2,
               sharesRevoked: 1,
             },
-            categories: { auth: 8, files: 5, sharing: 8, keys: 2 },
+            categories: {
+              navigation: 10,
+              auth: 8,
+              files: 5,
+              sharing: 8,
+              keys: 2,
+            },
           },
         });
       }
@@ -50,6 +63,7 @@ describe("admin analytics dashboard", () => {
           data: [
             {
               date: "2026-07-12",
+              pageViews: 10,
               logins: 8,
               newUsers: 2,
               limitedScopeLogins: 1,
@@ -65,6 +79,28 @@ describe("admin analytics dashboard", () => {
           ],
         });
       }
+      if (endpoint.startsWith("/analytics/monthly/dimensions")) {
+        return Promise.resolve({
+          success: true,
+          data: [
+            {
+              metric: "page_view",
+              dimension: "page",
+              bucket: "storage",
+              count: 40,
+              suppressed: false,
+            },
+          ],
+        });
+      }
+      if (endpoint.startsWith("/analytics/monthly")) {
+        return Promise.resolve({
+          success: true,
+          data: [
+            { month: "2025-01-01", pageViews: 80, totalEvents: 120 },
+          ],
+        });
+      }
       return Promise.resolve({
         success: true,
         data: [
@@ -74,6 +110,13 @@ describe("admin analytics dashboard", () => {
             bucket: "upload",
             count: null,
             suppressed: true,
+          },
+          {
+            metric: "page_view",
+            dimension: "page",
+            bucket: "docs_security_model",
+            count: 12,
+            suppressed: false,
           },
         ],
       });
@@ -95,13 +138,66 @@ describe("admin analytics dashboard", () => {
     expect(screen.getByText("Successful logins")).toBeInTheDocument();
     expect(screen.getByText("Files added")).toBeInTheDocument();
     expect(
-      screen.getByLabelText(/: 23 counted events$/),
+      screen.getByLabelText(/: 33 counted events$/),
     ).toBeInTheDocument();
 
     await waitFor(() => {
       expect(screen.getByText("upload")).toBeInTheDocument();
       expect(screen.getByText("< 5")).toBeInTheDocument();
+      expect(screen.getByText("Docs · Security model")).toBeInTheDocument();
     });
+    expect(screen.getByText("Long-term monthly history")).toBeInTheDocument();
+    expect(screen.getByText("January 2025")).toBeInTheDocument();
+    expect(screen.getAllByText("Page views").length).toBeGreaterThan(0);
+    expect(screen.getByText("Archived page attention")).toBeInTheDocument();
     expect(screen.getByText(/count events, not people/i)).toBeInTheDocument();
+
+    const requestedEndpoints = (apiClient.get as jest.Mock).mock.calls.map(
+      ([endpoint]) => endpoint as string,
+    );
+    expect(requestedEndpoints).toEqual(
+      expect.arrayContaining([
+        expect.stringMatching(
+          /^\/analytics\/summary\?from=\d{4}-\d{2}-\d{2}&to=\d{4}-\d{2}-\d{2}$/,
+        ),
+        expect.stringMatching(
+          /^\/analytics\/daily\?from=\d{4}-\d{2}-\d{2}&to=\d{4}-\d{2}-\d{2}$/,
+        ),
+        expect.stringMatching(
+          /^\/analytics\/dimensions\?from=\d{4}-\d{2}-\d{2}&to=\d{4}-\d{2}-\d{2}$/,
+        ),
+        "/analytics/monthly?months=120",
+        "/analytics/monthly/dimensions?months=120",
+      ]),
+    );
+  });
+
+  it("reloads exact daily aggregates when an operator selects a preset", async () => {
+    render(
+      <MemoryRouter>
+        <AnalyticsDashboard />
+      </MemoryRouter>,
+    );
+
+    await screen.findByRole("heading", {
+      name: /understand zerodrive without tracking/i,
+    });
+    await waitFor(() => expect(apiClient.get).toHaveBeenCalledTimes(5));
+
+    fireEvent.click(
+      within(screen.getByLabelText("Analytics period")).getByRole("button"),
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "7 days" }));
+
+    await waitFor(() => expect(apiClient.get).toHaveBeenCalledTimes(10));
+    const summaryRequests = (apiClient.get as jest.Mock).mock.calls
+      .map(([endpoint]) => endpoint as string)
+      .filter((endpoint) => endpoint.startsWith("/analytics/summary?"));
+    expect(summaryRequests).toHaveLength(2);
+
+    const selected = new URLSearchParams(summaryRequests[1].split("?")[1]);
+    const from = new Date(`${selected.get("from")}T00:00:00.000Z`);
+    const to = new Date(`${selected.get("to")}T00:00:00.000Z`);
+    expect((to.getTime() - from.getTime()) / 86_400_000).toBe(6);
   });
 });

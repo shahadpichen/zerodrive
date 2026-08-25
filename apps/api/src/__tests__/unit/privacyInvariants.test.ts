@@ -67,11 +67,19 @@ describe("database privacy invariants", () => {
     const dimensionsSchema = initSql.match(
       /CREATE TABLE IF NOT EXISTS analytics_daily_dimensions \(([\s\S]*?)\n\);/,
     )?.[1];
+    const monthlySummarySchema = initSql.match(
+      /CREATE TABLE IF NOT EXISTS analytics_monthly_summary \(([\s\S]*?)\n\);/,
+    )?.[1];
+    const monthlyDimensionsSchema = initSql.match(
+      /CREATE TABLE IF NOT EXISTS analytics_monthly_dimensions \(([\s\S]*?)\n\);/,
+    )?.[1];
     expect(summarySchema).toBeDefined();
     expect(dimensionsSchema).toBeDefined();
+    expect(monthlySummarySchema).toBeDefined();
+    expect(monthlyDimensionsSchema).toBeDefined();
 
     const analyticsSchema =
-      `${summarySchema}\n${dimensionsSchema}`.toLowerCase();
+      `${summarySchema}\n${dimensionsSchema}\n${monthlySummarySchema}\n${monthlyDimensionsSchema}`.toLowerCase();
     for (const forbidden of [
       "email",
       "user_id",
@@ -85,6 +93,9 @@ describe("database privacy invariants", () => {
       "object_key",
       "request_body",
       "event_timestamp",
+      "raw_url",
+      "query_string",
+      "referrer",
     ]) {
       expect(analyticsSchema).not.toContain(forbidden);
     }

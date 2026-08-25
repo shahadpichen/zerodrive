@@ -33,6 +33,7 @@ import {
   GoogleDrivePermissionGate,
   GoogleDrivePermissionProvider,
 } from "./components/google-drive-permission-gate";
+import { PageViewTracker } from "./components/page-view-tracker";
 
 // Check environment variables on app startup
 const checkEnvironmentVariables = () => {
@@ -64,7 +65,14 @@ const RootRoute: React.FC = () => {
     return null;
   }
 
-  return isAuthenticated ? <Navigate to="/home" replace /> : <LandingPage />;
+  return isAuthenticated ? (
+    <Navigate to="/home" replace />
+  ) : (
+    <>
+      <PageViewTracker page="landing" />
+      <LandingPage />
+    </>
+  );
 };
 
 const KeyManagementRedirect: React.FC = () => {
@@ -84,6 +92,7 @@ function App() {
           <Router>
             <LegalAcceptanceProvider>
               <GoogleDrivePermissionProvider>
+                <PageViewTracker />
                 <Routes>
                   <Route path="/" element={<RootRoute />} />
                   <Route path="/oauth/callback" element={<OAuthCallback />} />

@@ -111,6 +111,15 @@ describeWithPostgres("database migrations against PostgreSQL", () => {
            AS analytics_summary,
          to_regclass('public.analytics_daily_dimensions') IS NOT NULL
            AS analytics_dimensions,
+         to_regclass('public.analytics_monthly_summary') IS NOT NULL
+           AS analytics_monthly_summary,
+         to_regclass('public.analytics_monthly_dimensions') IS NOT NULL
+           AS analytics_monthly_dimensions,
+         EXISTS (
+           SELECT 1 FROM information_schema.columns
+           WHERE table_name = 'analytics_daily_summary'
+             AND column_name = 'total_page_views'
+         ) AS analytics_page_views,
          EXISTS (
            SELECT 1 FROM information_schema.columns
            WHERE table_name = 'analytics_daily_summary'
@@ -164,6 +173,9 @@ describeWithPostgres("database migrations against PostgreSQL", () => {
       encrypted_metadata: true,
       analytics_summary: true,
       analytics_dimensions: true,
+      analytics_monthly_summary: true,
+      analytics_monthly_dimensions: true,
+      analytics_page_views: true,
       analytics_lifecycle: true,
       oauth_uuid_id: true,
       analytics_deployment_id: true,

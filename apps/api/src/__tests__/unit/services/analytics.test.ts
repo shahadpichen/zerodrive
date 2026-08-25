@@ -5,14 +5,19 @@ import {
   getAnalyticsSummary,
   getDailyStats,
   getDimensionStats,
+  getMonthlyStats,
+  getMonthlyDimensionStats,
   getFileSizeBucket,
   getFileTypeCategory,
   trackEvent,
 } from "../../../services/analytics";
 
 const mockQuery = jest.fn();
+const mockClientQuery = jest.fn();
 jest.mock("../../../config/database", () => ({
   query: (...args: unknown[]) => mockQuery(...args),
+  transaction: (callback: (client: { query: jest.Mock }) => Promise<unknown>) =>
+    callback({ query: mockClientQuery }),
 }));
 
 describe("privacy-safe analytics service", () => {
@@ -20,6 +25,7 @@ describe("privacy-safe analytics service", () => {
     jest.clearAllMocks();
     process.env.ANALYTICS_ENABLED = "true";
     mockQuery.mockResolvedValue({ rows: [] });
+    mockClientQuery.mockResolvedValue({ rows: [] });
   });
 
   describe("trackEvent", () => {
@@ -78,6 +84,35 @@ describe("privacy-safe analytics service", () => {
       expect(mockQuery).not.toHaveBeenCalled();
     });
 
+    it("counts only allowlisted page buckets through the page contract", async () => {
+      await trackEvent(AnalyticsEvent.PAGE_VIEW, AnalyticsCategory.NAVIGATION, {
+        page: "docs_security_model",
+      });
+
+      expect(mockQuery.mock.calls[0][0]).toContain("total_page_views");
+      expect(mockQuery).toHaveBeenCalledWith(
+        expect.stringContaining("analytics_daily_dimensions"),
+        ["page_view", "page", "docs_security_model"],
+      );
+
+      jest.clearAllMocks();
+      await trackEvent(AnalyticsEvent.PAGE_VIEW, AnalyticsCategory.NAVIGATION, {
+        page: "unreviewed_but_safe_looking_page",
+      });
+      expect(mockQuery).not.toHaveBeenCalled();
+
+      await trackEvent(AnalyticsEvent.PAGE_VIEW, AnalyticsCategory.NAVIGATION, {
+        page: "/docs/security-model?visitor=person@example.com",
+      });
+      expect(mockQuery).not.toHaveBeenCalled();
+
+      await trackEvent(
+        AnalyticsEvent.PAGE_VIEW,
+        AnalyticsCategory.NAVIGATION,
+      );
+      expect(mockQuery).not.toHaveBeenCalled();
+    });
+
     it("does not break product behavior when PostgreSQL is unavailable", async () => {
       mockQuery.mockRejectedValue(new Error("database unavailable"));
 
@@ -102,6 +137,7 @@ describe("privacy-safe analytics service", () => {
           key_rotations: "2",
           shares_finalized: "25",
           shares_revoked: "3",
+          page_views: "200",
         },
       ],
     });
@@ -111,8 +147,9 @@ describe("privacy-safe analytics service", () => {
       new Date("2026-07-01T00:00:00Z"),
     );
 
-    expect(summary.rangeDays).toBe(30);
+    expect(summary.rangeDays).toBe(31);
     expect(summary.totals).toEqual({
+      pageViews: 200,
       logins: 105,
       newUsers: 20,
       limitedScopeLogins: 5,
@@ -126,12 +163,13 @@ describe("privacy-safe analytics service", () => {
       sharesRevoked: 3,
     });
     expect(summary.categories).toEqual({
+      navigation: 200,
       auth: 105,
       files: 75,
       sharing: 123,
       keys: 6,
     });
-    expect(summary.totalEvents).toBe(309);
+    expect(summary.totalEvents).toBe(509);
   });
 
   it("returns chronological daily aggregate points using a bound day value", async () => {
@@ -150,18 +188,22 @@ describe("privacy-safe analytics service", () => {
           key_rotations: "2",
           shares_finalized: "2",
           shares_revoked: "1",
+          page_views: "9",
         },
       ],
     });
 
-    const daily = await getDailyStats(7);
+    const startDate = new Date("2026-06-25T00:00:00Z");
+    const endDate = new Date("2026-07-01T00:00:00Z");
+    const daily = await getDailyStats(startDate, endDate);
 
     expect(mockQuery).toHaveBeenCalledWith(
-      expect.stringContaining("$1::integer"),
-      [7],
+      expect.stringContaining("date BETWEEN $1 AND $2"),
+      [startDate, endDate],
     );
     expect(daily[0]).toEqual({
       date: "2026-07-01",
+      pageViews: 9,
       logins: 6,
       newUsers: 1,
       limitedScopeLogins: 1,
@@ -194,22 +236,69 @@ describe("privacy-safe analytics service", () => {
       ],
     });
 
-    const buckets = await getDimensionStats(30);
+    const startDate = new Date("2026-06-02T00:00:00Z");
+    const endDate = new Date("2026-07-01T00:00:00Z");
+    const buckets = await getDimensionStats(startDate, endDate);
 
     expect(buckets[0]).toMatchObject({ count: null, suppressed: true });
     expect(buckets[1]).toMatchObject({ count: 8, suppressed: false });
   });
 
-  it("purges daily totals and dimensions older than 365 days", async () => {
+  it("rolls old daily counters into permanent monthly history before deletion", async () => {
     await cleanupAnalyticsRetention();
 
-    expect(mockQuery).toHaveBeenCalledTimes(2);
-    expect(mockQuery.mock.calls[0][0]).toContain(
+    expect(mockClientQuery).toHaveBeenCalledTimes(6);
+    expect(mockClientQuery.mock.calls[1][0]).toContain(
+      "LOCK TABLE analytics_daily_summary, analytics_daily_dimensions",
+    );
+    expect(mockClientQuery.mock.calls[2][0]).toContain(
+      "INSERT INTO analytics_monthly_summary",
+    );
+    expect(mockClientQuery.mock.calls[3][0]).toContain(
+      "INSERT INTO analytics_monthly_dimensions",
+    );
+    expect(mockClientQuery.mock.calls[4][0]).toContain(
       "DELETE FROM analytics_daily_dimensions",
     );
-    expect(mockQuery.mock.calls[1][0]).toContain(
+    expect(mockClientQuery.mock.calls[5][0]).toContain(
       "DELETE FROM analytics_daily_summary",
     );
+    expect(mockClientQuery.mock.calls[5][0]).toContain(
+      "date < CURRENT_DATE - 400",
+    );
+  });
+
+  it("returns permanent monthly aggregate history", async () => {
+    mockQuery.mockResolvedValue({
+      rows: [{ month: "2025-01-01", page_views: "18", total_events: "25" }],
+    });
+
+    await expect(getMonthlyStats(120)).resolves.toEqual([
+      { month: "2025-01-01", pageViews: 18, totalEvents: 25 },
+    ]);
+  });
+
+  it("suppresses low-volume permanent monthly dimensions", async () => {
+    mockQuery.mockResolvedValue({
+      rows: [
+        {
+          metric: "page_view",
+          dimension: "page",
+          bucket: "docs",
+          count: "4",
+        },
+      ],
+    });
+
+    await expect(getMonthlyDimensionStats(120)).resolves.toEqual([
+      {
+        metric: "page_view",
+        dimension: "page",
+        bucket: "docs",
+        count: null,
+        suppressed: true,
+      },
+    ]);
   });
 
   it("uses coarse file size ranges", () => {

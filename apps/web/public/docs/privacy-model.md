@@ -22,9 +22,9 @@ The database stores only a hash of that capability. The sender’s browser keeps
 
 Analytics can be useful. They help answer questions like “are people using file sharing?” or “did uploads fail more often today?”
 
-But analytics should not become a second identity database. ZeroDrive does not use third-party analytics or advertising scripts. Analytics are disabled by default. When a deployment enables them, it stores first-party daily aggregate counters in its own PostgreSQL database rather than detailed event streams tied to people.
+But analytics should not become a second identity database. ZeroDrive does not use third-party analytics or advertising scripts. Analytics are disabled by default. When a deployment enables them, it stores first-party aggregate counters in its own PostgreSQL database rather than detailed event streams tied to people.
 
-The counters exclude account identifiers, emails, IP addresses, filenames, object keys, capabilities, browser fingerprints, and session identifiers. Coarse breakdowns are stored independently, low-volume buckets are hidden, and records older than 365 days are deleted. Only deployment-configured administrators can read them.
+The counters exclude account identifiers, emails, IP addresses, filenames, object keys, capabilities, browser fingerprints, and session identifiers. Page attention is counted only under a reviewed label such as Storage or Security documentation; ZeroDrive does not store a raw URL, query string, referrer, visitor identifier, or navigation history. Coarse breakdowns are stored independently and low-volume buckets are hidden. Exact daily counters remain for the latest 400-day window. Older days are combined into monthly totals that have no automatic expiry, preserving long-term trends without retaining individual activity. Only deployment-configured administrators can read them.
 
 The goal is to learn whether the product works without tracking exactly who did what with which file.
 

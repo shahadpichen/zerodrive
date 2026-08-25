@@ -179,8 +179,11 @@ CREATE TABLE IF NOT EXISTS analytics_daily_summary (
     total_key_rotations INTEGER DEFAULT 0,
     total_shares_finalized INTEGER DEFAULT 0,
     total_shares_revoked INTEGER DEFAULT 0,
+    total_page_views BIGINT NOT NULL DEFAULT 0,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT analytics_daily_summary_total_page_views_nonnegative
+        CHECK (total_page_views >= 0)
 );
 
 -- Create index for date-based queries
@@ -204,10 +207,30 @@ CREATE TABLE IF NOT EXISTS analytics_daily_dimensions (
     deployment_id UUID NOT NULL DEFAULT zerodrive_default_deployment_id()
         REFERENCES deployments(id),
     date DATE NOT NULL,
-    metric VARCHAR(64) NOT NULL CHECK (metric IN ('file_added_to_drive', 'file_shared', 'invitation_sent')),
-    dimension VARCHAR(32) NOT NULL CHECK (dimension IN ('source', 'size_bucket', 'file_category', 'has_expiration', 'has_custom_message')),
+    metric VARCHAR(64) NOT NULL CONSTRAINT analytics_daily_dimensions_metric_check
+        CHECK (metric IN ('file_added_to_drive', 'file_shared', 'invitation_sent', 'page_view')),
+    dimension VARCHAR(32) NOT NULL CONSTRAINT analytics_daily_dimensions_dimension_check
+        CHECK (dimension IN ('source', 'size_bucket', 'file_category', 'has_expiration', 'has_custom_message', 'page')),
     bucket VARCHAR(32) NOT NULL,
-    count INTEGER NOT NULL DEFAULT 0 CHECK (count >= 0)
+    count INTEGER NOT NULL DEFAULT 0 CHECK (count >= 0),
+    CONSTRAINT analytics_daily_dimensions_page_bucket_check CHECK (
+        dimension <> 'page'
+        OR (
+            metric = 'page_view'
+            AND bucket IN (
+                'landing', 'home', 'storage', 'share', 'shared_with_me',
+                'recovery_access', 'docs', 'docs_how_it_works',
+                'docs_how_to_use', 'docs_keys_and_recovery',
+                'docs_secure_sharing', 'docs_privacy_model',
+                'docs_security_model', 'docs_if_zerodrive_disappears',
+                'docs_self_hosting', 'privacy', 'terms'
+            )
+        )
+    ),
+    CONSTRAINT analytics_daily_dimensions_page_contract_check CHECK (
+        (metric = 'page_view' AND dimension = 'page')
+        OR (metric <> 'page_view' AND dimension <> 'page')
+    )
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_analytics_daily_dimensions_deployment_key_unique
@@ -216,6 +239,106 @@ CREATE INDEX IF NOT EXISTS idx_analytics_daily_dimensions_deployment_date
     ON analytics_daily_dimensions(deployment_id, date DESC);
 CREATE INDEX IF NOT EXISTS idx_analytics_daily_dimensions_date
     ON analytics_daily_dimensions(date DESC);
+
+-- Long-term anonymous monthly analytics. Daily rows are retained for exactly
+-- 400 days, rolled up before deletion, and monthly rows have no automatic
+-- expiry. These tables contain aggregate counts only.
+CREATE TABLE IF NOT EXISTS analytics_monthly_summary (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    deployment_id UUID NOT NULL DEFAULT zerodrive_default_deployment_id()
+        REFERENCES deployments(id),
+    month DATE NOT NULL,
+    total_logins BIGINT NOT NULL DEFAULT 0,
+    total_new_users BIGINT NOT NULL DEFAULT 0,
+    total_limited_scope_logins BIGINT NOT NULL DEFAULT 0,
+    total_downloads BIGINT NOT NULL DEFAULT 0,
+    total_files_added_to_drive BIGINT NOT NULL DEFAULT 0,
+    total_shares BIGINT NOT NULL DEFAULT 0,
+    total_invitations BIGINT NOT NULL DEFAULT 0,
+    total_key_setups BIGINT NOT NULL DEFAULT 0,
+    total_key_rotations BIGINT NOT NULL DEFAULT 0,
+    total_shares_finalized BIGINT NOT NULL DEFAULT 0,
+    total_shares_revoked BIGINT NOT NULL DEFAULT 0,
+    total_page_views BIGINT NOT NULL DEFAULT 0,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT analytics_monthly_summary_month_start_check
+        CHECK (EXTRACT(DAY FROM month) = 1),
+    CONSTRAINT analytics_monthly_summary_counts_nonnegative CHECK (
+        total_logins >= 0
+        AND total_new_users >= 0
+        AND total_limited_scope_logins >= 0
+        AND total_downloads >= 0
+        AND total_files_added_to_drive >= 0
+        AND total_shares >= 0
+        AND total_invitations >= 0
+        AND total_key_setups >= 0
+        AND total_key_rotations >= 0
+        AND total_shares_finalized >= 0
+        AND total_shares_revoked >= 0
+        AND total_page_views >= 0
+    )
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_analytics_monthly_summary_deployment_month_unique
+    ON analytics_monthly_summary(deployment_id, month);
+CREATE INDEX IF NOT EXISTS idx_analytics_monthly_summary_deployment_month
+    ON analytics_monthly_summary(deployment_id, month DESC);
+
+DROP TRIGGER IF EXISTS update_analytics_monthly_summary_updated_at
+    ON analytics_monthly_summary;
+CREATE TRIGGER update_analytics_monthly_summary_updated_at
+    BEFORE UPDATE ON analytics_monthly_summary
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TABLE IF NOT EXISTS analytics_monthly_dimensions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    deployment_id UUID NOT NULL DEFAULT zerodrive_default_deployment_id()
+        REFERENCES deployments(id),
+    month DATE NOT NULL,
+    metric VARCHAR(64) NOT NULL CONSTRAINT analytics_monthly_dimensions_metric_check
+        CHECK (metric IN ('file_added_to_drive', 'file_shared', 'invitation_sent', 'page_view')),
+    dimension VARCHAR(32) NOT NULL CONSTRAINT analytics_monthly_dimensions_dimension_check
+        CHECK (dimension IN ('source', 'size_bucket', 'file_category', 'has_expiration', 'has_custom_message', 'page')),
+    bucket VARCHAR(32) NOT NULL,
+    count BIGINT NOT NULL DEFAULT 0,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT analytics_monthly_dimensions_month_start_check
+        CHECK (EXTRACT(DAY FROM month) = 1),
+    CONSTRAINT analytics_monthly_dimensions_page_bucket_check CHECK (
+        dimension <> 'page'
+        OR (
+            metric = 'page_view'
+            AND bucket IN (
+                'landing', 'home', 'storage', 'share', 'shared_with_me',
+                'recovery_access', 'docs', 'docs_how_it_works',
+                'docs_how_to_use', 'docs_keys_and_recovery',
+                'docs_secure_sharing', 'docs_privacy_model',
+                'docs_security_model', 'docs_if_zerodrive_disappears',
+                'docs_self_hosting', 'privacy', 'terms'
+            )
+        )
+    ),
+    CONSTRAINT analytics_monthly_dimensions_page_contract_check CHECK (
+        (metric = 'page_view' AND dimension = 'page')
+        OR (metric <> 'page_view' AND dimension <> 'page')
+    ),
+    CONSTRAINT analytics_monthly_dimensions_count_nonnegative CHECK (count >= 0)
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_analytics_monthly_dimensions_deployment_key_unique
+    ON analytics_monthly_dimensions(deployment_id, month, metric, dimension, bucket);
+CREATE INDEX IF NOT EXISTS idx_analytics_monthly_dimensions_deployment_month
+    ON analytics_monthly_dimensions(deployment_id, month DESC);
+
+DROP TRIGGER IF EXISTS update_analytics_monthly_dimensions_updated_at
+    ON analytics_monthly_dimensions;
+CREATE TRIGGER update_analytics_monthly_dimensions_updated_at
+    BEFORE UPDATE ON analytics_monthly_dimensions
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
 
 -- One-time OAuth capabilities. Only non-reversible capability hashes are
 -- persisted; the encrypted capability carries its short-lived payload.
