@@ -336,11 +336,9 @@ export default function AnalyticsDashboard() {
   return (
     <main className="w-full space-y-10">
       <section className="mx-auto max-w-5xl py-8 text-center md:py-14">
-        <p className="mb-4 text-xs uppercase tracking-[0.22em] text-muted-foreground">
-          Private operator view
-        </p>
+
         <h1 className="text-3xl leading-tight md:text-4xl">
-          Understand ZeroDrive without tracking its users.
+          Understand ZeroDrive <br/> without tracking its users.
         </h1>
         <p className="mx-auto mt-5 max-w-3xl text-sm leading-7 text-muted-foreground md:text-base">
           Aggregate counters from this deployment. These numbers count events,
