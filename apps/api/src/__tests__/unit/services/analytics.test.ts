@@ -273,9 +273,11 @@ describe("privacy-safe analytics service", () => {
       rows: [{ month: "2025-01-01", page_views: "18", total_events: "25" }],
     });
 
-    await expect(getMonthlyStats(120)).resolves.toEqual([
+    await expect(getMonthlyStats()).resolves.toEqual([
       { month: "2025-01-01", pageViews: 18, totalEvents: 25 },
     ]);
+    expect(mockQuery.mock.calls[0][0]).not.toContain("CURRENT_DATE");
+    expect(mockQuery.mock.calls[0]).toHaveLength(1);
   });
 
   it("suppresses low-volume permanent monthly dimensions", async () => {
@@ -290,7 +292,7 @@ describe("privacy-safe analytics service", () => {
       ],
     });
 
-    await expect(getMonthlyDimensionStats(120)).resolves.toEqual([
+    await expect(getMonthlyDimensionStats()).resolves.toEqual([
       {
         metric: "page_view",
         dimension: "page",
@@ -299,6 +301,8 @@ describe("privacy-safe analytics service", () => {
         suppressed: true,
       },
     ]);
+    expect(mockQuery.mock.calls[0][0]).not.toContain("CURRENT_DATE");
+    expect(mockQuery.mock.calls[0]).toHaveLength(1);
   });
 
   it("uses coarse file size ranges", () => {

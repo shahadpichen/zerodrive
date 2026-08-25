@@ -395,9 +395,7 @@ export async function getDimensionStats(
   });
 }
 
-export async function getMonthlyStats(
-  months: number = 120,
-): Promise<AnalyticsMonthlyStat[]> {
+export async function getMonthlyStats(): Promise<AnalyticsMonthlyStat[]> {
   const result = await query(
     `SELECT
        month,
@@ -418,9 +416,7 @@ export async function getMonthlyStats(
        ) AS total_events
      FROM analytics_monthly_summary
      WHERE deployment_id = zerodrive_default_deployment_id()
-       AND month >= date_trunc('month', CURRENT_DATE) - (($1::integer - 1) * INTERVAL '1 month')
      ORDER BY month ASC`,
-    [months],
   );
 
   return result.rows.map((row) => ({
@@ -433,17 +429,15 @@ export async function getMonthlyStats(
   }));
 }
 
-export async function getMonthlyDimensionStats(
-  months: number = 120,
-): Promise<AnalyticsDimensionBucket[]> {
+export async function getMonthlyDimensionStats(): Promise<
+  AnalyticsDimensionBucket[]
+> {
   const result = await query(
     `SELECT metric, dimension, bucket, SUM(count)::bigint AS count
      FROM analytics_monthly_dimensions
      WHERE deployment_id = zerodrive_default_deployment_id()
-       AND month >= date_trunc('month', CURRENT_DATE) - (($1::integer - 1) * INTERVAL '1 month')
      GROUP BY metric, dimension, bucket
      ORDER BY metric, dimension, count DESC, bucket ASC`,
-    [months],
   );
 
   return result.rows.map((row) => {

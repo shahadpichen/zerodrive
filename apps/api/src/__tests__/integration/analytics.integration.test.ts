@@ -285,15 +285,14 @@ describe("Analytics Routes Integration", () => {
       ]);
       const response = await request(app)
         .get("/api/analytics/monthly")
-        .query({ months: 120 })
         .set("Cookie", [authCookie()]);
 
       expect(response.status).toBe(200);
-      expect(mockGetMonthlyStats).toHaveBeenCalledWith(120);
+      expect(mockGetMonthlyStats).toHaveBeenCalledWith();
       expect(response.body.data[0].pageViews).toBe(12);
     });
 
-    it("defaults to ten years of permanent monthly aggregates", async () => {
+    it("returns the complete permanent monthly archive", async () => {
       mockGetMonthlyStats.mockResolvedValue([]);
 
       const response = await request(app)
@@ -301,21 +300,9 @@ describe("Analytics Routes Integration", () => {
         .set("Cookie", [authCookie()]);
 
       expect(response.status).toBe(200);
-      expect(mockGetMonthlyStats).toHaveBeenCalledWith(120);
+      expect(mockGetMonthlyStats).toHaveBeenCalledWith();
+      expect(response.body.message).toContain("Complete monthly");
     });
-
-    it.each(["0", "241", "abc", "1.5"])(
-      "rejects invalid months=%s",
-      async (months) => {
-        const response = await request(app)
-          .get("/api/analytics/monthly")
-          .query({ months })
-          .set("Cookie", [authCookie()]);
-
-        expect(response.status).toBe(422);
-        expect(mockGetMonthlyStats).not.toHaveBeenCalled();
-      },
-    );
   });
 
   describe("GET /api/analytics/monthly/dimensions", () => {
@@ -331,26 +318,12 @@ describe("Analytics Routes Integration", () => {
       ]);
       const response = await request(app)
         .get("/api/analytics/monthly/dimensions")
-        .query({ months: 120 })
         .set("Cookie", [authCookie()]);
 
       expect(response.status).toBe(200);
-      expect(mockGetMonthlyDimensionStats).toHaveBeenCalledWith(120);
+      expect(mockGetMonthlyDimensionStats).toHaveBeenCalledWith();
       expect(response.body.data[0].bucket).toBe("docs");
     });
-
-    it.each(["0", "241", "abc", "1.5"])(
-      "rejects invalid months=%s",
-      async (months) => {
-        const response = await request(app)
-          .get("/api/analytics/monthly/dimensions")
-          .query({ months })
-          .set("Cookie", [authCookie()]);
-
-        expect(response.status).toBe(422);
-        expect(mockGetMonthlyDimensionStats).not.toHaveBeenCalled();
-      },
-    );
   });
 
   describe("POST /api/analytics/track", () => {

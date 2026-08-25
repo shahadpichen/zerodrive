@@ -146,10 +146,12 @@ describe("admin analytics dashboard", () => {
       expect(screen.getByText("< 5")).toBeInTheDocument();
       expect(screen.getByText("Docs · Security model")).toBeInTheDocument();
     });
-    expect(screen.getByText("Long-term monthly history")).toBeInTheDocument();
+    expect(screen.getByText("Monthly archive")).toBeInTheDocument();
     expect(screen.getByText("January 2025")).toBeInTheDocument();
     expect(screen.getAllByText("Page views").length).toBeGreaterThan(0);
-    expect(screen.getByText("Archived page attention")).toBeInTheDocument();
+    expect(
+      screen.getByText("Archived page views by page"),
+    ).toBeInTheDocument();
     expect(screen.getByText(/count events, not people/i)).toBeInTheDocument();
 
     const requestedEndpoints = (apiClient.get as jest.Mock).mock.calls.map(
@@ -166,8 +168,8 @@ describe("admin analytics dashboard", () => {
         expect.stringMatching(
           /^\/analytics\/dimensions\?from=\d{4}-\d{2}-\d{2}&to=\d{4}-\d{2}-\d{2}$/,
         ),
-        "/analytics/monthly?months=120",
-        "/analytics/monthly/dimensions?months=120",
+        "/analytics/monthly",
+        "/analytics/monthly/dimensions",
       ]),
     );
   });

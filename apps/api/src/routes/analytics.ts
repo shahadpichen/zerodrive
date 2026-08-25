@@ -25,7 +25,6 @@ import { isAnalyticsEnabled } from "../config/analytics";
 
 const router = Router();
 const daysSchema = Joi.number().integer().min(1).max(400).default(30);
-const monthsSchema = Joi.number().integer().min(1).max(240).default(120);
 const isoDateSchema = Joi.string().pattern(/^\d{4}-\d{2}-\d{2}$/);
 const frontendTrackableEvents = [AnalyticsEvent.FILE_ADDED_TO_DRIVE];
 
@@ -121,16 +120,6 @@ function parseDateRange(query: Request["query"]): {
   return { startDate, endDate, label: `last ${days} days` };
 }
 
-function parseMonths(value: unknown): number {
-  const { error, value: months } = monthsSchema.validate(value);
-  if (error) {
-    throw ApiErrors.ValidationError(
-      "months must be an integer between 1 and 240",
-    );
-  }
-  return months;
-}
-
 /**
  * GET /api/analytics/summary
  * Get analytics summary for a date range
@@ -174,20 +163,18 @@ router.get(
 router.get(
   "/monthly",
   requireAnalyticsAdmin,
-  asyncHandler(async (req: Request, res: Response) => {
-    const months = parseMonths(req.query.months);
-    const stats = await getMonthlyStats(months);
-    res.apiSuccess(stats, `Monthly analytics history for ${months} months`);
+  asyncHandler(async (_req: Request, res: Response) => {
+    const stats = await getMonthlyStats();
+    res.apiSuccess(stats, "Complete monthly analytics history");
   }),
 );
 
 router.get(
   "/monthly/dimensions",
   requireAnalyticsAdmin,
-  asyncHandler(async (req: Request, res: Response) => {
-    const months = parseMonths(req.query.months);
-    const stats = await getMonthlyDimensionStats(months);
-    res.apiSuccess(stats, `Monthly analytics dimensions for ${months} months`);
+  asyncHandler(async (_req: Request, res: Response) => {
+    const stats = await getMonthlyDimensionStats();
+    res.apiSuccess(stats, "Complete monthly analytics dimensions");
   }),
 );
 

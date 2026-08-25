@@ -251,11 +251,9 @@ export default function AnalyticsDashboard() {
             apiClient.get<AnalyticsDimensionBucket[]>(
               `/analytics/dimensions?${query}`,
             ),
-            apiClient.get<AnalyticsMonthlyStat[]>(
-              "/analytics/monthly?months=120",
-            ),
+            apiClient.get<AnalyticsMonthlyStat[]>("/analytics/monthly"),
             apiClient.get<AnalyticsDimensionBucket[]>(
-              "/analytics/monthly/dimensions?months=120",
+              "/analytics/monthly/dimensions",
             ),
           ]);
 
@@ -342,7 +340,7 @@ export default function AnalyticsDashboard() {
           Private operator view
         </p>
         <h1 className="text-3xl leading-tight md:text-4xl">
-          Understand ZeroDrive <br/> without tracking its users.
+          Understand ZeroDrive without tracking its users.
         </h1>
         <p className="mx-auto mt-5 max-w-3xl text-sm leading-7 text-muted-foreground md:text-base">
           Aggregate counters from this deployment. These numbers count events,
@@ -570,10 +568,11 @@ export default function AnalyticsDashboard() {
 
       <Card className="shadow-none">
         <CardHeader>
-          <CardTitle>Long-term monthly history</CardTitle>
+          <CardTitle>Monthly archive</CardTitle>
           <CardDescription>
-            Daily counters are retained for 400 days. Older days are combined
-            into privacy-safe monthly totals and kept without automatic expiry.
+            A month-by-month view of older analytics. Daily counters are kept
+            for 400 days, then combined into privacy-safe monthly totals that
+            do not expire automatically.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -582,7 +581,7 @@ export default function AnalyticsDashboard() {
               <TableRow>
                 <TableHead>Month</TableHead>
                 <TableHead className="text-right">Page views</TableHead>
-                <TableHead className="text-right">All events</TableHead>
+                <TableHead className="text-right">Recorded events</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -620,8 +619,8 @@ export default function AnalyticsDashboard() {
       </Card>
 
       <DimensionList
-        title="Archived page attention"
-        description="Page-view totals from monthly history older than the daily window, covering up to the last 10 years."
+        title="Archived page views by page"
+        description="Page-view totals grouped by page across the complete monthly archive. This uses the same archived data shown above."
         buckets={longTermPageViews}
         labelForBucket={(bucket) => PAGE_LABELS[bucket] || bucket}
       />
