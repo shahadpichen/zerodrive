@@ -1,0 +1,173 @@
+import { promises as fs } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
+const docsDirectory = path.resolve(scriptDirectory, "../public/docs");
+const categoriesPath = path.join(docsDirectory, "categories.json");
+const generatedDirectory = path.resolve(scriptDirectory, "../src/generated");
+const manifestPath = path.join(generatedDirectory, "docs-manifest.ts");
+
+const requiredFields = [
+  "title",
+  "description",
+  "category",
+  "order",
+  "updated",
+];
+
+function slugify(value) {
+  return value
+    .toLowerCase()
+    .trim()
+    .replace(/[`'’]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+function parseFrontmatter(source, filename) {
+  if (!source.startsWith("---\n")) {
+    throw new Error(`${filename} must begin with Markdown frontmatter`);
+  }
+
+  const end = source.indexOf("\n---\n", 4);
+  if (end === -1) {
+    throw new Error(`${filename} has incomplete Markdown frontmatter`);
+  }
+
+  const values = {};
+  for (const rawLine of source.slice(4, end).split("\n")) {
+    const separator = rawLine.indexOf(":");
+    if (separator === -1) continue;
+    const key = rawLine.slice(0, separator).trim();
+    const value = rawLine.slice(separator + 1).trim();
+    values[key] = value;
+  }
+
+  for (const field of requiredFields) {
+    if (!values[field]) {
+      throw new Error(`${filename} is missing frontmatter field '${field}'`);
+    }
+  }
+
+  const order = Number(values.order);
+  if (!Number.isInteger(order) || order < 1) {
+    throw new Error(`${filename} has an invalid order`);
+  }
+
+  return {
+    metadata: {
+      ...values,
+      order,
+    },
+    body: source.slice(end + 5).trim(),
+  };
+}
+
+function extractSections(body, filename) {
+  const sections = [];
+  const seenIds = new Set();
+
+  for (const line of body.split("\n")) {
+    const match = /^(#{2,3})\s+(.+)$/.exec(line.trim());
+    if (!match) continue;
+
+    const title = match[2].replace(/\s+#+$/, "").trim();
+    const id = slugify(title);
+    if (!id || seenIds.has(id)) {
+      throw new Error(`${filename} contains a duplicate or invalid heading '${title}'`);
+    }
+    seenIds.add(id);
+    sections.push({ id, title, level: match[1].length });
+  }
+
+  if (!sections.some((section) => section.level === 2)) {
+    throw new Error(`${filename} must contain at least one level-two heading`);
+  }
+
+  return sections;
+}
+
+function createSearchText(body) {
+  return body
+    .replace(/```[\s\S]*?```/g, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, " ")
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
+    .replace(/[`*_>#|-]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+async function writeIfChanged(filePath, content) {
+  let current = "";
+  try {
+    current = await fs.readFile(filePath, "utf8");
+  } catch (error) {
+    if (error?.code !== "ENOENT") throw error;
+  }
+  if (current !== content) await fs.writeFile(filePath, content, "utf8");
+}
+
+async function generateManifest() {
+  const categories = JSON.parse(await fs.readFile(categoriesPath, "utf8"));
+  const categoryIds = new Set(categories.map((category) => category.id));
+  const files = (await fs.readdir(docsDirectory))
+    .filter((file) => file.endsWith(".md"))
+    .sort();
+  const pages = [];
+  const slugs = new Set();
+  const categoryOrders = new Set();
+
+  for (const filename of files) {
+    const slug = filename.replace(/\.md$/, "");
+    const source = await fs.readFile(path.join(docsDirectory, filename), "utf8");
+    const { metadata, body } = parseFrontmatter(source, filename);
+
+    if (slugs.has(slug)) throw new Error(`Duplicate docs slug '${slug}'`);
+    if (!categoryIds.has(metadata.category)) {
+      throw new Error(`${filename} uses unknown category '${metadata.category}'`);
+    }
+    const orderKey = `${metadata.category}:${metadata.order}`;
+    if (categoryOrders.has(orderKey)) {
+      throw new Error(`Duplicate docs order '${orderKey}'`);
+    }
+
+    slugs.add(slug);
+    categoryOrders.add(orderKey);
+    pages.push({
+      slug,
+      title: metadata.title,
+      description: metadata.description,
+      category: metadata.category,
+      order: metadata.order,
+      updated: metadata.updated,
+      analyticsKey: metadata.analyticsKey || null,
+      sections: extractSections(body, filename),
+      searchText: createSearchText(body),
+    });
+  }
+
+  const categoryOrder = new Map(
+    categories.map((category, index) => [category.id, index]),
+  );
+  pages.sort(
+    (left, right) =>
+      categoryOrder.get(left.category) - categoryOrder.get(right.category) ||
+      left.order - right.order,
+  );
+
+  const manifest = JSON.stringify({ categories, pages }, null, 2) + "\n";
+  await fs.mkdir(generatedDirectory, { recursive: true });
+  await writeIfChanged(
+    manifestPath,
+    `/* This file is generated by scripts/generate-docs-manifest.mjs. */\n` +
+      `export const docsManifest = ${manifest.trim()} as const;\n`,
+  );
+  console.log(`Generated docs manifest with ${pages.length} pages.`);
+}
+
+generateManifest().catch((error) => {
+  console.error(error instanceof Error ? error.message : error);
+  process.exitCode = 1;
+});

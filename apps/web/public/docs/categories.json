@@ -1,0 +1,37 @@
+[
+  {
+    "id": "getting-started",
+    "title": "Getting started",
+    "description": "Understand the model and protect your first file."
+  },
+  {
+    "id": "storage",
+    "title": "Storage",
+    "description": "Use encrypted files and folders in your Google Drive."
+  },
+  {
+    "id": "sharing",
+    "title": "Sharing",
+    "description": "Send and receive recipient-encrypted files."
+  },
+  {
+    "id": "recovery",
+    "title": "Recovery",
+    "description": "Keep access across reloads, devices, and outages."
+  },
+  {
+    "id": "privacy-security",
+    "title": "Privacy and security",
+    "description": "Understand what ZeroDrive protects and still reveals."
+  },
+  {
+    "id": "troubleshooting",
+    "title": "Troubleshooting",
+    "description": "Resolve common access, storage, and sharing problems."
+  },
+  {
+    "id": "self-hosting",
+    "title": "Self-hosting",
+    "description": "Run and maintain your own ZeroDrive deployment."
+  }
+]

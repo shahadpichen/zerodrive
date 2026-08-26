@@ -51,7 +51,10 @@
     "xlsx": "^0.18.5"
   },
   "scripts": {
+    "docs:generate": "node scripts/generate-docs-manifest.mjs",
+    "prestart": "pnpm docs:generate",
     "start": "react-scripts start",
+    "prebuild": "pnpm docs:generate",
     "build": "react-scripts build",
     "dev": "react-scripts start",
     "typecheck": "tsc --noEmit",

@@ -1,4 +1,13 @@
-<h2 id="sharing-flow">The sharing flow</h2>
+---
+title: How secure sharing works
+description: Understand recipient-only encryption, protected metadata, key changes, and saved shares.
+category: sharing
+order: 1
+updated: 2026-08-26
+analyticsKey: docs_secure_sharing
+---
+
+## The sharing flow
 
 When Alice shares with Bob, Alice does not share her recovery phrase or personal-vault key. Her browser creates a Capsule v1 object with a fresh data key and wraps access to that Capsule for Bob’s public sharing key.
 
@@ -10,7 +19,7 @@ The flow is: Alice chooses a file, ZeroDrive finds Bob’s public sharing key, A
 
 The server helps coordinate the process, but it should not see the readable file or the unencrypted file key.
 
-<h2 id="encrypted-metadata">Encrypted metadata</h2>
+## Encrypted metadata
 
 Metadata is the information around a file. The file content might be private, but the filename can still reveal a lot.
 
@@ -20,7 +29,7 @@ ZeroDrive’s sharing design avoids storing those readable details in the databa
 
 A Capsule v1 share record still needs some information to work. It stores the metadata Capsule, recipient key version and fingerprint, a random-looking storage key, status, expiry, timestamps, and retry state. Historical shares can still contain the older wrapped-key fields, but new Capsule shares do not use a separate database file-key envelope.
 
-<h2 id="key-pinning">Key pinning</h2>
+## Recognizing key changes
 
 Public keys can change over time. Maybe a user recovered their account on a new device, rotated keys, or replaced an old sharing key.
 
@@ -30,7 +39,7 @@ This is similar to secure messaging apps warning you that a contact’s security
 
 Key pinning does not make first contact perfect. The first time Alice shares with Bob, Alice still trusts the directory to return Bob’s real public key. Pinning helps detect unexpected changes after that first contact.
 
-<h2 id="saving-shares">Saving shared files</h2>
+## Saving shared files
 
 In Shared With Me, a recipient can download a decrypted file or save it into personal storage.
 

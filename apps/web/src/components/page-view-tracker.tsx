@@ -1,20 +1,29 @@
 import { useEffect } from "react";
 import { useLocation } from "react-router-dom";
-import type { AnalyticsPageKey } from "@zerodrive/shared-types";
+import {
+  ANALYTICS_PAGE_KEYS,
+  type AnalyticsPageKey,
+} from "@zerodrive/shared-types";
+import { docsPages } from "./docs/docs-content";
 
 const API_BASE_URL =
   process.env.REACT_APP_API_URL || "http://localhost:3001/api";
 
-const DOC_PAGE_KEYS: Readonly<Record<string, AnalyticsPageKey>> = {
-  "how-it-works": "docs_how_it_works",
-  "how-to-use": "docs_how_to_use",
-  "keys-and-recovery": "docs_keys_and_recovery",
-  "secure-sharing": "docs_secure_sharing",
-  "privacy-model": "docs_privacy_model",
-  "security-model": "docs_security_model",
-  "if-zerodrive-disappears": "docs_if_zerodrive_disappears",
-  "self-hosting": "docs_self_hosting",
-};
+const ANALYTICS_PAGE_KEY_SET = new Set<string>(ANALYTICS_PAGE_KEYS);
+
+function isAnalyticsPageKey(
+  value: string | null,
+): value is AnalyticsPageKey {
+  return value !== null && ANALYTICS_PAGE_KEY_SET.has(value);
+}
+
+const DOC_PAGE_KEYS: Readonly<Record<string, AnalyticsPageKey>> =
+  docsPages.reduce<Record<string, AnalyticsPageKey>>((keys, page) => {
+    if (isAnalyticsPageKey(page.analyticsKey)) {
+      keys[page.slug] = page.analyticsKey;
+    }
+    return keys;
+  }, {});
 
 const PRODUCT_PAGE_KEYS: Readonly<Record<string, AnalyticsPageKey>> = {
   "/home": "home",

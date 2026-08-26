@@ -1,4 +1,13 @@
-<h2 id="recipient-lookup">Recipient lookup</h2>
+---
+title: Privacy and stored data
+description: See what ZeroDrive stores, what it deliberately avoids, and what metadata remains.
+category: privacy-security
+order: 1
+updated: 2026-08-26
+analyticsKey: docs_privacy_model
+---
+
+## Recipient lookup
 
 Email addresses are useful because people know how to share with an email. But storing plaintext emails in privacy-sensitive database rows would create an identity map.
 
@@ -8,7 +17,7 @@ ZeroDrive’s model uses a backend-only private lookup value. The backend can te
 
 The non-technical idea is this: ZeroDrive may need an email for a moment, but it should not keep that email written plainly into the share record.
 
-<h2 id="sender-anonymity">Sender anonymity</h2>
+## Sender anonymity
 
 Shared-file rows should not directly store who sent the file. They should not store sender user IDs, sender emails, sender email hashes, sender IP addresses, or sender user agents.
 
@@ -18,7 +27,7 @@ Senders still need to manage shares, so ZeroDrive uses a management capability. 
 
 The database stores only a hash of that capability. The sender’s browser keeps or backs up the real capability privately. When the sender wants to revoke or update a share, the browser proves it has the capability without the share row needing to store sender identity.
 
-<h2 id="analytics">Analytics</h2>
+## Analytics
 
 Analytics can be useful. They help answer questions like “are people using file sharing?” or “did uploads fail more often today?”
 
@@ -28,7 +37,7 @@ The counters exclude account identifiers, emails, IP addresses, filenames, objec
 
 The goal is to learn whether the product works without tracking exactly who did what with which file.
 
-<h2 id="remaining-metadata">Remaining metadata</h2>
+## Remaining metadata
 
 Zero-knowledge file content does not mean zero metadata.
 

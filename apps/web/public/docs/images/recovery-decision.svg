@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1040 390" role="img" aria-labelledby="title description">
+  <title id="title">Recovery decision flow</title>
+  <desc id="description">For a new empty vault create a recovery phrase. For an existing vault use the original phrase. If the phrase does not open the encrypted index, stop before starting fresh.</desc>
+  <style>
+    :root { color-scheme: light dark; }
+    .bg { fill: #fbfaf5; }
+    .box { fill: none; stroke: #aaa49b; stroke-width: 2; }
+    .warn { fill: none; stroke: #c65a4a; stroke-width: 2; }
+    .line { fill: none; stroke: #11100f; stroke-width: 2; marker-end: url(#arrow); }
+    .label { fill: #11100f; font: 600 18px monospace; }
+    .text { fill: #72727c; font: 15px monospace; }
+    @media (prefers-color-scheme: dark) {
+      .bg { fill: #12100f; }
+      .box { stroke: #373331; }
+      .line { stroke: #d6d8df; }
+      .label { fill: #d6d8df; }
+      .text { fill: #9ca1ad; }
+    }
+  </style>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="context-stroke"/>
+    </marker>
+  </defs>
+  <rect class="bg" width="1040" height="390"/>
+  <rect class="box" x="370" y="30" width="300" height="90"/>
+  <text class="label" x="520" y="68" text-anchor="middle">Does this account already</text>
+  <text class="label" x="520" y="94" text-anchor="middle">have ZeroDrive files?</text>
+
+  <rect class="box" x="55" y="215" width="300" height="110"/>
+  <text class="label" x="205" y="258" text-anchor="middle">No — new vault</text>
+  <text class="text" x="205" y="292" text-anchor="middle">Create and save a new phrase</text>
+
+  <rect class="box" x="685" y="215" width="300" height="110"/>
+  <text class="label" x="835" y="258" text-anchor="middle">Yes — existing vault</text>
+  <text class="text" x="835" y="292" text-anchor="middle">Enter the original phrase</text>
+
+  <path class="line" d="M 430 120 C 370 160, 300 170, 245 215"/>
+  <text class="text" x="330" y="170" text-anchor="middle">No</text>
+  <path class="line" d="M 610 120 C 670 160, 740 170, 795 215"/>
+  <text class="text" x="710" y="170" text-anchor="middle">Yes</text>
+
+  <rect class="warn" x="370" y="345" width="300" height="34"/>
+  <text class="text" x="520" y="367" text-anchor="middle">Mismatch? Stop before starting fresh.</text>
+</svg>

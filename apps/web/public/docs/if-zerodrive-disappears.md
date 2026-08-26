@@ -1,4 +1,13 @@
-<h2 id="what-remains">What remains</h2>
+---
+title: If ZeroDrive disappears
+description: Understand what remains recoverable and which files still depend on hosted sharing infrastructure.
+category: recovery
+order: 3
+updated: 2026-08-26
+analyticsKey: docs_if_zerodrive_disappears
+---
+
+## What remains
 
 If the hosted ZeroDrive service disappears, your personal encrypted files should still remain in your Google Drive. The hosted app is the interface, not the final owner of your encrypted personal files.
 
@@ -8,7 +17,7 @@ The important word is “encrypted.” If ZeroDrive disappears, files may still 
 
 Keeping the encrypted file is only half of recovery. Keeping the key material is the other half.
 
-<h2 id="what-you-need">What you need</h2>
+## What you need
 
 Recovery is not just about downloading files from Google Drive. To turn encrypted ZeroDrive files back into readable files, you need matching pieces.
 
@@ -18,7 +27,7 @@ If one of those pieces is missing, recovery may fail. For example, having the en
 
 ZeroDrive also cannot recover files that were deleted directly from Google Drive, corrupted, partially uploaded, or overwritten.
 
-<h2 id="planned-recovery-tooling">Offline recovery tooling</h2>
+## Offline recovery tooling
 
 ZeroDrive publishes the open-source `@zerodrivehq/recovery` CLI for offline recovery. It uses the same Capsule implementation as the web app and does not depend on the hosted ZeroDrive website.
 
@@ -32,7 +41,7 @@ Consult the package’s current README for the exact commands and supported lega
 
 Enter sensitive recovery material only when the tool prompts for it. Do not place a recovery phrase directly in command arguments, shell history, scripts, screenshots, or issue reports.
 
-<h2 id="pending-shares">Pending shares</h2>
+## Pending shares
 
 Pending shared files are different from personal files already stored in your Google Drive.
 
