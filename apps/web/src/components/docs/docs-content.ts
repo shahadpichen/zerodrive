@@ -21,6 +21,7 @@ export interface DocsPage {
   updated: string;
   analyticsKey: string | null;
   sections: readonly DocsSection[];
+  body: string;
   searchText: string;
 }
 
@@ -52,12 +53,6 @@ export function getAdjacentDocsPages(page: DocsPage): {
     previous: index > 0 ? docsPages[index - 1] : undefined,
     next: index < docsPages.length - 1 ? docsPages[index + 1] : undefined,
   };
-}
-
-export function stripDocsFrontmatter(markdown: string): string {
-  if (!markdown.startsWith("---\n")) return markdown;
-  const end = markdown.indexOf("\n---\n", 4);
-  return end === -1 ? markdown : markdown.slice(end + 5).trim();
 }
 
 export function slugifyDocsHeading(value: string): string {

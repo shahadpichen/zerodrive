@@ -12,6 +12,7 @@ describe("privacy-safe page view tracker", () => {
   });
 
   it.each([
+    ["/", "landing"],
     ["/home", "home"],
     ["/storage", "storage"],
     ["/share", "share"],

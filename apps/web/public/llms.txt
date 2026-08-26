@@ -1,0 +1,37 @@
+# ZeroDrive
+
+> ZeroDrive adds browser-based encryption on top of Google Drive. Files are encrypted before upload, recovery access stays with the user, and private sharing is coordinated without storing sender identity in share records.
+
+## Public pages
+- [ZeroDrive](https://zerodrive.xyz/): Browser-encrypted file storage and private sharing on Google Drive.
+- [ZeroDrive documentation](https://zerodrive.xyz/docs): Setup, storage, sharing, recovery, privacy, and security guides.
+- [Privacy Policy](https://zerodrive.xyz/privacy): How ZeroDrive handles Google access and encrypted application data.
+- [Terms of Service](https://zerodrive.xyz/terms): Terms for using ZeroDrive with your own Google Drive.
+
+## Documentation
+- [Common problems](https://zerodrive.xyz/docs/common-problems): Diagnose vault access, encrypted metadata, upload, preview, and sharing failures safely.
+- [Create your sharing identity](https://zerodrive.xyz/docs/create-sharing-identity): Prepare the recipient keys that let other ZeroDrive users send encrypted files to you.
+- [Files, folders, and deletion](https://zerodrive.xyz/docs/files-folders-delete): Organize encrypted files and understand what move and delete actions change.
+- [Fix Google Drive access](https://zerodrive.xyz/docs/drive-permission-problems): Resolve a sign-in that succeeded without the permissions required for encrypted Storage.
+- [Google sign-in and Drive permissions](https://zerodrive.xyz/docs/google-permissions): Understand the permissions ZeroDrive requests and why Google may send an access email.
+- [How secure sharing works](https://zerodrive.xyz/docs/secure-sharing): Understand recipient-only encryption, protected metadata, key changes, and saved shares.
+- [How ZeroDrive works](https://zerodrive.xyz/docs/how-it-works): Understand where your files go, who can read them, and what ZeroDrive coordinates.
+- [If ZeroDrive disappears](https://zerodrive.xyz/docs/if-zerodrive-disappears): Understand what remains recoverable and which files still depend on hosted sharing infrastructure.
+- [Preview and download files](https://zerodrive.xyz/docs/previews-and-downloads): Learn what the browser decrypts, which previews are supported, and when downloading is better.
+- [Privacy and stored data](https://zerodrive.xyz/docs/privacy-model): See what ZeroDrive stores, what it deliberately avoids, and what metadata remains.
+- [Privacy-safe analytics](https://zerodrive.xyz/docs/analytics-privacy): Understand which aggregate counters an operator can see and which identifying data is excluded.
+- [Production deployment checklist](https://zerodrive.xyz/docs/production-deployment): Prepare domains, OAuth, secrets, storage, migrations, email, and operational checks for self-hosting.
+- [Quick start](https://zerodrive.xyz/docs/how-to-use): Sign in, set up Recovery & Access, upload a file, and prepare secure sharing.
+- [Receive a shared file](https://zerodrive.xyz/docs/shared-with-me-guide): Open the shared inbox, download plaintext, or save a fresh encrypted copy to Storage.
+- [Recovery phrase and browser access](https://zerodrive.xyz/docs/keys-and-recovery): Learn what the recovery phrase protects and when this browser needs it again.
+- [Security model and limitations](https://zerodrive.xyz/docs/security-model): Learn what ZeroDrive protects, what it cannot protect, and where trust still remains.
+- [Self-hosting overview](https://zerodrive.xyz/docs/self-hosting): Understand the services, secrets, and responsibilities in a ZeroDrive deployment.
+- [Set up Recovery & Access](https://zerodrive.xyz/docs/recovery-access-setup): Create a recovery phrase or restore the phrase that already protects your encrypted files.
+- [Share a file](https://zerodrive.xyz/docs/share-a-file): Encrypt a device or Storage file for one recipient and finalize its temporary shared copy.
+- [Upload queue and large files](https://zerodrive.xyz/docs/upload-queue-large-files): Understand queued uploads, navigation, completion, retry behavior, and large-file limits.
+- [Upload your first encrypted file](https://zerodrive.xyz/docs/first-upload): Follow the first Storage upload from your device to an encrypted object in Google Drive.
+- [Use encrypted Storage](https://zerodrive.xyz/docs/using-storage): Understand how ZeroDrive organizes encrypted files and folders in your Google Drive.
+- [Use ZeroDrive on another device](https://zerodrive.xyz/docs/another-device): Restore vault access and sharing history without transferring plaintext files or private keys manually.
+
+## Source
+- [GitHub repository](https://github.com/zerodrivehq/zerodrive)

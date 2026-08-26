@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React from "react";
 import Markdown from "markdown-to-jsx";
 import { content } from "../components/landing-page/content";
 import { GoogleAuth } from "../components/landing-page/google-auth";
@@ -6,32 +6,42 @@ import Footer from "../components/landing-page/footer";
 import Header from "../components/landing-page/header";
 import RecoveryPhrase from "../components/landing-page/recovery-phrase";
 import Faq from "../components/landing-page/faq";
+import { SITE_NAME, SITE_ORIGIN } from "../lib/site-metadata";
 
 interface LandingPageProps {
   onAuthChange?: (authenticated: boolean) => void;
 }
 
 function LandingPage({ onAuthChange }: LandingPageProps) {
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
-    return sessionStorage.getItem("isAuthenticated") === "true";
-  });
-
   const handleAuthChange = (authenticated: boolean) => {
-    setIsAuthenticated(authenticated);
-    // Also update parent App.tsx state if callback provided
-    if (onAuthChange) {
-      onAuthChange(authenticated);
-    }
+    onAuthChange?.(authenticated);
   };
 
-  if (isAuthenticated) {
-    return null;
-  }
-
   return (
-    <section className="container mx-auto w-full relative">
+    <section
+      className="container relative mx-auto w-full"
+      itemScope
+      itemType="https://schema.org/WebSite"
+    >
+      <meta itemProp="name" content={SITE_NAME} />
+      <meta itemProp="url" content={SITE_ORIGIN} />
       <Header />
-      <div className="lg:px-[12vw] px-5 mx-auto mt-20 max-w-screen-xl sm:px-6">
+      <div
+        className="mx-auto mt-20 max-w-screen-xl px-5 sm:px-6 lg:px-[12vw]"
+        itemScope
+        itemType="https://schema.org/SoftwareApplication"
+      >
+        <meta itemProp="name" content={SITE_NAME} />
+        <meta itemProp="applicationCategory" content="SecurityApplication" />
+        <meta itemProp="operatingSystem" content="Modern web browsers" />
+        <span
+          itemProp="offers"
+          itemScope
+          itemType="https://schema.org/Offer"
+        >
+          <meta itemProp="price" content="0" />
+          <meta itemProp="priceCurrency" content="USD" />
+        </span>
         <div className="text-center">
           <h1 className="text-2xl md:text-3xl md:w-[70%] mx-auto">
             End-to-End Encrypted File Storage on{" "}
@@ -84,7 +94,7 @@ function LandingPage({ onAuthChange }: LandingPageProps) {
         </div>
       </div> */}
 
-      <div className="lg:px-[12vw] text-center pb-[2vh] px-5 flex flex-col gap-6 mt-[5vh]">
+      <div className="mt-[5vh] flex flex-col gap-6 px-5 pb-[2vh] text-center lg:px-[12vw]">
         {content.map((section, index) => (
           <div key={index} className="mb-[20px]">
             <h2 className="text-2xl text-center mb-[20px]">

@@ -1,3 +1,30 @@
-# https://www.robotstxt.org/robotstxt.html
 User-agent: *
-Disallow:
+Allow: /
+Disallow: /home
+Disallow: /storage
+Disallow: /share
+Disallow: /shared-with-me
+Disallow: /recovery-access
+Disallow: /key-management
+Disallow: /admin/
+Disallow: /oauth/
+
+User-agent: OAI-SearchBot
+Allow: /
+
+User-agent: ChatGPT-User
+Allow: /
+
+User-agent: GPTBot
+Disallow: /
+
+User-agent: Google-Extended
+Disallow: /
+
+User-agent: CCBot
+Disallow: /
+
+User-agent: ClaudeBot
+Disallow: /
+
+Sitemap: https://zerodrive.xyz/sitemap.xml

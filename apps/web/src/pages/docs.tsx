@@ -16,14 +16,6 @@ import {
 } from "../components/docs/docs-content";
 
 function Docs() {
-  React.useEffect(() => {
-    const previousTitle = document.title;
-    document.title = "Documentation · ZeroDrive";
-    return () => {
-      document.title = previousTitle;
-    };
-  }, []);
-
   return (
     <main className="container relative mx-auto w-full">
       <Header />

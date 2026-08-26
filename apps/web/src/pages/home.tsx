@@ -442,7 +442,7 @@ function HomeContent() {
         </button>
         <div className="flex items-center gap-3">
           <a
-            href="https://github.com/shahadpichen/zerodrive"
+            href="https://github.com/zerodrivehq/zerodrive"
             target="_blank"
             rel="noopener noreferrer"
             className="hidden text-sm font-medium hover:underline sm:inline-block"

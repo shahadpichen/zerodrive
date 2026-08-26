@@ -47,23 +47,42 @@ const FAQS: { q: string; a: React.ReactNode }[] = [
 
 function Faq() {
   return (
-    <div className="text-center">
+    <section
+      className="text-center"
+      itemScope
+      itemType="https://schema.org/FAQPage"
+    >
       <h2 className="mb-[20px] text-2xl text-center">Frequently asked</h2>
 
       <div className="mx-auto md:w-[85%] border text-left">
         {FAQS.map((item, i) => (
-          <div key={i} className="border-b px-4 py-4 last:border-b-0">
+          <div
+            key={i}
+            className="border-b px-4 py-4 last:border-b-0"
+            itemScope
+            itemProp="mainEntity"
+            itemType="https://schema.org/Question"
+          >
             <div className="flex gap-2.5 text-[0.92rem] font-medium">
               <span className="text-[hsl(var(--link))]">+</span>
-              <span>{item.q}</span>
+              <span itemProp="name">{item.q}</span>
             </div>
-            <p className="mt-2 pl-[22px] text-sm font-light leading-relaxed">
-              {item.a}
-            </p>
+            <div
+              itemScope
+              itemProp="acceptedAnswer"
+              itemType="https://schema.org/Answer"
+            >
+              <p
+                className="mt-2 pl-[22px] text-sm font-light leading-relaxed"
+                itemProp="text"
+              >
+                {item.a}
+              </p>
+            </div>
           </div>
         ))}
       </div>
-    </div>
+    </section>
   );
 }
 
