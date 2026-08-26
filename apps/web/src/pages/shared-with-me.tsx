@@ -685,6 +685,16 @@ const SharedWithMePage: React.FC = () => {
                           ? ` · Expires ${file.expiresAt.toLocaleDateString()}`
                           : ""}
                       </p>
+                      {file.message?.trim() && (
+                        <div className="mt-3 border-l-2 border-primary/50 pl-3">
+                          <p className="text-[0.65rem] font-medium uppercase tracking-[0.14em] text-muted-foreground">
+                            Protected message
+                          </p>
+                          <p className="mt-1 whitespace-pre-wrap break-words text-xs leading-relaxed">
+                            {file.message.trim()}
+                          </p>
+                        </div>
+                      )}
                     </div>
                   </div>
 

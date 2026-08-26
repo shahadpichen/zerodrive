@@ -5,6 +5,7 @@ import SharedWithMePage from "../../pages/shared-with-me";
 import { getUserEmail } from "../../utils/authService";
 import apiClient from "../../utils/apiClient";
 import {
+  decryptSharedMetadata,
   decryptSharedFile,
   downloadEncryptedFile,
 } from "../../utils/fileSharing";
@@ -12,7 +13,10 @@ import { getUserKeyPair, getUserKeyPairs } from "../../utils/keyStorage";
 import { getMnemonic } from "../../utils/mnemonicManager";
 import { downloadEncryptedRsaKeyFromDrive } from "../../utils/gdriveKeyStorage";
 import { fetchAndStoreFileMetadata } from "../../utils/dexieDB";
-import { openSharingKeyBackupCapsule } from "../../utils/capsuleAdapter";
+import {
+  inspectSharedMetadataCapsule,
+  openSharingKeyBackupCapsule,
+} from "../../utils/capsuleAdapter";
 import { useOptionalVaultData } from "../../contexts/vault-data-context";
 import { useUploadQueue } from "../../contexts/upload-queue-context";
 import { toast as sonnerToast } from "sonner";
@@ -40,6 +44,7 @@ jest.mock("../../utils/apiClient", () => ({
 
 jest.mock("../../utils/fileSharing", () => ({
   decryptSharedFile: jest.fn(),
+  decryptSharedMetadata: jest.fn(),
   downloadEncryptedFile: jest.fn(),
 }));
 
@@ -71,6 +76,7 @@ jest.mock("../../utils/rsaKeyRecovery", () => ({
 }));
 
 jest.mock("../../utils/capsuleAdapter", () => ({
+  inspectSharedMetadataCapsule: jest.fn(),
   openSharingKeyBackupCapsule: jest.fn(),
 }));
 
@@ -122,6 +128,13 @@ const mockDownloadEncryptedFile = downloadEncryptedFile as jest.MockedFunction<
 const mockDecryptSharedFile = decryptSharedFile as jest.MockedFunction<
   typeof decryptSharedFile
 >;
+const mockDecryptSharedMetadata = decryptSharedMetadata as jest.MockedFunction<
+  typeof decryptSharedMetadata
+>;
+const mockInspectSharedMetadataCapsule =
+  inspectSharedMetadataCapsule as jest.MockedFunction<
+    typeof inspectSharedMetadataCapsule
+  >;
 const mockUseUploadQueue = useUploadQueue as jest.MockedFunction<
   typeof useUploadQueue
 >;
@@ -155,7 +168,7 @@ function renderPage() {
   );
 }
 
-function showFiles(files = [databaseFile]) {
+function showFiles(files: any[] = [databaseFile]) {
   (apiClient.sharedFiles.getForUser as jest.Mock).mockResolvedValue({
     files,
     total: files.length,
@@ -202,6 +215,19 @@ describe("SharedWithMePage", () => {
       decryptedFile: new Blob(["plaintext"], { type: "application/pdf" }),
       fileName: "project-brief.pdf",
       mimeType: "application/pdf",
+    });
+    mockInspectSharedMetadataCapsule.mockReturnValue([
+      {
+        keyVersion: 1,
+        fingerprint: "a".repeat(64),
+        wrappedKeyLength: 256,
+      },
+    ]);
+    mockDecryptSharedMetadata.mockResolvedValue({
+      version: 1,
+      name: "project-brief.pdf",
+      mimeType: "application/pdf",
+      bindingId: "4df72578-7567-4bac-8535-6c3e22eaee47",
     });
     mockEnqueueUploads.mockReturnValue(["upload-1"]);
     mockWaitForTask.mockResolvedValue({
@@ -326,6 +352,35 @@ describe("SharedWithMePage", () => {
     expect(
       screen.getByText(/download saves plaintext to this device/i),
     ).toBeInTheDocument();
+  });
+
+  it("shows the personal message after encrypted metadata is opened", async () => {
+    mockDecryptSharedMetadata.mockResolvedValue({
+      version: 1,
+      name: "project-brief.pdf",
+      mimeType: "application/pdf",
+      message: "Here is the document we discussed.",
+      bindingId: "4df72578-7567-4bac-8535-6c3e22eaee47",
+    });
+    showFiles([
+      {
+        ...databaseFile,
+        content_format: "capsule_v1",
+        file_name: null,
+        mime_type: null,
+        encrypted_file_key: null,
+        encrypted_metadata: "encrypted-metadata-capsule",
+        recipient_key_version: 1,
+        recipient_key_fingerprint: "a".repeat(64),
+      },
+    ]);
+
+    renderPage();
+
+    expect(
+      await screen.findByText("Here is the document we discussed."),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Protected message")).toBeInTheDocument();
   });
 
   it("filters the inbox by filename", async () => {

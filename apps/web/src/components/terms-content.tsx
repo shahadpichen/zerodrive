@@ -27,7 +27,17 @@ export const termsOfService = [
   {
     heading: "File sharing",
     content:
-      "ZeroDrive sharing is designed to encrypt a shared file for the selected recipient. Share records should not store a sender user ID, sender email, or plaintext recipient email. You are responsible for choosing the correct recipient and for understanding that email notifications or invitations may involve an email provider processing the recipient address.",
+      "ZeroDrive sharing is designed to encrypt a shared file for the selected recipient. Share records should not store a sender user ID, sender email, or plaintext recipient email. A ZeroDrive notification only means that encrypted content was prepared for the account that received it; it does not mean ZeroDrive knows or has verified the sender, the file, the filename, the message, or the sender's purpose. You are responsible for choosing the correct recipient and for understanding that email notifications or invitations may involve an email provider processing the recipient address.",
+  },
+  {
+    heading: "Shared content and recipient safety",
+    content:
+      "People can use ZeroDrive to share many kinds of files. Because shared files, filenames, and messages are encrypted for the recipient, ZeroDrive cannot ordinarily inspect, review, scan, verify, approve, or endorse them before the recipient opens them. The person sharing content is responsible for having the right to share it and for ensuring that it is lawful, safe, and does not infringe another person's rights. ZeroDrive must not be used to distribute illegal, abusive, malicious, deceptive, harmful, or rights-infringing content.\n\nReceiving a ZeroDrive share does not require you to open, download, or save it. If you do not recognize or trust a share, leave it unopened and allow it to expire. You may also report suspicious, illegal, abusive, malicious, or harmful use to ZeroDrive through a published project contact channel. Recipients are responsible for deciding whether they trust the content they choose to open. An email or inbox entry from ZeroDrive is not a statement that the sender or content is safe. Use appropriate device security and caution, especially for unexpected files.\n\nTo the maximum extent permitted by applicable law, ZeroDrive and its maintainers are not responsible merely because user-provided encrypted content was sent to or received by an account, or for loss, damage, disputes, or claims caused by sending, receiving, opening, downloading, saving, or relying on that content. Nothing in these Terms excludes liability or legal rights that cannot lawfully be excluded.",
+  },
+  {
+    heading: "Reports and action on prohibited content",
+    content:
+      "If potentially illegal, abusive, or harmful use is reported, ZeroDrive may review the information supplied in the report and may restrict or remove access to an encrypted share, encrypted object, account capability, or hosted feature when reasonably necessary to enforce these Terms, protect users, respond to a valid legal request, or comply with applicable law. Because ZeroDrive is not designed to decrypt shared content, our ability to assess a report may be limited. Reporting a share does not require you to decrypt or open it. A report should include only the information needed to identify and explain the problem, and must never include your recovery phrase or private key material.",
   },
   {
     heading: "Your content",

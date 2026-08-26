@@ -22,7 +22,12 @@ export const privacyPolicy = [
   {
     heading: "Sharing and recipient privacy",
     content:
-      "When you share a file, your browser encrypts it for the chosen recipient before upload. The sharing database stores encrypted share data and privacy-safe lookup identifiers. Share records are designed not to store a sender user ID, sender email, plaintext recipient email, Google account ID, IP address, user agent, request ID, or session ID. Email delivery providers may still process recipient email addresses when notification or invitation emails are sent.",
+      "When you share a file, your browser encrypts it for the chosen recipient before upload. The sharing database stores encrypted share data and privacy-safe lookup identifiers. Share records are designed not to store a sender user ID, sender email, plaintext recipient email, Google account ID, IP address, user agent, request ID, or session ID. This also means a recipient should not assume that ZeroDrive can identify or verify who prepared a share. Email delivery providers may still process recipient email addresses when notification or invitation emails are sent.",
+  },
+  {
+    heading: "Encrypted content and abuse reports",
+    content:
+      "ZeroDrive is not designed to inspect, classify, scan, or understand the plaintext contents, filenames, or messages inside an encrypted share. The hosted service therefore cannot ordinarily determine what a shared file contains before the recipient decrypts it. You can leave an unexpected share unopened; reporting it to ZeroDrive does not require you to decrypt, download, or save it.\n\nIf you contact ZeroDrive about suspected illegal, abusive, malicious, or harmful use, we may process the information you voluntarily provide in the report, such as your contact details, a privacy-safe share reference, screenshots, or a description of the problem. Do not send your recovery phrase, private keys, passwords, access tokens, or an unencrypted copy of a private file in a report. Report information may be used to investigate the concern, protect users, enforce the Terms, respond to lawful requests, and restrict or remove access to an encrypted share or hosted feature where technically and legally possible. It may be retained only for as long as reasonably needed for those purposes and applicable legal obligations.",
   },
   {
     heading: "Account and legal records",
