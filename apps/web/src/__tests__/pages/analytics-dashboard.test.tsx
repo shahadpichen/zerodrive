@@ -7,7 +7,9 @@ import {
   within,
 } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
-import AnalyticsDashboard from "../../pages/analytics-dashboard";
+import AnalyticsDashboard, {
+  analyticsPageLabel,
+} from "../../pages/analytics-dashboard";
 import apiClient from "../../utils/apiClient";
 
 jest.mock("../../utils/apiClient", () => ({
@@ -23,6 +25,15 @@ jest.mock("sonner", () => ({
 }));
 
 describe("admin analytics dashboard", () => {
+  it("labels generated documentation analytics buckets", () => {
+    expect(analyticsPageLabel("docs_security_model")).toBe(
+      "Docs · Security model and limitations",
+    );
+    expect(analyticsPageLabel("docs_google_permissions")).toBe(
+      "Docs · Google sign-in and Drive permissions",
+    );
+  });
+
   beforeEach(() => {
     jest.clearAllMocks();
     (apiClient.get as jest.Mock).mockImplementation((endpoint: string) => {
@@ -144,7 +155,9 @@ describe("admin analytics dashboard", () => {
     await waitFor(() => {
       expect(screen.getByText("upload")).toBeInTheDocument();
       expect(screen.getByText("< 5")).toBeInTheDocument();
-      expect(screen.getByText("Docs · Security model")).toBeInTheDocument();
+      expect(
+        screen.getByText("Docs · Security model and limitations"),
+      ).toBeInTheDocument();
     });
     expect(screen.getByText("Monthly archive")).toBeInTheDocument();
     expect(screen.getByText("January 2025")).toBeInTheDocument();

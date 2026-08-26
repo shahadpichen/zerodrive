@@ -1,4 +1,13 @@
-<h2 id="first-time-setup">First-time setup</h2>
+---
+title: Quick start
+description: Sign in, set up Recovery & Access, upload a file, and prepare secure sharing.
+category: getting-started
+order: 2
+updated: 2026-08-26
+analyticsKey: docs_how_to_use
+---
+
+## First-time setup
 
 The first setup is the most important part of using ZeroDrive. You sign in with Google, create your encryption key, and save the recovery phrase. After that, the app should feel close to a normal file manager.
 
@@ -8,9 +17,9 @@ That may feel stricter than normal apps, but it is also the point of ZeroDrive. 
 
 For a new user, the safe path is simple: sign in with Google, create a new key, write down or save the 12-word recovery phrase, and only then start uploading important files.
 
-If you want to receive encrypted shares from other people, enable file sharing too. That creates the sharing keys your account needs so other users can prepare encrypted files for you.
+If you want to receive encrypted shares from other people, create your sharing identity too. This creates the recipient keys other users need to prepare encrypted files specifically for you.
 
-<h2 id="upload-and-download">Upload and download</h2>
+## Upload and download
 
 Use Storage for your own private files. Uploading means “lock this file and put the locked version in Google Drive.” Downloading means “get the locked file back and unlock it in my browser.”
 
@@ -20,9 +29,9 @@ When you upload, choose or drag a file into Storage. ZeroDrive creates a Capsule
 
 If decryption fails, the app is not refusing arbitrarily. It usually means the current browser does not have the right key, the recovery phrase is wrong, or the encrypted file was changed outside ZeroDrive.
 
-<h2 id="share-and-receive">Share and receive</h2>
+## Share and receive
 
-Sharing is like preparing a locked package for one specific person. Before you can send it, ZeroDrive needs the recipient to have sharing enabled so the app knows how to lock the package for them.
+Sharing is like preparing a locked package for one specific person. Before you can send it, the recipient needs a ZeroDrive sharing identity so your browser knows how to lock the package for them.
 
 To send a file, go to Share Files, choose a local file or a file already in your storage, enter the recipient email, and let ZeroDrive prepare the encrypted share. The recipient email is used to find the recipient’s sharing key. It should not become a plain permanent label inside the shared-file database record.
 
@@ -30,7 +39,7 @@ To receive a file, go to Shared With Me. If your key is not active in the curren
 
 When receiving a file, you can download it or save it into your own Storage. Saving creates your own encrypted copy in your Google Drive. It does not move the sender’s original file and does not reveal the sender’s keys.
 
-<h2 id="common-problems">Common problems</h2>
+## Common problems
 
 Most problems in ZeroDrive come from one of three things: the wrong key, the wrong Google account, or a recipient who has not finished setting up sharing.
 
@@ -38,6 +47,6 @@ If ZeroDrive says the key is missing, use the same 12-word recovery phrase you s
 
 If decryption fails, the recovery phrase may be wrong, the encrypted file may have been changed outside ZeroDrive, or the file may belong to a different account or key.
 
-If a recipient cannot receive a share, they may not have enabled sharing yet, or the email you entered may not match the account they use with ZeroDrive.
+If a recipient cannot receive a share, they may not have created a sharing identity yet, or the email you entered may not match the account they use with ZeroDrive.
 
 The important thing to remember is that ZeroDrive cannot bypass encryption to “just open the file anyway.” If the key is wrong, the safe behavior is to fail.

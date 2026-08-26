@@ -33,6 +33,7 @@ import {
   TableHeader,
   TableRow,
 } from "../components/ui/table";
+import { docsPages } from "../components/docs/docs-content";
 
 const utcTodayParts = new Date()
   .toISOString()
@@ -44,6 +45,12 @@ const today = startOfDay(
 );
 const initialRange: DateRange = { from: subDays(today, 29), to: today };
 
+const DOCS_PAGE_LABELS = Object.fromEntries(
+  docsPages
+    .filter((page) => page.analyticsKey)
+    .map((page) => [page.analyticsKey, `Docs · ${page.title}`]),
+);
+
 const PAGE_LABELS: Readonly<Record<string, string>> = {
   landing: "Landing page",
   home: "Home",
@@ -52,17 +59,14 @@ const PAGE_LABELS: Readonly<Record<string, string>> = {
   shared_with_me: "Shared with me",
   recovery_access: "Recovery & Access",
   docs: "Docs overview",
-  docs_how_it_works: "Docs · How it works",
-  docs_how_to_use: "Docs · How to use",
-  docs_keys_and_recovery: "Docs · Keys and recovery",
-  docs_secure_sharing: "Docs · Secure sharing",
-  docs_privacy_model: "Docs · Privacy model",
-  docs_security_model: "Docs · Security model",
-  docs_if_zerodrive_disappears: "Docs · If ZeroDrive disappears",
-  docs_self_hosting: "Docs · Self-hosting",
+  ...DOCS_PAGE_LABELS,
   privacy: "Privacy Policy",
   terms: "Terms of Service",
 };
+
+export function analyticsPageLabel(bucket: string): string {
+  return PAGE_LABELS[bucket] || bucket;
+}
 
 function formatDate(date: string): string {
   return new Intl.DateTimeFormat(undefined, {
@@ -431,7 +435,7 @@ export default function AnalyticsDashboard() {
           title="Page views"
           description="Aggregate visits to reviewed product and documentation pages. No visitor, session, raw URL, query string, or referrer is stored."
           buckets={dimensionsByName.get("page_view:page") || []}
-          labelForBucket={(bucket) => PAGE_LABELS[bucket] || bucket}
+          labelForBucket={analyticsPageLabel}
         />
       </section>
 
@@ -620,7 +624,7 @@ export default function AnalyticsDashboard() {
         title="Archived page views by page"
         description="Page-view totals grouped by page across the complete monthly archive. This uses the same archived data shown above."
         buckets={longTermPageViews}
-        labelForBucket={(bucket) => PAGE_LABELS[bucket] || bucket}
+        labelForBucket={analyticsPageLabel}
       />
 
       <section className="border-2 px-6 py-7 md:px-8">

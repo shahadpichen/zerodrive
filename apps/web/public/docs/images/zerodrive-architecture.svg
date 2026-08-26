@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1120 420" role="img" aria-labelledby="title description">
+  <title id="title">ZeroDrive personal storage and sharing architecture</title>
+  <desc id="description">The browser encrypts personal files before Google Drive and encrypts shared copies before object storage. The backend coordinates authentication and recipient routing without receiving plaintext.</desc>
+  <style>
+    :root { color-scheme: light dark; }
+    .bg { fill: #fbfaf5; }
+    .box { fill: none; stroke: #aaa49b; stroke-width: 2; }
+    .line { fill: none; stroke: #11100f; stroke-width: 2; marker-end: url(#arrow); }
+    .muted { fill: #72727c; font: 16px monospace; }
+    .label { fill: #11100f; font: 600 20px monospace; }
+    .small { fill: #11100f; font: 15px monospace; }
+    @media (prefers-color-scheme: dark) {
+      .bg { fill: #12100f; }
+      .box { stroke: #373331; }
+      .line { stroke: #d6d8df; }
+      .muted { fill: #9ca1ad; }
+      .label, .small { fill: #d6d8df; }
+    }
+  </style>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="context-stroke"/>
+    </marker>
+  </defs>
+  <rect class="bg" width="1120" height="420"/>
+  <rect class="box" x="40" y="88" width="250" height="240"/>
+  <text class="label" x="165" y="135" text-anchor="middle">Your browser</text>
+  <text class="small" x="165" y="187" text-anchor="middle">Readable file</text>
+  <text class="small" x="165" y="222" text-anchor="middle">Recovery access</text>
+  <text class="small" x="165" y="257" text-anchor="middle">Encrypt / decrypt</text>
+
+  <rect class="box" x="440" y="35" width="260" height="145"/>
+  <text class="label" x="570" y="82" text-anchor="middle">Google Drive</text>
+  <text class="muted" x="570" y="120" text-anchor="middle">Personal .zd objects</text>
+  <text class="muted" x="570" y="149" text-anchor="middle">Hidden encrypted index</text>
+
+  <rect class="box" x="440" y="240" width="260" height="145"/>
+  <text class="label" x="570" y="287" text-anchor="middle">ZeroDrive API</text>
+  <text class="muted" x="570" y="325" text-anchor="middle">Login and recipient lookup</text>
+  <text class="muted" x="570" y="354" text-anchor="middle">Share lifecycle</text>
+
+  <rect class="box" x="830" y="240" width="250" height="145"/>
+  <text class="label" x="955" y="287" text-anchor="middle">Object storage</text>
+  <text class="muted" x="955" y="325" text-anchor="middle">Recipient-encrypted</text>
+  <text class="muted" x="955" y="354" text-anchor="middle">temporary shares</text>
+
+  <path class="line" d="M 290 140 C 350 140, 375 108, 440 108"/>
+  <text class="small" x="365" y="92" text-anchor="middle">encrypted personal file</text>
+  <path class="line" d="M 290 278 C 350 278, 375 312, 440 312"/>
+  <text class="small" x="362" y="344" text-anchor="middle">coordination only</text>
+  <path class="line" d="M 700 312 L 830 312"/>
+  <text class="small" x="765" y="294" text-anchor="middle">encrypted share</text>
+</svg>

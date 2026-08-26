@@ -1,6 +1,15 @@
-<h2 id="mental-model">The simple mental model</h2>
+---
+title: How ZeroDrive works
+description: Understand where your files go, who can read them, and what ZeroDrive coordinates.
+category: getting-started
+order: 1
+updated: 2026-08-26
+analyticsKey: docs_how_it_works
+---
 
-ZeroDrive is easiest to understand if you imagine every file being placed inside a locked box before it leaves your computer. Google Drive or ZeroDrive storage may hold the locked box, but they should not hold the key that opens it.
+## The simple mental model
+
+ZeroDrive is easiest to understand if you imagine every file being placed inside a locked box before it leaves your computer. Google Drive holds encrypted personal files. A ZeroDrive deployment's object storage holds temporary recipient-encrypted shares. Neither should hold the private key that opens the file.
 
 This is different from many normal cloud storage apps. Usually, a file is uploaded first and then the provider protects it inside their own systems. ZeroDrive tries to protect the file earlier. Your browser turns the readable file into an encrypted file before storage receives it.
 
@@ -8,7 +17,11 @@ So the simple version is this: your browser locks and unlocks files, storage hol
 
 Your browser is the most trusted part of this model because it is where encryption and decryption happen. When a file becomes readable, it becomes readable inside your browser after your key is available. That is why your recovery phrase, browser session, and device security matter so much.
 
-<h2 id="personal-files">Personal files</h2>
+![ZeroDrive architecture showing browser encryption before Google Drive and shared object storage](/docs/images/zerodrive-architecture.svg)
+
+*Personal files go to Google Drive as encrypted objects. Shared copies use separate recipient-encrypted object storage while the API coordinates delivery.*
+
+## Personal files
 
 When you add a file to Storage, ZeroDrive handles the original file in your browser first. The app writes a Capsule v1 encrypted object locally and uploads only that encrypted object to your Google Drive.
 
@@ -20,7 +33,7 @@ The original filename, file type, and content are authenticated inside the encry
 
 The upload flow is: choose a file, create the Capsule in the browser, upload it, and update the encrypted vault index. The download flow is the reverse: fetch the Capsule, verify and decrypt it in the browser, then show or save the readable version.
 
-<h2 id="shared-files">Shared files</h2>
+## Shared files
 
 Shared files use a different storage path from personal files. When you share a file, ZeroDrive creates a recipient-encrypted Capsule intended for that recipient. That shared Capsule is stored in object storage through backend-authorized upload and download links.
 
@@ -30,7 +43,7 @@ For new shares, the database stores a small recipient-encrypted metadata Capsule
 
 This is why sharing can work without the server reading the file. The server coordinates the delivery. The browser does the private encryption and decryption work.
 
-<h2 id="share-lifecycle">Share lifecycle</h2>
+## Share lifecycle
 
 A shared file moves through a small lifecycle, like a package being prepared, delivered, and eventually cleaned up.
 

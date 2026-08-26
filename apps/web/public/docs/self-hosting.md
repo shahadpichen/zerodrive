@@ -1,4 +1,13 @@
-<h2 id="what-you-run">What you run</h2>
+---
+title: Self-hosting overview
+description: Understand the services, secrets, and responsibilities in a ZeroDrive deployment.
+category: self-hosting
+order: 1
+updated: 2026-08-26
+analyticsKey: docs_self_hosting
+---
+
+## What you run
 
 Self-hosting means you run the ZeroDrive stack yourself instead of depending on the hosted service.
 
@@ -10,7 +19,7 @@ For local development, `pnpm infra:up` starts PostgreSQL, MinIO, and pgAdmin. Th
 
 For production, you need proper domains, HTTPS, backups, monitoring, and a secure place to store secrets.
 
-<h2 id="environment">Environment</h2>
+## Environment
 
 Use the repository’s current `.env.example` files as the source of truth.
 
@@ -22,7 +31,7 @@ The main frontend value is `REACT_APP_API_URL`. `REACT_APP_RSA_PBKDF2_SALT` is n
 
 Never commit real production values to GitHub.
 
-<h2 id="secret-management">Secret management</h2>
+## Secret management
 
 Secret management is where many self-hosted apps become unsafe. A strong encryption design can still fail if production secrets are weak, reused, committed to GitHub, or logged accidentally.
 
@@ -32,7 +41,7 @@ Keep the directory HMAC secret outside PostgreSQL. If an attacker only gets a da
 
 Rotating the directory secret later requires a planned identifier migration. Do not change it casually in production.
 
-<h2 id="same-privacy-rules">Same privacy rules</h2>
+## Keep the same privacy boundaries
 
 Self-hosting changes who controls the infrastructure. It does not mean the backend should receive plaintext files, recovery phrases, private keys, or unencrypted file keys.
 

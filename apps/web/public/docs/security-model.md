@@ -1,4 +1,13 @@
-<h2 id="trust-boundary">Trust boundary</h2>
+---
+title: Security model and limitations
+description: Learn what ZeroDrive protects, what it cannot protect, and where trust still remains.
+category: privacy-security
+order: 2
+updated: 2026-08-26
+analyticsKey: docs_security_model
+---
+
+## Trust boundary
 
 ZeroDrive has an important boundary: your browser is where readable files should appear, and the server is where coordination should happen.
 
@@ -10,7 +19,7 @@ The server may know operational information such as session state, that a share 
 
 The server should not know your recovery phrase, Capsule data keys, private sharing key, plaintext files, plaintext filenames, plaintext messages, or unencrypted shared-file keys.
 
-<h2 id="protects-against">What it protects against</h2>
+## What it protects against
 
 ZeroDrive is built to reduce trust in cloud storage and in the ZeroDrive backend. It cannot remove all risk, but it can make important attacks much harder.
 
@@ -24,7 +33,7 @@ It protects against a database dump immediately revealing plaintext shared-file 
 
 It also protects against cross-user access problems when endpoints correctly use the authenticated account instead of trusting caller-supplied identifiers.
 
-<h2 id="limitations">Limitations</h2>
+## Limitations
 
 Some risks are outside what encryption can solve.
 

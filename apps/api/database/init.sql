@@ -223,7 +223,15 @@ CREATE TABLE IF NOT EXISTS analytics_daily_dimensions (
                 'docs_how_to_use', 'docs_keys_and_recovery',
                 'docs_secure_sharing', 'docs_privacy_model',
                 'docs_security_model', 'docs_if_zerodrive_disappears',
-                'docs_self_hosting', 'privacy', 'terms'
+                'docs_self_hosting', 'docs_google_permissions',
+                'docs_recovery_access_setup', 'docs_first_upload',
+                'docs_using_storage', 'docs_upload_queue',
+                'docs_previews_downloads', 'docs_files_folders_delete',
+                'docs_create_sharing_identity', 'docs_share_file',
+                'docs_shared_with_me', 'docs_another_device',
+                'docs_analytics_privacy', 'docs_common_problems',
+                'docs_drive_permission_problems',
+                'docs_production_deployment', 'privacy', 'terms'
             )
         )
     ),
@@ -317,7 +325,15 @@ CREATE TABLE IF NOT EXISTS analytics_monthly_dimensions (
                 'docs_how_to_use', 'docs_keys_and_recovery',
                 'docs_secure_sharing', 'docs_privacy_model',
                 'docs_security_model', 'docs_if_zerodrive_disappears',
-                'docs_self_hosting', 'privacy', 'terms'
+                'docs_self_hosting', 'docs_google_permissions',
+                'docs_recovery_access_setup', 'docs_first_upload',
+                'docs_using_storage', 'docs_upload_queue',
+                'docs_previews_downloads', 'docs_files_folders_delete',
+                'docs_create_sharing_identity', 'docs_share_file',
+                'docs_shared_with_me', 'docs_another_device',
+                'docs_analytics_privacy', 'docs_common_problems',
+                'docs_drive_permission_problems',
+                'docs_production_deployment', 'privacy', 'terms'
             )
         )
     ),

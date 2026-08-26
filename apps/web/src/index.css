@@ -164,3 +164,67 @@ u {
   color: hsl(var(--foreground));
   font-weight: 500;
 }
+
+.docs-article h2 {
+  scroll-margin-top: 2rem;
+  margin: 3.5rem 0 1rem;
+  max-width: none;
+  text-align: left;
+  font-size: 1.5rem;
+}
+
+.docs-article h3 {
+  scroll-margin-top: 2rem;
+  margin-top: 2.25rem;
+  font-size: 1.05rem;
+}
+
+.docs-article p,
+.docs-article li {
+  line-height: 1.9;
+}
+
+.docs-article a {
+  color: hsl(var(--link));
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
+.docs-article strong {
+  color: hsl(var(--foreground));
+  font-weight: 600;
+}
+
+.docs-article blockquote {
+  margin-top: 1.5rem;
+  border-left: 2px solid hsl(var(--border));
+  padding-left: 1.25rem;
+}
+
+.docs-article img {
+  margin-top: 2rem;
+  width: 100%;
+  border: 1px solid hsl(var(--border));
+}
+
+.docs-article img + em {
+  display: block;
+  margin-top: 0.75rem;
+  color: hsl(var(--muted-foreground));
+  font-size: 0.8rem;
+  line-height: 1.6;
+}
+
+.docs-article pre {
+  margin-top: 1.5rem;
+  overflow-x: auto;
+  border: 1px solid hsl(var(--border));
+  background: hsl(var(--muted) / 0.35);
+  padding: 1rem;
+}
+
+.docs-article pre code {
+  border: 0;
+  background: transparent;
+  padding: 0;
+}
