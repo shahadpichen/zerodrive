@@ -32,7 +32,7 @@ function Header() {
         </button>
 
         <a
-          href="https://github.com/shahadpichen/zerodrive"
+          href="https://github.com/zerodrivehq/zerodrive"
           target="_blank"
           rel="noopener noreferrer"
           className="text-sm font-medium hover:underline"
@@ -61,7 +61,7 @@ function Header() {
 
             <DropdownMenuItem asChild>
               <a
-                href="https://github.com/shahadpichen/zerodrive"
+                href="https://github.com/zerodrivehq/zerodrive"
                 target="_blank"
                 rel="noopener noreferrer"
               >

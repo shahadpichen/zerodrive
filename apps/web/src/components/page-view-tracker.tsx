@@ -26,6 +26,7 @@ const DOC_PAGE_KEYS: Readonly<Record<string, AnalyticsPageKey>> =
   }, {});
 
 const PRODUCT_PAGE_KEYS: Readonly<Record<string, AnalyticsPageKey>> = {
+  "/": "landing",
   "/home": "home",
   "/storage": "storage",
   "/share": "share",

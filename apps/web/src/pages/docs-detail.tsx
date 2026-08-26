@@ -11,8 +11,8 @@ import {
   getDocsCategory,
   getDocsPage,
   slugifyDocsHeading,
-  stripDocsFrontmatter,
 } from "../components/docs/docs-content";
+import { SITE_NAME, SITE_ORIGIN } from "../lib/site-metadata";
 import {
   useActiveDocsHeading,
   type RegisterDocsHeading,
@@ -55,55 +55,16 @@ function DocsHeading({
 function DocsDetail() {
   const { slug } = useParams();
   const page = getDocsPage(slug);
-  const [markdown, setMarkdown] = React.useState("");
-  const [isLoading, setIsLoading] = React.useState(true);
-  const [loadError, setLoadError] = React.useState(false);
   const sectionIds = React.useMemo(
     () => page?.sections.map((section) => section.id) || [],
     [page],
   );
   const { activeSection, registerHeading, registerArticleEnd } =
-    useActiveDocsHeading(sectionIds, !isLoading && !loadError);
+    useActiveDocsHeading(sectionIds);
 
   React.useEffect(() => {
     if (!page || window.location.hash) return;
     window.scrollTo({ top: 0, left: 0, behavior: "auto" });
-  }, [page]);
-
-  React.useEffect(() => {
-    if (!page) return;
-    const previousTitle = document.title;
-    document.title = `${page.title} · ZeroDrive`;
-    return () => {
-      document.title = previousTitle;
-    };
-  }, [page]);
-
-  React.useEffect(() => {
-    if (!page) return;
-
-    let active = true;
-    setIsLoading(true);
-    setLoadError(false);
-
-    fetch(`${process.env.PUBLIC_URL}/docs/${page.slug}.md`)
-      .then((response) => {
-        if (!response.ok) throw new Error("Documentation request failed");
-        return response.text();
-      })
-      .then((content) => {
-        if (active) setMarkdown(stripDocsFrontmatter(content));
-      })
-      .catch(() => {
-        if (active) setLoadError(true);
-      })
-      .finally(() => {
-        if (active) setIsLoading(false);
-      });
-
-    return () => {
-      active = false;
-    };
   }, [page]);
 
   if (!page) return <Navigate to="/docs" replace />;
@@ -116,23 +77,69 @@ function DocsDetail() {
       <Header />
 
       <DocsShell page={page} activeSection={activeSection}>
+        <div itemScope itemType="https://schema.org/TechArticle">
         <div className="mb-10">
-          <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-            <Link to="/docs" className="hover:text-foreground hover:underline">
-              Docs
-            </Link>
-            <span aria-hidden="true">/</span>
-            <span>{category?.title}</span>
-          </div>
-          <h1 className="mt-5 text-3xl leading-tight md:text-4xl">
+          <nav
+            aria-label="Breadcrumb"
+            itemScope
+            itemType="https://schema.org/BreadcrumbList"
+          >
+            <ol className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+              <li
+                itemProp="itemListElement"
+                itemScope
+                itemType="https://schema.org/ListItem"
+              >
+                <Link
+                  to="/docs"
+                  className="hover:text-foreground hover:underline"
+                  itemProp="item"
+                >
+                  <span itemProp="name">Docs</span>
+                </Link>
+                <meta itemProp="position" content="1" />
+              </li>
+              <li aria-hidden="true">/</li>
+              <li
+                itemProp="itemListElement"
+                itemScope
+                itemType="https://schema.org/ListItem"
+              >
+                <span itemProp="name">{category?.title}</span>
+                <meta itemProp="position" content="2" />
+              </li>
+            </ol>
+          </nav>
+          <h1
+            className="mt-5 text-3xl leading-tight md:text-4xl"
+            itemProp="headline"
+          >
             {page.title}
           </h1>
-          <p className="mt-5 max-w-3xl text-sm leading-7 text-muted-foreground md:text-base">
+          <p
+            className="mt-5 max-w-3xl text-sm leading-7 text-muted-foreground md:text-base"
+            itemProp="description"
+          >
             {page.description}
           </p>
           <p className="mt-4 text-xs text-muted-foreground">
-            Reviewed {page.updated}
+            Reviewed{" "}
+            <time itemProp="dateModified" dateTime={page.updated}>
+              {page.updated}
+            </time>
           </p>
+          <meta
+            itemProp="mainEntityOfPage"
+            content={`${SITE_ORIGIN}/docs/${page.slug}`}
+          />
+          <span
+            itemProp="publisher"
+            itemScope
+            itemType="https://schema.org/Organization"
+          >
+            <meta itemProp="name" content={SITE_NAME} />
+            <meta itemProp="url" content={SITE_ORIGIN} />
+          </span>
         </div>
 
         <details className="mb-10 border p-4 xl:hidden">
@@ -153,57 +160,41 @@ function DocsDetail() {
           </ul>
         </details>
 
-        <article className="docs-reading docs-article min-h-[18rem] text-left text-sm leading-7 md:text-base [&_code]:border [&_code]:bg-muted/40 [&_code]:px-1.5 [&_code]:py-0.5">
-          {isLoading && (
-            <p className="border py-16 text-center text-muted-foreground">
-              Loading documentation…
-            </p>
-          )}
-
-          {loadError && (
-            <div className="border border-destructive/40 bg-destructive/5 p-6">
-              <p className="font-medium text-foreground">
-                This documentation page could not be loaded.
-              </p>
-              <p className="mt-2 text-sm text-muted-foreground">
-                Check the connection and try the page again.
-              </p>
-            </div>
-          )}
-
-          {!isLoading && !loadError && (
-            <Markdown
-              options={{
-                forceBlock: true,
-                overrides: {
-                  h2: {
-                    component: (
-                      props: React.HTMLAttributes<HTMLHeadingElement>,
-                    ) => (
-                      <DocsHeading
-                        {...props}
-                        level={2}
-                        registerHeading={registerHeading}
-                      />
-                    ),
-                  },
-                  h3: {
-                    component: (
-                      props: React.HTMLAttributes<HTMLHeadingElement>,
-                    ) => (
-                      <DocsHeading
-                        {...props}
-                        level={3}
-                        registerHeading={registerHeading}
-                      />
-                    ),
-                  },
+        <article
+          className="docs-reading docs-article min-h-[18rem] text-left text-sm leading-7 md:text-base [&_code]:border [&_code]:bg-muted/40 [&_code]:px-1.5 [&_code]:py-0.5"
+          itemProp="articleBody"
+        >
+          <Markdown
+            options={{
+              forceBlock: true,
+              overrides: {
+                h2: {
+                  component: (
+                    props: React.HTMLAttributes<HTMLHeadingElement>,
+                  ) => (
+                    <DocsHeading
+                      {...props}
+                      level={2}
+                      registerHeading={registerHeading}
+                    />
+                  ),
                 },
-              }}
-            >
-              {markdown}
-            </Markdown>
-          )}
+                h3: {
+                  component: (
+                    props: React.HTMLAttributes<HTMLHeadingElement>,
+                  ) => (
+                    <DocsHeading
+                      {...props}
+                      level={3}
+                      registerHeading={registerHeading}
+                    />
+                  ),
+                },
+              },
+            }}
+          >
+            {page.body}
+          </Markdown>
           <span
             ref={registerArticleEnd}
             aria-hidden="true"
@@ -254,6 +245,7 @@ function DocsDetail() {
             </Button>
           )}
         </nav>
+        </div>
       </DocsShell>
 
       <Footer />

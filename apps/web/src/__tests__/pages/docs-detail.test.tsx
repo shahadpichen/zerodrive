@@ -3,7 +3,6 @@ import {
   fireEvent,
   render,
   screen,
-  waitFor,
   within,
 } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
@@ -17,14 +16,8 @@ jest.mock("../../components/landing-page/footer", () => () => (
 ));
 
 describe("documentation guide", () => {
-  beforeEach(() => {
-    global.fetch = jest.fn().mockResolvedValue({
-      ok: true,
-      text: () =>
-        Promise.resolve(
-          "---\ntitle: How ZeroDrive works\n---\n\n## The simple mental model\n\nReadable explanation.\n\n## Personal files\n\nEncrypted before upload.\n\n## Shared files\n\nRecipient encrypted.\n\n## Share lifecycle\n\nPending, active, and deleted.",
-        ),
-    });
+  beforeAll(() => {
+    window.scrollTo = jest.fn();
   });
 
   it("renders category navigation, article anchors, and adjacent guides", async () => {
@@ -47,18 +40,17 @@ describe("documentation guide", () => {
       name: "The simple mental model",
     });
     expect(heading).toHaveAttribute("id", "the-simple-mental-model");
-    expect(screen.getByText("Readable explanation.")).toBeInTheDocument();
+    expect(
+      screen.getByText(/ZeroDrive is easiest to understand/i),
+    ).toBeInTheDocument();
     expect(
       within(screen.getByRole("navigation", { name: "More documentation" }))
         .getByRole("link", { name: /quick start/i }),
     ).toHaveAttribute("href", "/docs/how-to-use");
   });
 
-  it("shows a calm failure state instead of an internal fetch error", async () => {
-    (global.fetch as jest.Mock).mockRejectedValueOnce(
-      new Error("private server response"),
-    );
-
+  it("renders the complete article without requesting raw Markdown", async () => {
+    global.fetch = jest.fn();
     render(
       <MemoryRouter initialEntries={["/docs/how-it-works"]}>
         <Routes>
@@ -68,11 +60,9 @@ describe("documentation guide", () => {
     );
 
     expect(
-      await screen.findByText(/documentation page could not be loaded/i),
+      screen.getByRole("heading", { name: "Share lifecycle" }),
     ).toBeInTheDocument();
-    await waitFor(() => {
-      expect(screen.queryByText(/private server response/i)).not.toBeInTheDocument();
-    });
+    expect(global.fetch).not.toHaveBeenCalled();
   });
 
   it("opens local documentation search with the standard keyboard shortcut", async () => {

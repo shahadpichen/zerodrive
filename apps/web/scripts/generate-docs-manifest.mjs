@@ -144,6 +144,7 @@ async function generateManifest() {
       updated: metadata.updated,
       analyticsKey: metadata.analyticsKey || null,
       sections: extractSections(body, filename),
+      body,
       searchText: createSearchText(body),
     });
   }

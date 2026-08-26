@@ -5,7 +5,6 @@ import {
   getPagesInCategory,
   searchDocs,
   slugifyDocsHeading,
-  stripDocsFrontmatter,
 } from "../../components/docs/docs-content";
 
 describe("generated documentation catalog", () => {
@@ -51,10 +50,10 @@ describe("generated documentation catalog", () => {
     expect(searchDocs("not-a-real-zerodrive-topic")).toEqual([]);
   });
 
-  it("strips source frontmatter and creates stable heading anchors", () => {
-    expect(
-      stripDocsFrontmatter("---\ntitle: Example\n---\n\n## Start here"),
-    ).toBe("## Start here");
+  it("embeds article bodies without frontmatter and creates stable anchors", () => {
+    const firstPage = docsPages[0];
+    expect(firstPage.body).toContain("## ");
+    expect(firstPage.body).not.toMatch(/^---/);
     expect(slugifyDocsHeading("Google Drive’s `appDataFolder`")).toBe(
       "google-drives-appdatafolder",
     );

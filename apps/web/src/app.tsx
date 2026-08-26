@@ -34,6 +34,8 @@ import {
   GoogleDrivePermissionProvider,
 } from "./components/google-drive-permission-gate";
 import { PageViewTracker } from "./components/page-view-tracker";
+import { SeoHead } from "./components/seo-head";
+import NotFound from "./pages/not-found";
 
 // Check environment variables on app startup
 const checkEnvironmentVariables = () => {
@@ -54,7 +56,11 @@ const checkEnvironmentVariables = () => {
 // Root route component - checks auth when it renders
 const RootRoute: React.FC = () => {
   const [isAuthenticated, setIsAuthenticated] = React.useState<boolean | null>(
-    null,
+    () =>
+      typeof document !== "undefined" &&
+      document.getElementById("root")?.dataset.prerenderedPath === "/"
+        ? false
+        : null,
   );
 
   React.useEffect(() => {
@@ -68,10 +74,7 @@ const RootRoute: React.FC = () => {
   return isAuthenticated ? (
     <Navigate to="/home" replace />
   ) : (
-    <>
-      <PageViewTracker page="landing" />
-      <LandingPage />
-    </>
+    <LandingPage />
   );
 };
 
@@ -92,6 +95,7 @@ function App() {
           <Router>
             <LegalAcceptanceProvider>
               <GoogleDrivePermissionProvider>
+                <SeoHead />
                 <PageViewTracker />
                 <Routes>
                   <Route path="/" element={<RootRoute />} />
@@ -170,8 +174,9 @@ function App() {
                   <Route path="/docs/:slug" element={<DocsDetail />} />
                   <Route
                     path="/how-it-works"
-                    element={<Navigate to="/docs" replace />}
+                    element={<Navigate to="/docs/how-it-works" replace />}
                   />
+                  <Route path="*" element={<NotFound />} />
                 </Routes>
                 <UploadQueueTray />
               </GoogleDrivePermissionProvider>
