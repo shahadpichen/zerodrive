@@ -1,4 +1,5 @@
 import crypto from "crypto";
+import { isPlaceholderValue } from "../config/runtimeValidation";
 
 export function normalizeEmail(email: string): string {
   return email.trim().toLowerCase();
@@ -46,6 +47,7 @@ export function validateIdentitySecrets(): void {
   const directorySecret = process.env.DIRECTORY_HMAC_SECRET;
   if (
     !directorySecret ||
+    isPlaceholderValue(directorySecret) ||
     directorySecret.length < 32 ||
     directorySecret.includes("your-independent")
   ) {
@@ -53,9 +55,14 @@ export function validateIdentitySecrets(): void {
       "DIRECTORY_HMAC_SECRET must be configured with at least 32 non-placeholder characters",
     );
   }
-  if (!process.env.EMAIL_HASH_SALT) {
+  const legacySecret = process.env.EMAIL_HASH_SALT;
+  if (
+    !legacySecret ||
+    (process.env.NODE_ENV === "production" &&
+      (isPlaceholderValue(legacySecret) || legacySecret.length < 32))
+  ) {
     throw new Error(
-      "EMAIL_HASH_SALT is required until legacy identifier migration is retired",
+      "EMAIL_HASH_SALT must be a non-placeholder value of at least 32 characters in production while legacy identifier migration is supported",
     );
   }
 }

@@ -6,7 +6,7 @@ import { query } from "../../../config/database";
 
 jest.mock("../../../config/s3", () => ({
   MINIO_BUCKET: "test-bucket",
-  s3Client: {},
+  s3PresignClient: { kind: "public-presigning-client" },
 }));
 jest.mock("../../../config/database");
 jest.mock("../../../utils/logger", () => ({
@@ -62,6 +62,9 @@ describe("authorized presigned URLs", () => {
 
     expect(response.body.data.fileKey).toBeUndefined();
     const command = mockGetSignedUrl.mock.calls[0][1];
+    expect(mockGetSignedUrl.mock.calls[0][0]).toEqual({
+      kind: "public-presigning-client",
+    });
     expect(command.input).toMatchObject({
       Key: "shared/opaque-id",
       ContentLength: 1052,

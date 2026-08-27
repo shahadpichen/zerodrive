@@ -7,7 +7,7 @@ import { Router, Request, Response } from "express";
 import { PutObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import Joi from "joi";
-import { s3Client, MINIO_BUCKET } from "../config/s3";
+import { s3PresignClient, MINIO_BUCKET } from "../config/s3";
 import { query } from "../config/database";
 import logger from "../utils/logger";
 import { shareCapabilityMatches } from "../utils/shareCapability";
@@ -86,7 +86,7 @@ router.post(
         ContentLength: expectedSize,
       });
 
-      const uploadUrl = await getSignedUrl(s3Client, command, {
+      const uploadUrl = await getSignedUrl(s3PresignClient, command, {
         expiresIn: 300, // 5 minutes
       });
 
@@ -109,7 +109,6 @@ router.post(
         error: {
           code: "SERVER_ERROR",
           message: "Failed to generate upload URL",
-          details: error instanceof Error ? error.message : "Unknown error",
         },
       });
     }
@@ -179,7 +178,7 @@ router.post("/download", async (req: Request, res: Response) => {
       Key: fileKey,
     });
 
-    const downloadUrl = await getSignedUrl(s3Client, command, {
+    const downloadUrl = await getSignedUrl(s3PresignClient, command, {
       expiresIn: 300, // 5 minutes
     });
 
@@ -202,7 +201,6 @@ router.post("/download", async (req: Request, res: Response) => {
       error: {
         code: "SERVER_ERROR",
         message: "Failed to generate download URL",
-        details: error instanceof Error ? error.message : "Unknown error",
       },
     });
   }

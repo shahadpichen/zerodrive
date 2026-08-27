@@ -17,6 +17,8 @@
 # environment files
 **/.env
 **/.env.studio.*
+.env.production
+!.env.production.example
 
 # build artifacts
 *.tsbuildinfo
