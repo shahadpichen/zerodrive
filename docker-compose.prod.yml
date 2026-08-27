@@ -260,7 +260,7 @@ services:
       context: .
       dockerfile: apps/web/Dockerfile
       args:
-        REACT_APP_API_URL: ${REACT_APP_API_URL:-https://api.zerodrive.xyz/api}
+        REACT_APP_API_URL: ${REACT_APP_API_URL:-https://zerodrive.xyz/api}
         REACT_APP_SITE_ORIGIN: ${REACT_APP_SITE_ORIGIN:-https://zerodrive.xyz}
         REACT_APP_RSA_PBKDF2_SALT: ${REACT_APP_RSA_PBKDF2_SALT:-}
     container_name: zerodrive-frontend

@@ -17,7 +17,7 @@ Create `A` records pointing at the VPS IPv4 address:
 | --------------------- | -------------------------------------------- |
 | `zerodrive.xyz`       | Public web application                       |
 | `www.zerodrive.xyz`   | Redirect to the canonical web origin         |
-| `api.zerodrive.xyz`   | Express API and OAuth callback               |
+| `api.zerodrive.xyz`   | Operational API access and health checks     |
 | `files.zerodrive.xyz` | Encrypted shared-file transfer through MinIO |
 
 Remove stale `AAAA` records unless IPv6 has been configured and tested on the
@@ -88,11 +88,16 @@ place a true secret in a `REACT_APP_*` variable.
 Google Cloud must authorize this exact callback:
 
 ```text
-https://api.zerodrive.xyz/api/auth/callback/google
+https://zerodrive.xyz/api/auth/callback/google
 ```
 
-The allowed JavaScript origin is `https://zerodrive.xyz`. Mailgun should use
-the verified `zerodrive.xyz` domain and `notifications@zerodrive.xyz` sender.
+The allowed JavaScript origin is `https://zerodrive.xyz`. Browser API requests
+also use `https://zerodrive.xyz/api`; host Nginx proxies that path to the API.
+This same-origin arrangement lets ZeroDrive keep authentication and CSRF
+cookies host-only instead of exposing them to every `*.zerodrive.xyz`
+subdomain. `api.zerodrive.xyz` remains available for operational health checks,
+but it is not the browser OAuth callback origin. Mailgun should use the verified
+`zerodrive.xyz` domain and `notifications@zerodrive.xyz` sender.
 
 ## 4. Obtain the first TLS certificate
 
@@ -171,6 +176,7 @@ host ports.
 ```bash
 curl -fsS http://127.0.0.1:3001/api/health
 curl -I https://zerodrive.xyz
+curl -I https://zerodrive.xyz/api/health
 curl -I https://api.zerodrive.xyz/api/health
 curl -I https://files.zerodrive.xyz/minio/health/live
 sudo docker compose --env-file .env.production -f docker-compose.prod.yml logs --tail=100
