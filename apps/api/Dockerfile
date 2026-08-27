@@ -27,4 +27,7 @@ USER node
 
 EXPOSE 3001
 
-CMD ["pnpm", "--filter", "@zerodrive/api", "start"]
+# The production image is fully built and pruned above. Execute the compiled
+# server directly so container startup never invokes pnpm or attempts to
+# reconcile node_modules at runtime.
+CMD ["node", "apps/api/dist/server.js"]

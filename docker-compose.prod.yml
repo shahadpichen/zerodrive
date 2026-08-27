@@ -72,7 +72,10 @@ services:
       DB_MAX_CONNECTIONS: 2
       DB_IDLE_TIMEOUT: 30000
       DB_CONNECTION_TIMEOUT: 5000
-    command: ["pnpm", "--filter", "@zerodrive/api", "migrate:prod"]
+    # The image already contains the compiled migration runner and production
+    # dependencies. Running Node directly keeps startup deterministic and
+    # prevents pnpm from attempting an interactive node_modules rewrite.
+    command: ["node", "apps/api/dist/scripts/migrate.js"]
     depends_on:
       postgres-role-setup:
         condition: service_completed_successfully
