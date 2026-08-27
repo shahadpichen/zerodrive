@@ -9,6 +9,27 @@ import logger from "./logger";
 
 let isGapiInitialized = false;
 let initializationPromise: Promise<void> | null = null;
+const GAPI_INITIALIZATION_TIMEOUT_MS = 15_000;
+
+const withTimeout = async <T>(
+  operation: Promise<T>,
+  message: string,
+): Promise<T> => {
+  let timeoutId: number | undefined;
+  try {
+    return await Promise.race([
+      operation,
+      new Promise<never>((_, reject) => {
+        timeoutId = window.setTimeout(
+          () => reject(new Error(message)),
+          GAPI_INITIALIZATION_TIMEOUT_MS,
+        );
+      }),
+    ]);
+  } finally {
+    if (timeoutId !== undefined) window.clearTimeout(timeoutId);
+  }
+};
 
 /**
  * Initialize Google API client with token from backend
@@ -29,17 +50,36 @@ export const initializeGapi = async (): Promise<void> => {
     try {
       // Load gapi client
       logger.log("[GAPI] Loading Google API client library...");
-      await new Promise<void>((resolve) => {
-        gapi.load("client", () => resolve());
+      await new Promise<void>((resolve, reject) => {
+        const load = gapi.load as unknown as (
+          api: string,
+          options: {
+            callback: () => void;
+            onerror: () => void;
+            timeout: number;
+            ontimeout: () => void;
+          },
+        ) => void;
+        load("client", {
+          callback: resolve,
+          onerror: () =>
+            reject(new Error("Google API client could not be loaded.")),
+          timeout: GAPI_INITIALIZATION_TIMEOUT_MS,
+          ontimeout: () =>
+            reject(new Error("Google API client did not respond in time.")),
+        });
       });
 
       // Initialize client with Drive API
       logger.log("[GAPI] Initializing Drive API...");
-      await gapi.client.init({
-        discoveryDocs: [
-          "https://www.googleapis.com/discovery/v1/apis/drive/v3/rest",
-        ],
-      });
+      await withTimeout(
+        gapi.client.init({
+          discoveryDocs: [
+            "https://www.googleapis.com/discovery/v1/apis/drive/v3/rest",
+          ],
+        }),
+        "Google Drive client initialization timed out.",
+      );
 
       // Get access token from sessionStorage
       logger.log("[GAPI] Fetching Google access token from sessionStorage...");

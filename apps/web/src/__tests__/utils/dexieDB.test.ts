@@ -56,6 +56,12 @@ jest.mock("dexie", () => {
 
 // Mock modules
 jest.mock("../../utils/gapiInit");
+jest.mock("../../utils/authService", () => ({
+  GOOGLE_TOKEN_REFRESH_BUFFER_MS: 120000,
+  clearGoogleTokens: jest.fn(),
+  getOrFetchGoogleToken: (...args: any[]) =>
+    mockGetOrFetchGoogleToken(...args),
+}));
 jest.mock("../../utils/metadataEncryption");
 jest.mock("sonner");
 jest.mock("../../utils/logger");
@@ -74,12 +80,7 @@ jest.mock("gapi-script", () => ({
 // Mock fetch globally
 global.fetch = jest.fn();
 
-const mockGetGoogleAccessToken = jest.fn();
-jest.mock("../../utils/gapiInit", () => ({
-  getGoogleAccessToken: (...args: any[]) => mockGetGoogleAccessToken(...args),
-  initializeGapi: jest.fn(),
-  refreshGapiToken: jest.fn(),
-}));
+const mockGetOrFetchGoogleToken = jest.fn();
 
 const mockEncryptMetadata = jest.fn();
 const mockDecryptMetadata = jest.fn();
@@ -152,7 +153,7 @@ describe("DexieDB - Google Drive Sync", () => {
 
   describe("sendToGoogleDrive", () => {
     beforeEach(() => {
-      mockGetGoogleAccessToken.mockResolvedValue("mock-token");
+      mockGetOrFetchGoogleToken.mockResolvedValue("mock-token");
       mockEncryptMetadata.mockResolvedValue(new Blob(["encrypted-data"]));
       (global.fetch as jest.Mock).mockClear();
     });
@@ -359,7 +360,7 @@ describe("DexieDB - Google Drive Sync", () => {
     });
 
     it("should throw error when no access token available", async () => {
-      mockGetGoogleAccessToken.mockResolvedValue(null);
+      mockGetOrFetchGoogleToken.mockResolvedValue(null);
 
       await expect(sendToGoogleDrive([testFile])).rejects.toThrow(
         "User not authenticated for Google Drive update.",
@@ -372,7 +373,7 @@ describe("DexieDB - Google Drive Sync", () => {
       await expect(sendToGoogleDrive([testFile])).rejects.toThrow(
         /Refresh Storage before changing files or folders/,
       );
-      expect(mockGetGoogleAccessToken).not.toHaveBeenCalled();
+      expect(mockGetOrFetchGoogleToken).not.toHaveBeenCalled();
       expect(global.fetch).not.toHaveBeenCalled();
     });
 
@@ -432,7 +433,7 @@ describe("DexieDB - Google Drive Sync", () => {
 
   describe("fetchAndStoreFileMetadata", () => {
     beforeEach(() => {
-      mockGetGoogleAccessToken.mockResolvedValue("mock-token");
+      mockGetOrFetchGoogleToken.mockResolvedValue("mock-token");
       mockEncryptMetadata.mockResolvedValue(new Blob(["migrated-index"]));
       mockDecryptMetadata.mockResolvedValue({
         version: 2,

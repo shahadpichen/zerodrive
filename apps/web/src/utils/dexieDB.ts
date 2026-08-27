@@ -1,6 +1,6 @@
 import Dexie from "dexie";
 import type { JsonObject } from "@zerodrivehq/capsule";
-import { initializeGapi, refreshGapiToken } from "./gapiInit";
+import { getOrFetchGoogleToken } from "./authService";
 import logger from "./logger";
 import {
   decryptMetadata,
@@ -289,8 +289,7 @@ const sendToGoogleDrive = async (
       allowMetadataReplacement: options.allowMetadataReplacement,
     });
 
-    const { getGoogleAccessToken } = await import("./gapiInit");
-    const token = await getGoogleAccessToken();
+    const token = await getOrFetchGoogleToken();
     if (!token) {
       throw new Error("User not authenticated for Google Drive update.");
     }
@@ -336,10 +335,7 @@ const fetchAndStoreFileMetadataUnlocked = async (
   const MAX_RETRIES = 1; // Only retry once to prevent infinite loops
 
   try {
-    await initializeGapi();
-
-    const { getGoogleAccessToken } = await import("./gapiInit");
-    const token = await getGoogleAccessToken();
+    const token = await getOrFetchGoogleToken();
     if (!token) {
       throw new Error("Failed to get access token");
     }
@@ -592,7 +588,7 @@ const fetchAndStoreFileMetadataUnlocked = async (
         logger.warn(
           `Token expired (retry ${retryCount + 1}/${MAX_RETRIES}). Refreshing...`,
         );
-        await refreshGapiToken();
+        await getOrFetchGoogleToken({ forceRefresh: true });
         // Retry the request after token refresh with incremented retry count
         await fetchAndStoreFileMetadataUnlocked(
           retryCount + 1,

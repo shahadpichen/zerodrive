@@ -20,7 +20,6 @@ import {
   hasGoogleTokensInStorage,
   logout,
 } from "../../utils/authService";
-import { initializeGapi } from "../../utils/gapiInit";
 import {
   clearSession,
   getSessionUser,
@@ -88,10 +87,6 @@ jest.mock("../../utils/authService", () => ({
   getUserEmail: jest.fn().mockResolvedValue("owner@example.com"),
   hasGoogleTokensInStorage: jest.fn().mockReturnValue(true),
   logout: jest.fn().mockResolvedValue(undefined),
-}));
-
-jest.mock("../../utils/gapiInit", () => ({
-  initializeGapi: jest.fn().mockResolvedValue(undefined),
 }));
 
 jest.mock("../../utils/sessionManager", () => ({
@@ -214,7 +209,6 @@ describe("PrivateStorage metadata replacement warning", () => {
     (getUserEmail as jest.Mock).mockResolvedValue("owner@example.com");
     (hasGoogleTokensInStorage as jest.Mock).mockReturnValue(true);
     (logout as jest.Mock).mockResolvedValue(undefined);
-    (initializeGapi as jest.Mock).mockResolvedValue(undefined);
     (getSessionUser as jest.Mock).mockReturnValue("owner@example.com");
     (setSessionUser as jest.Mock).mockImplementation(() => undefined);
     (clearSession as jest.Mock).mockImplementation(() => undefined);

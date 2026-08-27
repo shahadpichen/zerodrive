@@ -1,9 +1,11 @@
 import {
   GOOGLE_TOKEN_REFRESH_BUFFER_MS,
   clearGoogleTokens,
+  getOrFetchGoogleToken,
 } from "./authService";
-import { getGoogleAccessToken } from "./gapiInit";
 import logger from "./logger";
+
+const DEFAULT_GOOGLE_DRIVE_REQUEST_TIMEOUT_MS = 30_000;
 
 export class GoogleDriveRequestError extends Error {
   public status: number;
@@ -20,7 +22,7 @@ export class GoogleDriveRequestError extends Error {
 export async function ensureGoogleDriveConnected(
   minTokenValidityMs: number = GOOGLE_TOKEN_REFRESH_BUFFER_MS,
 ): Promise<void> {
-  const token = await getGoogleAccessToken({
+  const token = await getOrFetchGoogleToken({
     minValidityMs: minTokenValidityMs,
   });
   if (!token) {
@@ -47,19 +49,62 @@ function withAuthorization(init: RequestInit, token: string): RequestInit {
   };
 }
 
+async function fetchWithTimeout(
+  input: RequestInfo | URL,
+  init: RequestInit,
+  timeoutMs: number,
+): Promise<Response> {
+  const controller = new AbortController();
+  const callerSignal = init.signal;
+  let timedOut = false;
+
+  const abortFromCaller = () => controller.abort(callerSignal?.reason);
+  if (callerSignal?.aborted) {
+    abortFromCaller();
+  } else {
+    callerSignal?.addEventListener("abort", abortFromCaller, { once: true });
+  }
+
+  const timeoutId = window.setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, timeoutMs);
+
+  try {
+    return await fetch(input, {
+      ...init,
+      signal: controller.signal,
+    });
+  } catch (error) {
+    if (timedOut) {
+      throw new GoogleDriveRequestError(
+        "Google Drive did not respond in time. Retry the operation.",
+        408,
+      );
+    }
+    throw error;
+  } finally {
+    window.clearTimeout(timeoutId);
+    callerSignal?.removeEventListener("abort", abortFromCaller);
+  }
+}
+
 export async function googleDriveFetch(
   input: RequestInfo | URL,
   init: RequestInit = {},
   options: {
     retryOnAuthFailure?: boolean;
     minTokenValidityMs?: number;
+    timeoutMs?: number;
   } = {},
 ): Promise<Response> {
   const retryOnAuthFailure = options.retryOnAuthFailure !== false;
   const minTokenValidityMs =
     options.minTokenValidityMs ?? GOOGLE_TOKEN_REFRESH_BUFFER_MS;
+  const timeoutMs =
+    options.timeoutMs ?? DEFAULT_GOOGLE_DRIVE_REQUEST_TIMEOUT_MS;
 
-  const token = await getGoogleAccessToken({
+  const token = await getOrFetchGoogleToken({
     minValidityMs: minTokenValidityMs,
   });
   if (!token) {
@@ -69,7 +114,11 @@ export async function googleDriveFetch(
     );
   }
 
-  const response = await fetch(input, withAuthorization(init, token));
+  const response = await fetchWithTimeout(
+    input,
+    withAuthorization(init, token),
+    timeoutMs,
+  );
   if (!retryOnAuthFailure || !isGoogleAuthFailure(response.status)) {
     return response;
   }
@@ -78,7 +127,7 @@ export async function googleDriveFetch(
     status: response.status,
   });
 
-  const refreshedToken = await getGoogleAccessToken({
+  const refreshedToken = await getOrFetchGoogleToken({
     forceRefresh: true,
     minValidityMs: minTokenValidityMs,
   });
@@ -90,7 +139,11 @@ export async function googleDriveFetch(
     );
   }
 
-  return fetch(input, withAuthorization(init, refreshedToken));
+  return fetchWithTimeout(
+    input,
+    withAuthorization(init, refreshedToken),
+    timeoutMs,
+  );
 }
 
 export async function readGoogleDriveError(

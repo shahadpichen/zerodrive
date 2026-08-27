@@ -208,31 +208,6 @@ function PrivateStorageContent() {
           return;
         }
 
-        // Initialize Google API with backend tokens
-        const { initializeGapi } = await import("../utils/gapiInit");
-
-        try {
-          await initializeGapi();
-        } catch (gapiError) {
-          console.error("Failed to initialize Google API:", gapiError);
-          toast.error("Google Drive connection failed", {
-            description:
-              "Could not connect to Google Drive. Try signing out and back in to reconnect.",
-            id: "storage:drive-connection",
-            action: {
-              label: "Sign Out",
-              onClick: async () => {
-                const { logout } = await import("../utils/authService");
-                await logout();
-                window.location.href = "/";
-              },
-            },
-          });
-          // Don't redirect - let user stay on page with error state
-          setIsLoadingUserFiles(false);
-          return;
-        }
-
         // A verified snapshot survives route navigation in VaultDataProvider.
         // Direct page loads still verify Drive in the background while the
         // account-scoped local snapshot remains visible.

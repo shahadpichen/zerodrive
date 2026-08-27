@@ -2,16 +2,15 @@ import {
   GoogleDriveRequestError,
   googleDriveFetch,
 } from "../../utils/googleDriveRequest";
-import { clearGoogleTokens } from "../../utils/authService";
-import { getGoogleAccessToken } from "../../utils/gapiInit";
-
-jest.mock("../../utils/gapiInit", () => ({
-  getGoogleAccessToken: jest.fn(),
-}));
+import {
+  clearGoogleTokens,
+  getOrFetchGoogleToken,
+} from "../../utils/authService";
 
 jest.mock("../../utils/authService", () => ({
   GOOGLE_TOKEN_REFRESH_BUFFER_MS: 120000,
   clearGoogleTokens: jest.fn(),
+  getOrFetchGoogleToken: jest.fn(),
 }));
 
 jest.mock("../../utils/logger", () => ({
@@ -20,8 +19,8 @@ jest.mock("../../utils/logger", () => ({
 
 global.fetch = jest.fn();
 
-const mockGetGoogleAccessToken = getGoogleAccessToken as jest.MockedFunction<
-  typeof getGoogleAccessToken
+const mockGetOrFetchGoogleToken = getOrFetchGoogleToken as jest.MockedFunction<
+  typeof getOrFetchGoogleToken
 >;
 
 describe("googleDriveFetch", () => {
@@ -30,7 +29,7 @@ describe("googleDriveFetch", () => {
   });
 
   it("uses a token with a safety buffer before making the Drive request", async () => {
-    mockGetGoogleAccessToken.mockResolvedValue("fresh-token");
+    mockGetOrFetchGoogleToken.mockResolvedValue("fresh-token");
     (global.fetch as jest.Mock).mockResolvedValue({
       ok: true,
       status: 200,
@@ -40,7 +39,7 @@ describe("googleDriveFetch", () => {
       method: "GET",
     });
 
-    expect(mockGetGoogleAccessToken).toHaveBeenCalledWith({
+    expect(mockGetOrFetchGoogleToken).toHaveBeenCalledWith({
       minValidityMs: 120000,
     });
     expect(global.fetch).toHaveBeenCalledWith(
@@ -56,7 +55,7 @@ describe("googleDriveFetch", () => {
   });
 
   it("refreshes the Google token and retries once after an auth failure", async () => {
-    mockGetGoogleAccessToken
+    mockGetOrFetchGoogleToken
       .mockResolvedValueOnce("expired-token")
       .mockResolvedValueOnce("refreshed-token");
     (global.fetch as jest.Mock)
@@ -78,7 +77,7 @@ describe("googleDriveFetch", () => {
     );
 
     expect(response.ok).toBe(true);
-    expect(mockGetGoogleAccessToken).toHaveBeenNthCalledWith(2, {
+    expect(mockGetOrFetchGoogleToken).toHaveBeenNthCalledWith(2, {
       forceRefresh: true,
       minValidityMs: 120000,
     });
@@ -89,7 +88,7 @@ describe("googleDriveFetch", () => {
   });
 
   it("clears stored Google tokens when the retry cannot get a fresh token", async () => {
-    mockGetGoogleAccessToken
+    mockGetOrFetchGoogleToken
       .mockResolvedValueOnce("expired-token")
       .mockResolvedValueOnce(null);
     (global.fetch as jest.Mock).mockResolvedValueOnce({
@@ -108,7 +107,7 @@ describe("googleDriveFetch", () => {
   });
 
   it("does not retry non-auth Drive failures", async () => {
-    mockGetGoogleAccessToken.mockResolvedValue("fresh-token");
+    mockGetOrFetchGoogleToken.mockResolvedValue("fresh-token");
     (global.fetch as jest.Mock).mockResolvedValue({
       ok: false,
       status: 500,
@@ -120,7 +119,31 @@ describe("googleDriveFetch", () => {
     );
 
     expect(response.status).toBe(500);
-    expect(mockGetGoogleAccessToken).toHaveBeenCalledTimes(1);
+    expect(mockGetOrFetchGoogleToken).toHaveBeenCalledTimes(1);
     expect(global.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("fails a stalled Drive request instead of leaving the vault refresh pending", async () => {
+    mockGetOrFetchGoogleToken.mockResolvedValue("fresh-token");
+    (global.fetch as jest.Mock).mockImplementation(
+      (_input: RequestInfo | URL, init: RequestInit) =>
+        new Promise((_resolve, reject) => {
+          init.signal?.addEventListener("abort", () => {
+            reject(Object.assign(new Error("aborted"), { name: "AbortError" }));
+          });
+        }),
+    );
+
+    await expect(
+      googleDriveFetch(
+        "https://www.googleapis.com/drive/v3/files",
+        { method: "GET" },
+        { timeoutMs: 25 },
+      ),
+    ).rejects.toMatchObject({
+      name: "GoogleDriveRequestError",
+      status: 408,
+      message: "Google Drive did not respond in time. Retry the operation.",
+    });
   });
 });

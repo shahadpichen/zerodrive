@@ -7,8 +7,8 @@
 export {}; // Make this a module to satisfy --isolatedModules
 jest.mock('gapi-script', () => ({
   gapi: {
-    load: jest.fn((api: string, callback: () => void) => {
-      callback();
+    load: jest.fn((api: string, options: { callback: () => void }) => {
+      options.callback();
     }),
     client: {
       init: jest.fn().mockResolvedValue(undefined),
@@ -50,8 +50,8 @@ describe('GapiInit', () => {
     mockGetOrFetchGoogleToken.mockClear();
 
     // Ensure mock implementations are set
-    (gapi.load as jest.Mock).mockImplementation((api: string, callback: () => void) => {
-      callback();
+    (gapi.load as jest.Mock).mockImplementation((api: string, options: { callback: () => void }) => {
+      options.callback();
     });
     (gapi.client.init as jest.Mock).mockResolvedValue(undefined);
 
@@ -62,7 +62,15 @@ describe('GapiInit', () => {
     it('should initialize gapi successfully', async () => {
       await initializeGapi();
 
-      expect(gapi.load).toHaveBeenCalledWith('client', expect.any(Function));
+      expect(gapi.load).toHaveBeenCalledWith(
+        'client',
+        expect.objectContaining({
+          callback: expect.any(Function),
+          onerror: expect.any(Function),
+          ontimeout: expect.any(Function),
+          timeout: 15000,
+        }),
+      );
       expect(gapi.client.init).toHaveBeenCalledWith({
         discoveryDocs: [
           'https://www.googleapis.com/discovery/v1/apis/drive/v3/rest',
@@ -113,6 +121,16 @@ describe('GapiInit', () => {
       );
 
       await expect(initializeGapi()).rejects.toThrow('Network error');
+    });
+
+    it('should reject when the Google client loader reports an error', async () => {
+      (gapi.load as jest.Mock).mockImplementationOnce(
+        (_api: string, options: { onerror: () => void }) => options.onerror(),
+      );
+
+      await expect(initializeGapi()).rejects.toThrow(
+        'Google API client could not be loaded.',
+      );
     });
 
     it('should reset initialization promise on error', async () => {
