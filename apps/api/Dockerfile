@@ -1,4 +1,4 @@
-FROM node:24-alpine
+FROM node:24-alpine AS build
 
 WORKDIR /repo
 
@@ -20,14 +20,28 @@ COPY . .
 RUN pnpm -r --filter './packages/*' build
 RUN pnpm --filter @zerodrive/api build
 
-RUN CI=true pnpm prune --prod --ignore-scripts
+# Create a portable API package with an isolated production dependency tree.
+# `pnpm prune` is not workspace-aware and can remove the package links needed
+# by the compiled API at runtime.
+RUN pnpm --filter @zerodrive/api --prod deploy --legacy /prod/api
 
-RUN chown -R node:node /repo
+FROM node:24-alpine AS runtime
+
+ENV NODE_ENV=production
+
+WORKDIR /app
+
+COPY --from=build --chown=node:node /prod/api ./
+
+# Fail the image build if the portable deployment is missing the compiled
+# migration runner or critical runtime dependencies.
+RUN test -f dist/scripts/migrate.js \
+  && node -e "require.resolve('pg'); require.resolve('express')"
+
 USER node
 
 EXPOSE 3001
 
-# The production image is fully built and pruned above. Execute the compiled
-# server directly so container startup never invokes pnpm or attempts to
-# reconcile node_modules at runtime.
-CMD ["node", "apps/api/dist/server.js"]
+# The runtime image contains only the deployed API package and its production
+# dependencies. Container startup performs no package-manager work.
+CMD ["node", "dist/server.js"]

@@ -75,7 +75,7 @@ services:
     # The image already contains the compiled migration runner and production
     # dependencies. Running Node directly keeps startup deterministic and
     # prevents pnpm from attempting an interactive node_modules rewrite.
-    command: ["node", "apps/api/dist/scripts/migrate.js"]
+    command: ["node", "dist/scripts/migrate.js"]
     depends_on:
       postgres-role-setup:
         condition: service_completed_successfully
