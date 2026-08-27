@@ -5,11 +5,24 @@ WORKDIR /repo
 
 RUN corepack enable
 
+# React embeds these public values in the browser bundle at build time. Never
+# pass server secrets through a REACT_APP_* build argument.
+ARG REACT_APP_API_URL
+ARG REACT_APP_SITE_ORIGIN=https://zerodrive.xyz
+ARG REACT_APP_RSA_PBKDF2_SALT
+ENV REACT_APP_API_URL=${REACT_APP_API_URL}
+ENV REACT_APP_SITE_ORIGIN=${REACT_APP_SITE_ORIGIN}
+ENV REACT_APP_RSA_PBKDF2_SALT=${REACT_APP_RSA_PBKDF2_SALT}
+
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY apps/api/package.json apps/api/package.json
+COPY apps/studio/package.json apps/studio/package.json
 COPY apps/web/package.json apps/web/package.json
 COPY packages/shared-types/package.json packages/shared-types/package.json
 
-RUN pnpm install --frozen-lockfile
+# Resolve the same workspace/peer graph recorded by the monorepo lockfile while
+# installing only the frontend and its workspace dependencies.
+RUN pnpm install --frozen-lockfile --filter @zerodrive/web...
 
 COPY . .
 

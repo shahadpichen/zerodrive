@@ -13,6 +13,7 @@ import compression from "compression";
 import cookieParser from "cookie-parser";
 import rateLimit from "express-rate-limit";
 import cron from "node-cron";
+import type { Server } from "node:http";
 import { testConnection } from "./config/database";
 import corsHandler from "./middleware/cors";
 import {
@@ -27,6 +28,7 @@ import { validateIdentitySecrets } from "./utils/identity";
 import { enforceHttps } from "./middleware/httpsEnforcement";
 import { validateAnalyticsConfig } from "./config/analytics";
 import { cleanupAnalyticsRetention } from "./services/analytics";
+import { validateAllowedOrigins } from "./config/runtimeValidation";
 
 // Initialize Express app
 const app: Application = express();
@@ -35,6 +37,8 @@ const app: Application = express();
 const PORT = parseInt(process.env.PORT || "3001");
 const HOST = process.env.HOST || "localhost";
 const NODE_ENV = process.env.NODE_ENV || "development";
+let httpServer: Server | null = null;
+let shutdownStarted = false;
 
 // Honor X-Forwarded-Proto only from explicitly trusted reverse proxies. The
 // secure default is a proxy on the same host.
@@ -177,11 +181,15 @@ app.use(errorHandler);
 
 // Graceful shutdown handler
 const gracefulShutdown = (signal: string) => {
+  if (shutdownStarted) return;
+  shutdownStarted = true;
   logger.shutdown(signal);
 
-  const server = app.listen();
+  if (!httpServer) {
+    process.exit(0);
+  }
 
-  server.close(() => {
+  httpServer.close(() => {
     logger.info("HTTP server closed");
     process.exit(0);
   });
@@ -216,6 +224,7 @@ const startServer = async (): Promise<void> => {
   try {
     validateIdentitySecrets();
     validateAnalyticsConfig();
+    validateAllowedOrigins(NODE_ENV, process.env.ALLOWED_ORIGINS);
     // Test database connection
     const dbConnected = await testConnection();
     if (!dbConnected) {
@@ -234,7 +243,7 @@ const startServer = async (): Promise<void> => {
     logger.info("Scheduled cleanup job initialized (runs daily at 2:00 AM)");
 
     // Start HTTP server
-    app.listen(PORT, HOST, () => {
+    httpServer = app.listen(PORT, HOST, () => {
       logger.startup({
         port: PORT,
         host: HOST,

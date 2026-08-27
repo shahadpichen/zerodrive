@@ -21,6 +21,9 @@ describe("JWTService", () => {
       expect(() =>
         validateJwtSecret("your-jwt-secret-here-64-hex-characters"),
       ).toThrow("JWT_SECRET");
+      expect(() =>
+        validateJwtSecret("CHANGE_ME_RANDOM_64_HEX_CHARACTERS"),
+      ).toThrow("JWT_SECRET");
     });
   });
 

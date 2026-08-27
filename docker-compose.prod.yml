@@ -1,30 +1,97 @@
+name: zerodrive
+
 services:
   postgres:
     image: postgres:15-alpine
     container_name: zerodrive-postgres
     environment:
       POSTGRES_DB: ${DB_NAME:-zerodrive}
-      POSTGRES_USER: ${DB_USER:-zerodrive_app}
-      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_USER: ${DB_ADMIN_USER:?DB_ADMIN_USER is required}
+      POSTGRES_PASSWORD: ${DB_ADMIN_PASSWORD:?DB_ADMIN_PASSWORD is required}
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./apps/api/database/init.sql:/docker-entrypoint-initdb.d/01-schema.sql
+      - ./apps/api/database/init.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-zerodrive_app} -d ${DB_NAME:-zerodrive}"]
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${DB_ADMIN_USER:?DB_ADMIN_USER is required} -d ${DB_NAME:-zerodrive}",
+        ]
       interval: 10s
       timeout: 5s
       retries: 5
     restart: unless-stopped
     networks:
       - zerodrive-internal
+    logging: &service-logging
+      driver: local
+      options:
+        max-size: "10m"
+        max-file: "5"
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 256
+    mem_limit: 768m
+
+  postgres-role-setup:
+    image: postgres:15-alpine
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_DB: ${DB_NAME:-zerodrive}
+      POSTGRES_ADMIN_USER: ${DB_ADMIN_USER:?DB_ADMIN_USER is required}
+      POSTGRES_ADMIN_PASSWORD: ${DB_ADMIN_PASSWORD:?DB_ADMIN_PASSWORD is required}
+      DB_USER: ${DB_USER:-zerodrive_app}
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
+    volumes:
+      - ./ops/production/postgres/provision-app-role.sh:/usr/local/bin/provision-app-role.sh:ro
+    entrypoint: ["/bin/sh", "/usr/local/bin/provision-app-role.sh"]
+    restart: "no"
+    networks:
+      - zerodrive-internal
+    logging: *service-logging
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 64
+    mem_limit: 128m
+
+  migrate:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    image: zerodrive-api:${ZERODRIVE_IMAGE_TAG:-production}
+    environment:
+      NODE_ENV: production
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME:-zerodrive}
+      DB_USER: ${DB_ADMIN_USER:?DB_ADMIN_USER is required}
+      DB_PASSWORD: ${DB_ADMIN_PASSWORD:?DB_ADMIN_PASSWORD is required}
+      DB_MAX_CONNECTIONS: 2
+      DB_IDLE_TIMEOUT: 30000
+      DB_CONNECTION_TIMEOUT: 5000
+    command: ["pnpm", "--filter", "@zerodrive/api", "migrate:prod"]
+    depends_on:
+      postgres-role-setup:
+        condition: service_completed_successfully
+    restart: "no"
+    networks:
+      - zerodrive-internal
+    logging: *service-logging
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 128
+    mem_limit: 256m
 
   minio:
     image: minio/minio:latest
     container_name: zerodrive-minio
     environment:
-      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY}
-      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY}
-      MINIO_SERVER_URL: https://files.zerodrive.xyz
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?MINIO_ROOT_USER is required}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD is required}
+      MINIO_SERVER_URL: ${MINIO_PUBLIC_ENDPOINT:-https://files.zerodrive.xyz}
     command: server /data --console-address ":9001"
     ports:
       - "127.0.0.1:9000:9000"
@@ -38,29 +105,117 @@ services:
     restart: unless-stopped
     networks:
       - zerodrive-internal
+    logging: *service-logging
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 256
+    mem_limit: 1g
 
   minio-setup:
     image: minio/mc:latest
     depends_on:
       minio:
         condition: service_healthy
-    entrypoint: >
-      /bin/sh -c "
-      sleep 10;
-      /usr/bin/mc alias set myminio http://minio:9000 ${MINIO_ACCESS_KEY} ${MINIO_SECRET_KEY};
-      /usr/bin/mc mb myminio/zerodrive-files --ignore-existing;
-      /usr/bin/mc anonymous set none myminio/zerodrive-files;
-      "
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?MINIO_ROOT_USER is required}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD is required}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:?MINIO_ACCESS_KEY is required}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:?MINIO_SECRET_KEY is required}
+      MINIO_BUCKET: ${MINIO_BUCKET:-zerodrive-files}
+    entrypoint:
+      - /bin/sh
+      - -eu
+      - -c
+      - |
+        /usr/bin/mc alias set myminio http://minio:9000 "$$MINIO_ROOT_USER" "$$MINIO_ROOT_PASSWORD" >/dev/null
+        /usr/bin/mc mb "myminio/$$MINIO_BUCKET" --ignore-existing
+        /usr/bin/mc anonymous set none "myminio/$$MINIO_BUCKET"
+        cat > /tmp/zerodrive-app-policy.json <<EOF
+        {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Action": ["s3:GetBucketLocation", "s3:ListBucket", "s3:ListBucketMultipartUploads"],
+              "Resource": ["arn:aws:s3:::$$MINIO_BUCKET"]
+            },
+            {
+              "Effect": "Allow",
+              "Action": ["s3:GetObject", "s3:PutObject", "s3:DeleteObject", "s3:AbortMultipartUpload", "s3:ListMultipartUploadParts"],
+              "Resource": ["arn:aws:s3:::$$MINIO_BUCKET/*"]
+            }
+          ]
+        }
+        EOF
+        /usr/bin/mc admin user add myminio "$$MINIO_ACCESS_KEY" "$$MINIO_SECRET_KEY"
+        /usr/bin/mc admin policy rm myminio zerodrive-app >/dev/null 2>&1 || true
+        /usr/bin/mc admin policy create myminio zerodrive-app /tmp/zerodrive-app-policy.json
+        /usr/bin/mc admin policy attach myminio zerodrive-app --user "$$MINIO_ACCESS_KEY"
+    restart: "no"
     networks:
       - zerodrive-internal
+    logging: *service-logging
+
+  minio-backup-client:
+    image: minio/mc:latest
+    profiles: ["ops"]
+    environment:
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:?MINIO_ACCESS_KEY is required}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:?MINIO_SECRET_KEY is required}
+      MINIO_BUCKET: ${MINIO_BUCKET:-zerodrive-files}
+    entrypoint: ["/bin/true"]
+    networks:
+      - zerodrive-internal
+    logging: *service-logging
 
   backend:
     build:
       context: .
       dockerfile: apps/api/Dockerfile
+    image: zerodrive-api:${ZERODRIVE_IMAGE_TAG:-production}
     container_name: zerodrive-backend
-    env_file:
-      - ./apps/api/.env.production
+    environment:
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      PORT: 3001
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME:-zerodrive}
+      DB_USER: ${DB_USER:-zerodrive_app}
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
+      DB_MAX_CONNECTIONS: ${DB_MAX_CONNECTIONS:-20}
+      DB_IDLE_TIMEOUT: ${DB_IDLE_TIMEOUT:-30000}
+      DB_CONNECTION_TIMEOUT: ${DB_CONNECTION_TIMEOUT:-5000}
+      RUN_DB_MIGRATIONS: "false"
+      APP_URL: ${APP_URL:-https://zerodrive.xyz}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:?ALLOWED_ORIGINS is required}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+      JWT_EXPIRY: ${JWT_EXPIRY:-15m}
+      REFRESH_TOKEN_EXPIRY: ${REFRESH_TOKEN_EXPIRY:-7d}
+      EMAIL_HASH_SALT: ${EMAIL_HASH_SALT:?EMAIL_HASH_SALT is required}
+      DIRECTORY_HMAC_SECRET: ${DIRECTORY_HMAC_SECRET:?DIRECTORY_HMAC_SECRET is required}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:?GOOGLE_CLIENT_ID is required}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:?GOOGLE_CLIENT_SECRET is required}
+      GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI:?GOOGLE_REDIRECT_URI is required}
+      MINIO_ENDPOINT: minio
+      MINIO_PORT: 9000
+      MINIO_USE_SSL: "false"
+      MINIO_PUBLIC_ENDPOINT: ${MINIO_PUBLIC_ENDPOINT:-https://files.zerodrive.xyz}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:?MINIO_ACCESS_KEY is required}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:?MINIO_SECRET_KEY is required}
+      MINIO_BUCKET: ${MINIO_BUCKET:-zerodrive-files}
+      MAILGUN_API_KEY: ${MAILGUN_API_KEY:?MAILGUN_API_KEY is required}
+      MAILGUN_DOMAIN: ${MAILGUN_DOMAIN:-zerodrive.xyz}
+      MAILGUN_FROM_NAME: ${MAILGUN_FROM_NAME:-ZeroDrive}
+      MAILGUN_FROM_EMAIL: ${MAILGUN_FROM_EMAIL:-notifications@zerodrive.xyz}
+      MAILGUN_WEBHOOK_SIGNING_KEY: ${MAILGUN_WEBHOOK_SIGNING_KEY:?MAILGUN_WEBHOOK_SIGNING_KEY is required}
+      ANALYTICS_ENABLED: ${ANALYTICS_ENABLED:-false}
+      ANALYTICS_ADMIN_EMAILS: ${ANALYTICS_ADMIN_EMAILS:-}
+      LEGAL_TERMS_VERSION: ${LEGAL_TERMS_VERSION:-2026-08}
+      LEGAL_PRIVACY_VERSION: ${LEGAL_PRIVACY_VERSION:-2026-08}
+      # Requests reach the container through the gateway of the fixed private
+      # bridge below. Only the API loopback host port is published.
+      TRUST_PROXY: 172.30.0.1
     ports:
       - "127.0.0.1:3001:3001"
     depends_on:
@@ -68,25 +223,67 @@ services:
         condition: service_healthy
       minio:
         condition: service_healthy
+      minio-setup:
+        condition: service_completed_successfully
+      migrate:
+        condition: service_completed_successfully
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3001/api/health"]
+      test:
+        [
+          "CMD",
+          "wget",
+          "--no-verbose",
+          "--tries=1",
+          "--spider",
+          "http://localhost:3001/api/health",
+        ]
       interval: 30s
       timeout: 5s
       retries: 5
+      start_period: 20s
     restart: unless-stopped
     networks:
       - zerodrive-internal
+    logging: *service-logging
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    pids_limit: 256
+    mem_limit: 768m
 
   frontend:
     build:
       context: .
       dockerfile: apps/web/Dockerfile
+      args:
+        REACT_APP_API_URL: ${REACT_APP_API_URL:-https://api.zerodrive.xyz/api}
+        REACT_APP_SITE_ORIGIN: ${REACT_APP_SITE_ORIGIN:-https://zerodrive.xyz}
+        REACT_APP_RSA_PBKDF2_SALT: ${REACT_APP_RSA_PBKDF2_SALT:-}
     container_name: zerodrive-frontend
     ports:
       - "127.0.0.1:3000:80"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "--no-verbose",
+          "--tries=1",
+          "--spider",
+          "http://localhost/",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
     restart: unless-stopped
     networks:
       - zerodrive-internal
+    logging: *service-logging
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 128
+    mem_limit: 256m
 
 volumes:
   postgres_data:
@@ -95,3 +292,7 @@ volumes:
 networks:
   zerodrive-internal:
     driver: bridge
+    ipam:
+      config:
+        - subnet: 172.30.0.0/24
+          gateway: 172.30.0.1

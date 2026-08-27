@@ -186,7 +186,12 @@ export const testConnection = async (): Promise<boolean> => {
       client.release();
     }
 
-    await runMigrations();
+    // Production runs migrations in a separate, short-lived container with
+    // the database owner role. The long-running API uses a non-superuser role
+    // and must never acquire schema-changing privileges.
+    if (process.env.RUN_DB_MIGRATIONS !== "false") {
+      await runMigrations();
+    }
 
     const timeResult = result.rows[0].current_time;
     const versionParts = result.rows[0].version.split(" ");

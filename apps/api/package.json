@@ -6,6 +6,7 @@
   "scripts": {
     "build": "tsc",
     "start": "node dist/server.js",
+    "migrate:prod": "node dist/scripts/migrate.js",
     "dev": "ts-node-dev --respawn --transpile-only src/server.ts",
     "dev:watch": "ts-node-dev --respawn --transpile-only --watch src src/server.ts",
     "test": "jest",
