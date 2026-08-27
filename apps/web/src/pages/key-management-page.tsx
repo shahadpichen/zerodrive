@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   AlertCircle,
@@ -70,7 +70,6 @@ export const KeyManagementPage: React.FC = () => {
   const [showGenerateWarning, setShowGenerateWarning] = useState(false);
   const [understandLoss, setUnderstandLoss] = useState(false);
   const [readyToSave, setReadyToSave] = useState(false);
-  const [isGapiReady, setIsGapiReady] = useState(false);
   const [isRecovering, setIsRecovering] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
@@ -78,30 +77,8 @@ export const KeyManagementPage: React.FC = () => {
   const [error, setError] = useState("");
   const [keyStatusVersion, setKeyStatusVersion] = useState(0);
 
-  useEffect(() => {
-    const initializeDrive = async () => {
-      try {
-        const { initializeGapi } = await import("../utils/gapiInit");
-        await initializeGapi();
-        setIsGapiReady(true);
-      } catch (initializationError) {
-        console.error(
-          "[KeyManagement] Google Drive initialization failed:",
-          initializationError,
-        );
-        toast.warning("Google Drive connection unavailable", {
-          description:
-            "Vault access remains available, but sharing identity recovery is unavailable.",
-          id: "recovery:drive-connection",
-        });
-      }
-    };
-
-    initializeDrive();
-  }, []);
-
   const recoverSharingKeys = async () => {
-    if (!isGapiReady || !hasGoogleTokensInStorage()) return;
+    if (!hasGoogleTokensInStorage()) return;
 
     try {
       const email = await getUserEmail();

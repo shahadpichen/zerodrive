@@ -8,7 +8,11 @@ import {
   storeKey,
 } from "../../utils/cryptoUtils";
 import { getMnemonic } from "../../utils/mnemonicManager";
-import { initializeGapi } from "../../utils/gapiInit";
+import { recoverRsaKeysIfNeeded } from "../../utils/rsaKeyRecovery";
+import {
+  getUserEmail,
+  hasGoogleTokensInStorage,
+} from "../../utils/authService";
 
 const mockNavigate = jest.fn();
 
@@ -44,10 +48,6 @@ jest.mock("../../utils/authService", () => ({
   hasGoogleTokensInStorage: jest.fn().mockReturnValue(true),
 }));
 
-jest.mock("../../utils/gapiInit", () => ({
-  initializeGapi: jest.fn().mockResolvedValue(undefined),
-}));
-
 jest.mock("../../components/key-management/DeviceManagement", () => ({
   DeviceManagement: () => <div>Current browser key status</div>,
 }));
@@ -68,15 +68,23 @@ const mockGetStoredKey = getStoredKey as jest.MockedFunction<
   typeof getStoredKey
 >;
 const mockGetMnemonic = getMnemonic as jest.MockedFunction<typeof getMnemonic>;
-const mockInitializeGapi = initializeGapi as jest.MockedFunction<
-  typeof initializeGapi
+const mockRecoverRsaKeysIfNeeded =
+  recoverRsaKeysIfNeeded as jest.MockedFunction<
+    typeof recoverRsaKeysIfNeeded
+  >;
+const mockGetUserEmail = getUserEmail as jest.MockedFunction<
+  typeof getUserEmail
 >;
+const mockHasGoogleTokensInStorage =
+  hasGoogleTokensInStorage as jest.MockedFunction<
+    typeof hasGoogleTokensInStorage
+  >;
 
 const mnemonic =
   "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
 
 async function renderPage(initialEntry = "/recovery-access") {
-  const view = render(
+  return render(
     <MemoryRouter
       initialEntries={[initialEntry]}
       future={{ v7_relativeSplatPath: true, v7_startTransition: true }}
@@ -84,8 +92,6 @@ async function renderPage(initialEntry = "/recovery-access") {
       <KeyManagementPage />
     </MemoryRouter>,
   );
-  await waitFor(() => expect(mockInitializeGapi).toHaveBeenCalled());
-  return view;
 }
 
 async function generateNewKey() {
@@ -109,6 +115,13 @@ describe("KeyManagementPage", () => {
     mockGetStoredKey.mockResolvedValue(null);
     mockGetMnemonic.mockReturnValue(null);
     mockStoreKey.mockResolvedValue(undefined);
+    mockGetUserEmail.mockResolvedValue("user@example.com");
+    mockHasGoogleTokensInStorage.mockReturnValue(true);
+    mockRecoverRsaKeysIfNeeded.mockResolvedValue({
+      success: true,
+      recovered: false,
+      keysExisted: false,
+    });
   });
 
   it("opens in a focused recovery mode", async () => {
@@ -179,6 +192,9 @@ describe("KeyManagementPage", () => {
     );
 
     await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith("/home"));
+    expect(mockRecoverRsaKeysIfNeeded).toHaveBeenCalledWith(
+      "user@example.com",
+    );
     expect(mockStoreKey).not.toHaveBeenCalled();
   });
 
