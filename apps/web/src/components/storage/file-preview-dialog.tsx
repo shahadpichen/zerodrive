@@ -256,6 +256,15 @@ export const FilePreviewDialog: React.FC<FilePreviewDialogProps> = ({
               controls
               className="w-full max-h-[70vh]"
               preload="metadata"
+              onError={(event) => {
+                console.error(
+                  "Video preview error:",
+                  event.currentTarget.error,
+                );
+                setError(
+                  "This browser cannot play this video's format or codec. Download it to open the original on your device.",
+                );
+              }}
             >
               Your browser does not support video playback.
             </video>
@@ -265,7 +274,20 @@ export const FilePreviewDialog: React.FC<FilePreviewDialogProps> = ({
       case "audio":
         return (
           <div className="flex items-center justify-center py-12">
-            <audio src={blobUrl} controls className="w-full max-w-md">
+            <audio
+              src={blobUrl}
+              controls
+              className="w-full max-w-md"
+              onError={(event) => {
+                console.error(
+                  "Audio preview error:",
+                  event.currentTarget.error,
+                );
+                setError(
+                  "This browser cannot play this audio format or codec. Download it to open the original on your device.",
+                );
+              }}
+            >
               Your browser does not support audio playback.
             </audio>
           </div>
@@ -283,7 +305,9 @@ export const FilePreviewDialog: React.FC<FilePreviewDialogProps> = ({
                 }}
                 onLoadError={(error) => {
                   console.error("PDF load error:", error);
-                  setError("Failed to load PDF. The file may be corrupted.");
+                  setError(
+                    "PDF preview could not start in this browser. Download it to open the original on your device.",
+                  );
                 }}
                 loading={
                   <div className="flex items-center justify-center py-12">

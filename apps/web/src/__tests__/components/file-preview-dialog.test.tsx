@@ -397,6 +397,33 @@ describe("FilePreviewDialog Component", () => {
         expect(video).toHaveAttribute("controls");
       });
     });
+
+    it("should explain when the browser cannot play the video codec", async () => {
+      mockGetPreviewType.mockReturnValue("video");
+      mockDecryptFileForPreview.mockResolvedValue({
+        blobUrl: "blob:mock-video",
+        blob: mockBlob,
+      });
+
+      render(
+        <FilePreviewDialog
+          {...defaultProps}
+          fileName="video.mov"
+          mimeType="video/quicktime"
+        />,
+      );
+
+      const video = await waitFor(() => {
+        const element = document.querySelector("video");
+        expect(element).toBeInTheDocument();
+        return element as HTMLVideoElement;
+      });
+      fireEvent.error(video);
+
+      expect(
+        screen.getByText(/cannot play this video's format or codec/i),
+      ).toBeInTheDocument();
+    });
   });
 
   describe("Audio Preview", () => {

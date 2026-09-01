@@ -25,6 +25,7 @@ import { writeCachedHomeDashboard } from "../../utils/homeDashboardCache";
 import { getAuthenticatedUser } from "../../utils/authService";
 import { AppProvider } from "../../contexts/app-context";
 import { VaultDataProvider } from "../../contexts/vault-data-context";
+import { useVaultData } from "../../contexts/vault-data-context";
 
 const mockNavigate = jest.fn();
 
@@ -63,6 +64,10 @@ jest.mock("../../utils/rsaKeyRecovery", () => ({
 
 jest.mock("../../utils/mnemonicManager", () => ({
   getMnemonic: jest.fn().mockReturnValue(null),
+}));
+
+jest.mock("../../utils/vaultAccess", () => ({
+  hasVaultReadAccess: jest.fn().mockResolvedValue(false),
 }));
 
 jest.mock("../../utils/vaultSetupState", () => ({
@@ -156,6 +161,28 @@ function renderHome() {
       <AppProvider>
         <VaultDataProvider>
           <Home />
+        </VaultDataProvider>
+      </AppProvider>
+    </MemoryRouter>,
+  );
+}
+
+function WarmHomeHarness() {
+  const { state } = useVaultData();
+
+  if (state.hasVaultKey === null || state.lastSyncedAt === null) {
+    return <div>Hydrating warm vault state</div>;
+  }
+
+  return <Home />;
+}
+
+function renderWarmHome() {
+  return render(
+    <MemoryRouter>
+      <AppProvider>
+        <VaultDataProvider>
+          <WarmHomeHarness />
         </VaultDataProvider>
       </AppProvider>
     </MemoryRouter>,
@@ -295,6 +322,39 @@ describe("Home guided vault setup", () => {
     ).toBeInTheDocument();
     expect(
       screen.queryByText("Setting up your private vault"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("keeps the critical setup checklist visible in a warm session without a vault key", async () => {
+    sessionStorage.setItem(
+      "google-tokens",
+      JSON.stringify({ userEmail: "owner@example.com" }),
+    );
+    localStorage.setItem(
+      "zerodrive-user-info-cache",
+      JSON.stringify({
+        version: 1,
+        timestamp: Date.now(),
+        email: "owner@example.com",
+        name: "Owner",
+        image: "",
+      }),
+    );
+    mockGetAuthenticatedUser.mockImplementation(() => new Promise(() => {}));
+
+    renderWarmHome();
+
+    expect(
+      await screen.findByText("Your next step is clear"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Create or recover vault access", {
+        selector: "span",
+      }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Vault access required")).toBeInTheDocument();
+    expect(
+      screen.queryByText("End-to-end encryption active"),
     ).not.toBeInTheDocument();
   });
 });

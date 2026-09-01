@@ -106,23 +106,33 @@ function HomeContent() {
     hasWarmVaultState && !showLoginWelcome
       ? readCachedHomeDashboardForUser(userEmail)
       : null;
-  const warmVaultSetup = hasWarmVaultState
-    ? (initialCachedDashboard?.vaultSetup ?? {
-        ...getVaultSetupState({
-          isAuthenticated: true,
-          hasGoogleTokens: hasGoogleTokensInStorage(),
-          hasPrimaryKey: !!sharedVaultState.hasVaultKey,
-          hasRecoveryPhrase: false,
-          fileCount: sharedVaultState.files.length,
-          folderCount: sharedVaultState.folders.length,
-          hasSharingKeys: false,
-          hasDecryptionError:
-            sharedVaultState.metadataStatus === "decryption_error",
-          guidanceDismissed: true,
-        }),
-        tasks: [],
-        shouldShowGuidance: false,
+  const derivedWarmVaultSetup = hasWarmVaultState
+    ? getVaultSetupState({
+        isAuthenticated: true,
+        hasGoogleTokens: hasGoogleTokensInStorage(),
+        hasPrimaryKey: !!sharedVaultState.hasVaultKey,
+        hasRecoveryPhrase: false,
+        fileCount: sharedVaultState.files.length,
+        folderCount: sharedVaultState.folders.length,
+        hasSharingKeys: false,
+        hasDecryptionError:
+          sharedVaultState.metadataStatus === "decryption_error",
+        // A missing key is critical guidance and cannot be dismissed. For an
+        // accessible vault, avoid flashing optional onboarding while Drive is
+        // still refreshing the authoritative setup snapshot.
+        guidanceDismissed: !!sharedVaultState.hasVaultKey,
       })
+    : null;
+  const cachedWarmVaultSetup = initialCachedDashboard?.vaultSetup ?? null;
+  const cachedWarmSetupMatchesAccess =
+    !!cachedWarmVaultSetup &&
+    (sharedVaultState.hasVaultKey
+      ? cachedWarmVaultSetup.status !== "needs_key"
+      : cachedWarmVaultSetup.status === "needs_key");
+  const warmVaultSetup = hasWarmVaultState
+    ? cachedWarmSetupMatchesAccess
+      ? cachedWarmVaultSetup
+      : derivedWarmVaultSetup
     : null;
   const [counts, setCounts] = useState(
     () =>
@@ -679,11 +689,23 @@ function HomeContent() {
               Security &amp; setup
             </div>
             <div className="flex items-start gap-2.5 border-b px-5 py-3.5 text-sm">
-              <Check className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-600" />
+              {hasVaultAccess ? (
+                <Check className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-600" />
+              ) : (
+                <Key className="mt-0.5 h-4 w-4 flex-shrink-0 text-muted-foreground" />
+              )}
               <div>
-                End-to-end encryption active
+                {isVaultStateLoading
+                  ? "Checking vault access"
+                  : hasVaultAccess
+                    ? "End-to-end encryption active"
+                    : "Vault access required"}
                 <div className="mt-0.5 text-[11.5px] font-light text-muted-foreground">
-                  Files are encrypted on your device before upload.
+                  {isVaultStateLoading
+                    ? "Checking this browser for the key that protects your files."
+                    : hasVaultAccess
+                      ? "Files are encrypted on your device before upload."
+                      : "Create or recover access before this browser can open encrypted files."}
                 </div>
               </div>
             </div>
