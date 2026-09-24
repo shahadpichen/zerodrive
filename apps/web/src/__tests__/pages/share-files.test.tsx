@@ -13,6 +13,7 @@ import { getMnemonic } from "../../utils/mnemonicManager";
 import { recoverRsaKeysIfNeeded } from "../../utils/rsaKeyRecovery";
 import apiClient from "../../utils/apiClient";
 import {
+  getOrFetchGoogleToken,
   getUserEmail,
   hasGoogleTokensInStorage,
 } from "../../utils/authService";
@@ -25,6 +26,7 @@ import {
 import { decryptFile } from "../../utils/decryptFile";
 import { pinRecipientKey } from "../../utils/recipientKeyPins";
 import { getStoredKey } from "../../utils/cryptoUtils";
+import { ThemeProvider, useTheme } from "../../components/theme-provider";
 
 const mockNavigate = jest.fn();
 
@@ -35,6 +37,7 @@ jest.mock("react-router-dom", () => ({
 
 jest.mock("../../utils/authService", () => ({
   getUserEmail: jest.fn().mockResolvedValue("sender@example.com"),
+  getOrFetchGoogleToken: jest.fn().mockResolvedValue("google-token"),
   hasGoogleTokensInStorage: jest.fn().mockReturnValue(true),
   logout: jest.fn(),
 }));
@@ -143,13 +146,29 @@ const mockGetStoredKey = getStoredKey as jest.MockedFunction<
   typeof getStoredKey
 >;
 
-function renderPage() {
+function AppearanceSwitch() {
+  const { interfaceStyle, setInterfaceStyle } = useTheme();
+  return (
+    <button
+      onClick={() =>
+        setInterfaceStyle(interfaceStyle === "creator" ? "modern" : "creator")
+      }
+    >
+      Switch interface
+    </button>
+  );
+}
+
+function renderPage(withAppearanceSwitch = false) {
   return render(
-    <AppProvider>
-      <MemoryRouter>
-        <ShareFilesPage />
-      </MemoryRouter>
-    </AppProvider>,
+    <ThemeProvider defaultTheme="light">
+      <AppProvider>
+        <MemoryRouter>
+          {withAppearanceSwitch && <AppearanceSwitch />}
+          <ShareFilesPage />
+        </MemoryRouter>
+      </AppProvider>
+    </ThemeProvider>,
   );
 }
 
@@ -176,6 +195,7 @@ describe("ShareFilesPage", () => {
       data: { email: "sender@example.com", emailHash: "f".repeat(64) },
     });
     mockGetUserEmail.mockResolvedValue("sender@example.com");
+    (getOrFetchGoogleToken as jest.Mock).mockResolvedValue("google-token");
     mockHasGoogleTokens.mockReturnValue(true);
     mockInitializeGapi.mockResolvedValue(undefined);
     mockGetGoogleAccessToken.mockResolvedValue("google-token");
@@ -240,6 +260,45 @@ describe("ShareFilesPage", () => {
     expect(
       screen.getByText(/only the chosen recipient can unlock it/i),
     ).toBeInTheDocument();
+  });
+
+  it("preserves the selected file, recipient and message when switching interface styles", async () => {
+    renderPage(true);
+    const file = await fillShareDetails();
+    fireEvent.click(
+      screen.getByRole("button", { name: /add a personal message/i }),
+    );
+    fireEvent.change(screen.getByLabelText("Message"), {
+      target: { value: "Review this roadmap" },
+    });
+    const fileInput = screen.getByLabelText(
+      "File to share",
+    ) as HTMLInputElement;
+    const recoveryCalls = mockRecoverKeys.mock.calls.length;
+    const initializationCalls = mockInitializeGapi.mock.calls.length;
+
+    fireEvent.click(screen.getByRole("button", { name: "Switch interface" }));
+    expect(document.documentElement).toHaveAttribute(
+      "data-interface",
+      "modern",
+    );
+    expect(screen.getByLabelText("File to share")).toBe(fileInput);
+    expect(fileInput.files?.[0]).toBe(file);
+    expect(screen.getByLabelText("Email address")).toHaveValue(
+      "recipient@example.com",
+    );
+    expect(screen.getByLabelText("Message")).toHaveValue("Review this roadmap");
+
+    fireEvent.click(screen.getByRole("button", { name: /review share/i }));
+    await screen.findByText("Review before sharing");
+    fireEvent.click(screen.getByRole("button", { name: "Switch interface" }));
+    expect(screen.getByText("Review before sharing")).toBeInTheDocument();
+    expect(screen.getByText("roadmap.pdf")).toBeInTheDocument();
+    expect(screen.getByText("recipient@example.com")).toBeInTheDocument();
+    expect(screen.getByText("Review this roadmap")).toBeInTheDocument();
+    expect(mockRecoverKeys).toHaveBeenCalledTimes(recoveryCalls);
+    expect(mockInitializeGapi).toHaveBeenCalledTimes(initializationCalls);
+    expect(mockStoreFileShare).not.toHaveBeenCalled();
   });
 
   it("presents sharing setup as a blocking prerequisite", async () => {
@@ -377,16 +436,10 @@ describe("ShareFilesPage", () => {
     );
     expect(mockDecryptFile).toHaveBeenCalledTimes(1);
     expect(mockDecryptFile.mock.calls[0][0]).toBe(encryptedBlob);
-    expect(mockDecryptFile.mock.calls[0][1]?.name).toBe(
-      "stored-report.pdf",
-    );
+    expect(mockDecryptFile.mock.calls[0][1]?.name).toBe("stored-report.pdf");
     expect(mockPrepareFile).toHaveBeenCalledTimes(1);
-    expect(mockPrepareFile.mock.calls[0][0].name).toBe(
-      "stored.pdf",
-    );
-    expect(mockPrepareFile.mock.calls[0][0].type).toBe(
-      "application/pdf",
-    );
+    expect(mockPrepareFile.mock.calls[0][0].name).toBe("stored.pdf");
+    expect(mockPrepareFile.mock.calls[0][0].type).toBe("application/pdf");
   });
 
   it("shows a persistent success state after sharing", async () => {

@@ -897,7 +897,7 @@ export const FileList: React.FC<FileListProps> = ({
           ))}
         </div>
       ) : (
-        <div className="overflow-x-auto">
+        <div className="file-table overflow-x-auto">
           <table className="w-full border-collapse text-sm">
             <thead>
               <tr className="border-b text-left text-xs uppercase tracking-wide text-muted-foreground">

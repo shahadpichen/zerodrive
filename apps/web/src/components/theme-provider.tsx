@@ -1,78 +1,85 @@
 import { createContext, useContext, useEffect, useState } from "react";
-
-type Theme = "dark" | "light" | "system";
+import {
+  ColorMode,
+  InterfaceStyle,
+  INTERFACE_STORAGE_KEY,
+  THEME_STORAGE_KEY,
+  isColorMode,
+  readPreference,
+  savePreference,
+} from "../appearance/preferences";
 
 type ThemeProviderProps = {
   children: React.ReactNode;
-  defaultTheme?: Theme;
+  defaultTheme?: ColorMode;
   storageKey?: string;
 };
-
 type ThemeProviderState = {
-  theme: Theme;
-  setTheme: (theme: Theme) => void;
+  theme: ColorMode;
+  setTheme: (theme: ColorMode) => void;
+  resolvedTheme: "light" | "dark";
+  interfaceStyle: InterfaceStyle;
+  setInterfaceStyle: (style: InterfaceStyle) => void;
 };
-
-const initialState: ThemeProviderState = {
-  theme: "system",
-  setTheme: () => null,
-};
-
-const ThemeProviderContext = createContext<ThemeProviderState>(initialState);
+const ThemeProviderContext = createContext<ThemeProviderState>({
+  theme: "light",
+  resolvedTheme: "light",
+  interfaceStyle: "creator",
+  setTheme: () => {},
+  setInterfaceStyle: () => {},
+});
 
 export function ThemeProvider({
   children,
   defaultTheme = "system",
-  storageKey = "vite-ui-theme",
-  ...props
+  storageKey = THEME_STORAGE_KEY,
 }: ThemeProviderProps) {
-  const [theme, setTheme] = useState<Theme>(
-    () =>
-      (typeof window !== "undefined"
-        ? (window.localStorage.getItem(storageKey) as Theme)
-        : null) || defaultTheme,
-  );
-
+  // Match build-time HTML first; restore preferences after hydration.
+  const [theme, updateTheme] = useState<ColorMode>(defaultTheme);
+  const [interfaceStyle, updateInterface] = useState<InterfaceStyle>("creator");
+  const [systemDark, setSystemDark] = useState(false);
+  const [ready, setReady] = useState(false);
   useEffect(() => {
-    const root = window.document.documentElement;
-
+    const saved = readPreference(storageKey);
+    updateTheme(isColorMode(saved) ? saved : defaultTheme);
+    updateInterface(
+      readPreference(INTERFACE_STORAGE_KEY) === "modern" ? "modern" : "creator",
+    );
+    const media = window.matchMedia?.("(prefers-color-scheme: dark)");
+    const update = () => setSystemDark(media?.matches ?? false);
+    update();
+    media?.addEventListener?.("change", update);
+    setReady(true);
+    return () => media?.removeEventListener?.("change", update);
+  }, [storageKey, defaultTheme]);
+  const resolvedTheme =
+    theme === "system" ? (systemDark ? "dark" : "light") : theme;
+  useEffect(() => {
+    if (!ready) return;
+    const root = document.documentElement;
     root.classList.remove("light", "dark");
-
-    if (theme === "system") {
-      const systemTheme = window.matchMedia("(prefers-color-scheme: dark)")
-        .matches
-        ? "dark"
-        : "light";
-
-      root.classList.add(systemTheme);
-      return;
-    }
-
-    root.classList.add(theme);
-  }, [theme]);
-
-  const value = {
-    theme,
-    setTheme: (theme: Theme) => {
-      if (typeof window !== "undefined") {
-        window.localStorage.setItem(storageKey, theme);
-      }
-      setTheme(theme);
-    },
-  };
-
+    root.classList.add(resolvedTheme);
+    root.dataset.interface = interfaceStyle;
+    root.style.colorScheme = resolvedTheme;
+  }, [resolvedTheme, interfaceStyle, ready]);
   return (
-    <ThemeProviderContext.Provider {...props} value={value}>
+    <ThemeProviderContext.Provider
+      value={{
+        theme,
+        resolvedTheme,
+        interfaceStyle,
+        setTheme: (next) => {
+          savePreference(storageKey, next);
+          updateTheme(next);
+        },
+        setInterfaceStyle: (next) => {
+          savePreference(INTERFACE_STORAGE_KEY, next);
+          updateInterface(next);
+        },
+      }}
+    >
       {children}
     </ThemeProviderContext.Provider>
   );
 }
-
-export const useTheme = () => {
-  const context = useContext(ThemeProviderContext);
-
-  if (context === undefined)
-    throw new Error("useTheme must be used within a ThemeProvider");
-
-  return context;
-};
+export const useTheme = () => useContext(ThemeProviderContext);

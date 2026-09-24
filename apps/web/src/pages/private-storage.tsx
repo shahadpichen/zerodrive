@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
+import { useInterfaceCopy } from "../appearance/content";
 import { useNavigate } from "react-router-dom";
 import { FileList } from "../components/storage/file-list";
 import { Button } from "../components/ui/button";
@@ -58,6 +59,7 @@ function createMetadataReplaceCode() {
 }
 
 function PrivateStorageContent() {
+  const copy = useInterfaceCopy().storage;
   const navigate = useNavigate();
   const { currentFolderId } = useFolderContext();
   const {
@@ -587,7 +589,7 @@ function PrivateStorageContent() {
       />
 
       <div
-        className="relative space-y-6"
+        className="modern-page storage-page relative space-y-6"
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
@@ -606,7 +608,7 @@ function PrivateStorageContent() {
         {/* Page Header */}
         <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between lg:gap-8">
           <div className="flex max-w-3xl flex-col gap-2">
-            <h1 className="text-2xl tracking-tight">Storage</h1>
+            <h1 className="text-2xl tracking-tight">{copy.title}</h1>
             {hasVaultKey === false ? (
               <p className="text-sm font-light leading-relaxed text-muted-foreground">
                 Set up vault access before using Storage. You can create a new
@@ -614,8 +616,7 @@ function PrivateStorageContent() {
               </p>
             ) : (
               <p className="text-sm font-light leading-relaxed text-muted-foreground">
-                This is your encrypted vault. Files are encrypted in this
-                browser before the protected copy is saved to your Google Drive.
+                {copy.description}
               </p>
             )}
           </div>

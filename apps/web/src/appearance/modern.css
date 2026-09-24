@@ -1,0 +1,243 @@
+@font-face {
+  font-family: "Inter";
+  src: url("../../public/fonts/inter-latin-variable.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Bricolage Grotesque";
+  src: url("../../public/fonts/bricolage-grotesque-latin-variable.woff2")
+    format("woff2");
+  font-style: normal;
+  font-weight: 200 800;
+  font-display: swap;
+}
+
+:root[data-interface="modern"] {
+  --background: 50 23% 95%;
+  --foreground: 48 20% 10%;
+  --card: 48 25% 97%;
+  --card-foreground: 48 20% 10%;
+  --popover: 48 25% 97%;
+  --popover-foreground: 48 20% 10%;
+  --primary: 48 20% 10%;
+  --primary-foreground: 50 23% 95%;
+  --primary-hover: 48 15% 20%;
+  --brand: 12 100% 52%;
+  --secondary: 48 12% 89%;
+  --secondary-foreground: 48 20% 10%;
+  --muted: 48 12% 91%;
+  --muted-foreground: 48 5% 35%;
+  --accent: 20 45% 92%;
+  --accent-foreground: 12 85% 34%;
+  --accent-border: 12 85% 40%;
+  --link: 12 85% 34%;
+  --border: 48 10% 82%;
+  --input: 48 5% 50%;
+  --ring: 12 85% 34%;
+  --destructive: 0 72% 42%;
+  --destructive-foreground: 0 0% 100%;
+  --radius: 0.25rem;
+  --control-radius: 0.125rem;
+  --surface-shadow: none;
+}
+:root[data-interface="modern"].dark {
+  --background: 48 12% 8%;
+  --foreground: 50 23% 95%;
+  --card: 48 10% 12%;
+  --card-foreground: 50 23% 95%;
+  --popover: 48 10% 12%;
+  --popover-foreground: 50 23% 95%;
+  --primary: 50 23% 95%;
+  --primary-foreground: 48 20% 10%;
+  --primary-hover: 48 15% 84%;
+  --brand: 15 100% 64%;
+  --secondary: 48 8% 20%;
+  --secondary-foreground: 50 23% 95%;
+  --muted: 48 8% 20%;
+  --muted-foreground: 48 7% 68%;
+  --accent: 15 30% 17%;
+  --accent-foreground: 15 100% 72%;
+  --accent-border: 15 75% 58%;
+  --link: 15 100% 72%;
+  --border: 48 6% 27%;
+  --input: 48 5% 53%;
+  --ring: 15 100% 72%;
+  --destructive: 0 72% 42%;
+  --surface-shadow: none;
+}
+[data-interface="modern"] body {
+  font-family: "Inter", system-ui, sans-serif;
+  font-variation-settings: normal;
+}
+[data-interface="modern"] :is(h1, h2, h3, .brand-wordmark) {
+  font-family: "Bricolage Grotesque", "Inter", sans-serif;
+  font-weight: 800;
+  letter-spacing: -0.045em;
+}
+[data-interface="modern"]
+  :is(button, a, input, textarea, select):focus-visible {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: 3px;
+}
+[data-interface="modern"] .zd-button {
+  border-radius: var(--control-radius);
+  font-weight: 600;
+  transition:
+    background-color 150ms,
+    box-shadow 150ms;
+}
+[data-interface="modern"] .zd-button-primary {
+  background: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+  border-color: transparent;
+  box-shadow: none;
+}
+[data-interface="modern"] .zd-button-primary:hover {
+  background: hsl(var(--primary-hover));
+}
+:root[data-interface="modern"] .text-primary {
+  color: hsl(var(--link));
+}
+[data-interface="modern"] .modern-brand-mark {
+  color: hsl(var(--brand));
+}
+[data-interface="modern"] .modern-emphasis {
+  color: hsl(var(--brand));
+}
+[data-interface="modern"] .modern-eyebrow {
+  font-family: ui-monospace, monospace;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.25em;
+  text-transform: uppercase;
+}
+[data-interface="modern"] .modern-hero .zd-button-primary {
+  min-height: 3.5rem;
+  padding-inline: 2rem;
+}
+[data-interface="modern"] .modern-sidebar nav a {
+  border-radius: var(--control-radius);
+}
+[data-interface="modern"] :is(.zd-surface, .zd-popover) {
+  border-radius: var(--radius);
+  background: hsl(var(--card));
+  color: hsl(var(--card-foreground));
+  box-shadow: var(--surface-shadow);
+}
+[data-interface="modern"]
+  :is(
+    input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
+    textarea,
+    select
+  ) {
+  border-radius: var(--control-radius);
+  border-color: hsl(var(--input));
+}
+[data-interface="modern"] .modern-page {
+  max-width: 80rem;
+  margin-inline: auto;
+}
+[data-interface="modern"] .modern-page > .border,
+[data-interface="modern"] .modern-page > section.border,
+[data-interface="modern"] .home-panel {
+  border-radius: var(--radius);
+  background: hsl(var(--card));
+  box-shadow: var(--surface-shadow);
+  overflow: hidden;
+}
+[data-interface="modern"] .modern-page h1 {
+  font-size: clamp(1.75rem, 3vw, 2.5rem);
+}
+[data-interface="modern"] .modern-page .font-light {
+  font-weight: 400;
+}
+[data-interface="modern"] .home-content {
+  margin-top: 2.5rem;
+  max-width: 80rem;
+}
+[data-interface="modern"] .home-welcome {
+  text-align: left;
+}
+[data-interface="modern"] .home-welcome :is(h1, p) {
+  margin-left: 0;
+}
+[data-interface="modern"] .home-feature {
+  border-radius: var(--radius);
+  background: hsl(var(--card));
+  box-shadow: var(--surface-shadow);
+}
+[data-interface="modern"] .home-feature:hover {
+  border-color: hsl(var(--accent-border));
+}
+[data-interface="modern"] .share-content > .border,
+[data-interface="modern"] .share-content > div > .border,
+[data-interface="modern"] .recovery-page > .border {
+  border-radius: var(--radius);
+  background: hsl(var(--card));
+  box-shadow: var(--surface-shadow);
+  overflow: hidden;
+}
+[data-interface="modern"] .share-content [aria-label="Sharing progress"] {
+  border-radius: var(--control-radius);
+  overflow: hidden;
+  background: hsl(var(--card));
+}
+[data-interface="modern"] .share-content [aria-current="step"] {
+  background: hsl(var(--accent));
+  color: hsl(var(--accent-foreground));
+}
+[data-interface="modern"] .storage-page .file-table {
+  border: 1px solid hsl(var(--border));
+  border-radius: var(--radius);
+  background: hsl(var(--card));
+  box-shadow: var(--surface-shadow);
+}
+[data-interface="modern"] .file-table :is(th, td) {
+  padding: 1rem;
+}
+[data-interface="modern"] .file-table th {
+  background: hsl(var(--muted));
+}
+[data-interface="modern"] .docs-reading {
+  font-size: 1rem;
+  line-height: 1.8;
+}
+[data-interface="modern"] .docs-reading :is(p, li) {
+  font-weight: 400;
+}
+[data-interface="modern"] .zd-tooltip {
+  border-radius: var(--control-radius);
+}
+.modern-sidebar {
+  display: none;
+}
+[data-interface="modern"] .zd-popover.modern-navigation-drawer {
+  inset: 0 auto 0 0;
+  width: min(22rem, 90vw);
+  height: 100dvh;
+  max-width: none;
+  transform: none;
+  border-radius: 0 1rem 1rem 0;
+  align-content: start;
+  overflow-y: auto;
+  animation: none;
+}
+@media (min-width: 1024px) {
+  [data-interface="modern"] .modern-sidebar {
+    display: flex;
+  }
+  [data-interface="modern"] .modern-app-content {
+    margin-left: 16rem;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-interface="modern"] *,
+  [data-interface="modern"] *::before,
+  [data-interface="modern"] *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

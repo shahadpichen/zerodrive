@@ -1,6 +1,7 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
 import { ModeToggle } from "../../components/mode-toggle";
+import { Brand } from "../../appearance/brand";
 
 import {
   DropdownMenu,
@@ -19,7 +20,7 @@ function Header() {
         onClick={() => navigate("/")}
         className="flex cursor-pointer items-center space-x-1 border-none bg-transparent p-0"
       >
-        <span className="text-lg font-semibold">ZeroDrive</span>
+        <Brand />
       </button>
 
       {/* Desktop Navigation */}

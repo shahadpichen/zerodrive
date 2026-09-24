@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { useInterfaceCopy } from "../appearance/content";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   AlertCircle,
@@ -47,6 +48,7 @@ const allowedReturnTargets = new Set([
 ]);
 
 export const KeyManagementPage: React.FC = () => {
+  const copy = useInterfaceCopy().recovery;
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const requestedReturnTo = searchParams.get("returnTo");
@@ -561,13 +563,11 @@ export const KeyManagementPage: React.FC = () => {
         </DialogContent>
       </Dialog>
 
-      <div className="space-y-6">
+      <div className="modern-page recovery-page space-y-6">
         <div>
-          <h1 className="text-2xl tracking-tight">Recovery & Access</h1>
+          <h1 className="text-2xl tracking-tight">{copy.title}</h1>
           <p className="mt-1 max-w-2xl text-sm leading-relaxed text-muted-foreground">
-            Manage the browser access that protects your encrypted vault.
-            Recovery happens locally; your recovery phrase is not sent to the
-            ZeroDrive server.
+            {copy.description}
           </p>
         </div>
 
