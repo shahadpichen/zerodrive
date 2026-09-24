@@ -2,6 +2,7 @@ import React from "react";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { KeyManagementPage } from "../../pages/key-management-page";
+import { ThemeProvider, useTheme } from "../../components/theme-provider";
 import {
   generateMnemonic,
   getStoredKey,
@@ -69,9 +70,7 @@ const mockGetStoredKey = getStoredKey as jest.MockedFunction<
 >;
 const mockGetMnemonic = getMnemonic as jest.MockedFunction<typeof getMnemonic>;
 const mockRecoverRsaKeysIfNeeded =
-  recoverRsaKeysIfNeeded as jest.MockedFunction<
-    typeof recoverRsaKeysIfNeeded
-  >;
+  recoverRsaKeysIfNeeded as jest.MockedFunction<typeof recoverRsaKeysIfNeeded>;
 const mockGetUserEmail = getUserEmail as jest.MockedFunction<
   typeof getUserEmail
 >;
@@ -83,14 +82,33 @@ const mockHasGoogleTokensInStorage =
 const mnemonic =
   "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
 
-async function renderPage(initialEntry = "/recovery-access") {
-  return render(
-    <MemoryRouter
-      initialEntries={[initialEntry]}
-      future={{ v7_relativeSplatPath: true, v7_startTransition: true }}
+function AppearanceSwitch() {
+  const { interfaceStyle, setInterfaceStyle } = useTheme();
+  return (
+    <button
+      onClick={() =>
+        setInterfaceStyle(interfaceStyle === "creator" ? "modern" : "creator")
+      }
     >
-      <KeyManagementPage />
-    </MemoryRouter>,
+      Switch interface
+    </button>
+  );
+}
+
+async function renderPage(
+  initialEntry = "/recovery-access",
+  withAppearanceSwitch = false,
+) {
+  return render(
+    <ThemeProvider defaultTheme="light">
+      <MemoryRouter
+        initialEntries={[initialEntry]}
+        future={{ v7_relativeSplatPath: true, v7_startTransition: true }}
+      >
+        {withAppearanceSwitch && <AppearanceSwitch />}
+        <KeyManagementPage />
+      </MemoryRouter>
+    </ThemeProvider>,
   );
 }
 
@@ -132,6 +150,26 @@ describe("KeyManagementPage", () => {
     expect(screen.getByLabelText("Recovery phrase")).toBeInTheDocument();
     expect(screen.getByText(/never sent to the server/i)).toBeInTheDocument();
     expect(screen.getByText("Current browser key status")).toBeInTheDocument();
+  });
+
+  it("preserves an entered recovery phrase when changing interface without generating or recovering keys", async () => {
+    await renderPage("/recovery-access", true);
+    const phraseInput = screen.getByLabelText("Recovery phrase");
+    fireEvent.change(phraseInput, { target: { value: mnemonic } });
+    fireEvent.click(screen.getByRole("button", { name: "Switch interface" }));
+    expect(document.documentElement).toHaveAttribute(
+      "data-interface",
+      "modern",
+    );
+    expect(screen.getByLabelText("Recovery phrase")).toBe(phraseInput);
+    expect(phraseInput).toHaveValue(mnemonic);
+
+    fireEvent.click(screen.getByRole("button", { name: "Switch interface" }));
+    expect(phraseInput).toHaveValue(mnemonic);
+    expect(mockGenerateMnemonic).not.toHaveBeenCalled();
+    expect(mockStoreKey).not.toHaveBeenCalled();
+    expect(mockRecoverRsaKeysIfNeeded).not.toHaveBeenCalled();
+    expect(mockNavigate).not.toHaveBeenCalled();
   });
 
   it("switches cleanly between recovery and key creation", async () => {
@@ -192,9 +230,7 @@ describe("KeyManagementPage", () => {
     );
 
     await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith("/home"));
-    expect(mockRecoverRsaKeysIfNeeded).toHaveBeenCalledWith(
-      "user@example.com",
-    );
+    expect(mockRecoverRsaKeysIfNeeded).toHaveBeenCalledWith("user@example.com");
     expect(mockStoreKey).not.toHaveBeenCalled();
   });
 

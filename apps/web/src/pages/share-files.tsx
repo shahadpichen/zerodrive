@@ -1,4 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
+import { useInterfaceCopy } from "../appearance/content";
+import { useTheme } from "../components/theme-provider";
 import { useNavigate } from "react-router-dom";
 import {
   AlertCircle,
@@ -206,6 +208,8 @@ function StepIndicator({
 }
 
 const ShareFilesPage: React.FC = () => {
+  const copy = useInterfaceCopy().share;
+  const { interfaceStyle } = useTheme();
   const navigate = useNavigate();
   const { userEmail } = useApp();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -1370,18 +1374,51 @@ const ShareFilesPage: React.FC = () => {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="modern-page share-page space-y-6">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl tracking-tight">Share a file</h1>
+          <h1 className="text-2xl tracking-tight">{copy.title}</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Your browser locks the file so only the chosen recipient can unlock
-            it.
+            {copy.description}
           </p>
         </div>
       </div>
 
-      <div className="max-w-4xl">{renderContent()}</div>
+      {interfaceStyle === "modern" &&
+        pageState !== "compose" &&
+        pageState !== "review" && (
+          <ol
+            aria-label="Sharing progress"
+            className="flex flex-wrap gap-3 text-sm"
+          >
+            {[
+              {
+                label: "Choose & address",
+                active: [
+                  "checking",
+                  "access",
+                  "setup",
+                  "compose",
+                  "invite",
+                ].includes(pageState),
+              },
+              { label: "Review", active: false },
+              { label: "Encrypt & send", active: pageState === "sharing" },
+              { label: "Done", active: pageState === "success" },
+            ].map((step, index) => (
+              <li
+                key={step.label}
+                aria-current={step.active ? "step" : undefined}
+                className={`rounded-full border px-4 py-2 ${step.active ? "bg-accent text-accent-foreground" : "text-muted-foreground"}`}
+              >
+                {index + 1}. {step.label}
+              </li>
+            ))}
+          </ol>
+        )}
+      <div key="share-content" className="share-content max-w-4xl">
+        {renderContent()}
+      </div>
     </div>
   );
 };

@@ -1,3 +1,4 @@
+import { useInterfaceCopy } from "../appearance/content";
 import React, {
   useCallback,
   useEffect,
@@ -209,6 +210,7 @@ async function getRecipientPrivateKeyCandidates(
 }
 
 const SharedWithMePage: React.FC = () => {
+  const copy = useInterfaceCopy().inbox;
   const navigate = useNavigate();
   const vaultData = useOptionalVaultData();
   const { enqueueUploads, waitForTask } = useUploadQueue();
@@ -569,13 +571,12 @@ const SharedWithMePage: React.FC = () => {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="modern-page inbox-page space-y-6">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl tracking-tight">Shared with me</h1>
+          <h1 className="text-2xl tracking-tight">{copy.title}</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Encrypted files sent to this ZeroDrive account. Your browser unlocks
-            them only after the sender finalizes the share.
+            {copy.description}
           </p>
         </div>
         <Button

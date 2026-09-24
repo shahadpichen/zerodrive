@@ -8,6 +8,8 @@ import {
 } from "../../utils/vaultIndexDriveStorage";
 import { LegalAcceptanceReminder } from "../legal-acceptance-gate";
 import { GoogleDrivePermissionReminder } from "../google-drive-permission-gate";
+import { ModernNavigation } from "../../appearance/modern-navigation";
+import { ModeToggle } from "../mode-toggle";
 
 function AuthenticatedLayoutContent({
   children,
@@ -61,46 +63,50 @@ function AuthenticatedLayoutContent({
 
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <div className="mx-auto max-w-6xl px-6 pb-20 pt-8">
-        {/* No chrome — just a way back to the hub */}
-        <div className="mb-6 flex items-center justify-between gap-4">
-          <button
-            onClick={() => navigate("/home")}
-            className="inline-flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Home
-          </button>
-          <div className="flex items-center gap-3">
-            <GoogleDrivePermissionReminder />
-            <LegalAcceptanceReminder />
+      <ModernNavigation />
+      <div className="modern-app-content">
+        <div className="modern-page mx-auto max-w-6xl px-6 pb-20 pt-8">
+          {/* No chrome — just a way back to the hub */}
+          <div className="mb-6 flex items-center justify-between gap-4">
+            <button
+              onClick={() => navigate("/home")}
+              className="inline-flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Home
+            </button>
+            <div className="flex items-center gap-3">
+              <GoogleDrivePermissionReminder />
+              <LegalAcceptanceReminder />
+              <ModeToggle />
+            </div>
           </div>
+
+          {shouldShowDecryptionNotice && (
+            <div className="mb-6 flex items-center gap-2 border-2 border-accent-border bg-accent px-4 py-3">
+              <AlertTriangle className="h-4 w-4 text-accent-foreground" />
+              <span className="text-xs font-medium leading-relaxed text-accent-foreground">
+                {decryptionNotice.message}
+                <button
+                  onClick={() => navigate(recoveryPath)}
+                  className="ml-1 underline hover:no-underline"
+                >
+                  {decryptionNotice.action}
+                </button>
+              </span>
+            </div>
+          )}
+
+          {showVaultIndexMigrationNotice && (
+            <div className="mb-6 border border-border bg-card px-4 py-3 text-xs leading-relaxed text-muted-foreground">
+              ZeroDrive moved your encrypted file list to hidden Google app
+              storage. The old visible <code>db-list.json</code> safety copy is
+              no longer used; keep it until your files look right.
+            </div>
+          )}
+
+          {children}
         </div>
-
-        {shouldShowDecryptionNotice && (
-          <div className="mb-6 flex items-center gap-2 border-2 border-accent-border bg-accent px-4 py-3">
-            <AlertTriangle className="h-4 w-4 text-accent-foreground" />
-            <span className="text-xs font-medium leading-relaxed text-accent-foreground">
-              {decryptionNotice.message}
-              <button
-                onClick={() => navigate(recoveryPath)}
-                className="ml-1 underline hover:no-underline"
-              >
-                {decryptionNotice.action}
-              </button>
-            </span>
-          </div>
-        )}
-
-        {showVaultIndexMigrationNotice && (
-          <div className="mb-6 border border-border bg-card px-4 py-3 text-xs leading-relaxed text-muted-foreground">
-            ZeroDrive moved your encrypted file list to hidden Google app
-            storage. The old visible <code>db-list.json</code> safety copy is no
-            longer used; keep it until your files look right.
-          </div>
-        )}
-
-        {children}
       </div>
     </div>
   );

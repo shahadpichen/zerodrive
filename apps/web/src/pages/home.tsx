@@ -1,4 +1,6 @@
 import React, { useEffect, useState } from "react";
+import { ModernNavigation } from "../appearance/modern-navigation";
+import { Brand } from "../appearance/brand";
 import { useNavigate } from "react-router-dom";
 import {
   HardDrive,
@@ -441,348 +443,357 @@ function HomeContent() {
   };
 
   return (
-    <div className="container mx-auto w-full relative min-h-screen bg-background text-foreground">
-      {/* Header (landing-page style) — brand left, account controls right */}
-      <header className="flex h-[10vh] border-b justify-between pt-5 items-center gap-4 px-10 lg:px-10">
-        <button
-          onClick={() => navigate("/home")}
-          className="flex items-center gap-2 bg-transparent p-0"
-        >
-          <span className="text-lg font-semibold">ZeroDrive</span>
-        </button>
-        <div className="flex items-center gap-3">
-          <a
-            href="https://github.com/zerodrivehq/zerodrive"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="hidden text-sm font-medium hover:underline sm:inline-block"
-          >
-            Star on GitHub
-          </a>
-          <GoogleDrivePermissionReminder className="hidden sm:inline-flex" />
-          <LegalAcceptanceReminder className="hidden sm:inline-flex" />
-          <ModeToggle />
-          {userEmail && (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button aria-label="Account menu" className="rounded-full">
-                  <Avatar className="h-9 w-9">
-                    {userImage && (
-                      <AvatarImage
-                        src={userImage}
-                        alt={userName || userEmail}
-                      />
-                    )}
-                    <AvatarFallback>
-                      {initials(userName, userEmail)}
-                    </AvatarFallback>
-                  </Avatar>
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-64">
-                <DropdownMenuLabel className="font-normal">
-                  <div className="flex flex-col space-y-0.5">
-                    <span className="text-sm font-medium">
-                      {userName || userEmail}
-                    </span>
-                    <span className="truncate text-xs text-muted-foreground">
-                      {userEmail}
-                    </span>
-                  </div>
-                </DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                {storageInfo && (
-                  <>
-                    <div className="px-2 py-2">
-                      <div className="mb-1.5 flex items-center justify-between text-xs">
-                        <span className="text-muted-foreground">
-                          Storage used
+    <div className="mx-auto w-full relative min-h-screen bg-background text-foreground">
+      <ModernNavigation />
+      <div className="modern-app-content">
+        <div className="container mx-auto">
+          {/* Header (landing-page style) — brand left, account controls right */}
+          <header className="flex h-[10vh] border-b justify-between pt-5 items-center gap-4 px-10 lg:px-10">
+            <button
+              onClick={() => navigate("/home")}
+              className="flex items-center gap-2 bg-transparent p-0"
+            >
+              <Brand />
+            </button>
+            <div className="flex items-center gap-3">
+              <a
+                href="https://github.com/zerodrivehq/zerodrive"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="hidden text-sm font-medium hover:underline sm:inline-block"
+              >
+                Star on GitHub
+              </a>
+              <GoogleDrivePermissionReminder className="hidden sm:inline-flex" />
+              <LegalAcceptanceReminder className="hidden sm:inline-flex" />
+              <ModeToggle />
+              {userEmail && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button aria-label="Account menu" className="rounded-full">
+                      <Avatar className="h-9 w-9">
+                        {userImage && (
+                          <AvatarImage
+                            src={userImage}
+                            alt={userName || userEmail}
+                          />
+                        )}
+                        <AvatarFallback>
+                          {initials(userName, userEmail)}
+                        </AvatarFallback>
+                      </Avatar>
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-64">
+                    <DropdownMenuLabel className="font-normal">
+                      <div className="flex flex-col space-y-0.5">
+                        <span className="text-sm font-medium">
+                          {userName || userEmail}
                         </span>
-                        <span>
-                          {formatBytes(storageInfo.used)} /{" "}
-                          {formatBytes(storageInfo.total)}
+                        <span className="truncate text-xs text-muted-foreground">
+                          {userEmail}
                         </span>
                       </div>
-                      <Progress value={usagePercentage} className="h-1.5" />
-                    </div>
+                    </DropdownMenuLabel>
                     <DropdownMenuSeparator />
-                  </>
-                )}
-                <DropdownMenuItem
-                  onClick={handleLogout}
-                  className="cursor-pointer"
-                >
-                  <LogOut className="mr-2 h-4 w-4" />
-                  Log out
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          )}
-        </div>
-      </header>
-
-      <div className="mx-auto mt-20 max-w-5xl px-6 pb-20 sm:px-8">
-        {/* Welcome — centered, matching the landing hero type scale */}
-        <div className="text-center">
-          <h1 className="text-xl sm:text-2xl md:text-3xl md:w-[70%] mx-auto">
-            {heroHeadline}
-          </h1>
-          <p className="mx-auto mt-4 max-w-2xl font-light leading-relaxed">
-            {heroDescription}
-          </p>
-        </div>
-
-        {showVaultGuidance && vaultSetup && (
-          <div className="mt-8 border text-left">
-            <div className="flex flex-col gap-4 border-b px-5 py-5 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <div className="inline-flex border px-2.5 py-1 text-xs font-semibold">
-                  {vaultSetup.badge}
-                </div>
-                <h2 className="mt-4 text-xl tracking-tight">
-                  {nextTask
-                    ? "Your next step is clear"
-                    : "Your vault setup is almost complete"}
-                </h2>
-                <p className="mt-2 max-w-2xl text-sm font-light leading-relaxed text-muted-foreground">
-                  {nextTask
-                    ? nextTask.description
-                    : "You can keep using ZeroDrive now. Secure sharing is optional and can be created when you need it."}
-                </p>
-              </div>
-              <div className="flex flex-col gap-2 sm:min-w-56">
-                <button
-                  onClick={() => navigate(vaultSetup.primaryActionPath)}
-                  className="border bg-foreground px-4 py-2 text-sm font-semibold text-background transition-colors hover:bg-foreground/90"
-                >
-                  {vaultSetup.primaryActionLabel}
-                </button>
-                {vaultSetup.status !== "needs_key" && (
-                  <button
-                    onClick={handleDismissGuidance}
-                    className="px-4 py-2 text-sm text-muted-foreground hover:text-foreground"
-                  >
-                    Hide setup guidance
-                  </button>
-                )}
-              </div>
+                    {storageInfo && (
+                      <>
+                        <div className="px-2 py-2">
+                          <div className="mb-1.5 flex items-center justify-between text-xs">
+                            <span className="text-muted-foreground">
+                              Storage used
+                            </span>
+                            <span>
+                              {formatBytes(storageInfo.used)} /{" "}
+                              {formatBytes(storageInfo.total)}
+                            </span>
+                          </div>
+                          <Progress value={usagePercentage} className="h-1.5" />
+                        </div>
+                        <DropdownMenuSeparator />
+                      </>
+                    )}
+                    <DropdownMenuItem
+                      onClick={handleLogout}
+                      className="cursor-pointer"
+                    >
+                      <LogOut className="mr-2 h-4 w-4" />
+                      Log out
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
             </div>
-            <div className="grid divide-y sm:grid-cols-2 sm:divide-x sm:divide-y-0">
-              {vaultSetup.tasks.map((task) => (
-                <button
-                  key={task.id}
-                  onClick={() => task.actionPath && navigate(task.actionPath)}
-                  className="flex items-start gap-3 px-5 py-4 text-left transition-colors hover:bg-muted/50"
-                >
-                  <span
-                    className={`mt-0.5 flex h-6 w-6 flex-shrink-0 items-center justify-center border text-xs ${
-                      task.complete
-                        ? "bg-foreground text-background"
-                        : "text-muted-foreground"
-                    }`}
-                  >
-                    {task.complete ? <Check className="h-4 w-4" /> : "•"}
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="flex items-center gap-2 text-sm font-semibold">
-                      {task.label}
-                      {task.optional && (
-                        <span className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
-                          optional
-                        </span>
-                      )}
-                    </span>
-                    <span className="mt-1 block text-xs font-light leading-relaxed text-muted-foreground">
-                      {task.description}
-                    </span>
-                  </span>
-                  <ChevronRight className="mt-1 h-4 w-4 flex-shrink-0 text-muted-foreground" />
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
+          </header>
 
-        {/* Navigation — the four destinations, uniform cards in a grid */}
-        <div className="mt-8 grid gap-4 sm:grid-cols-2">
-          {navCards.map((card) => {
-            const Icon = card.icon;
-            const isSoftLocked =
-              !!card.lockedDestination && shouldHoldSharingDestinations;
-            return (
-              <button
-                key={card.title}
-                onClick={() => openNavCard(card)}
-                className="flex items-center gap-4 border p-5 text-left transition-colors hover:bg-muted/50"
-              >
-                <Icon className="h-6 w-6 flex-shrink-0 text-muted-foreground" />
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2 text-[15px] font-semibold">
-                    {card.title}
-                    {isSoftLocked && (
-                      <span className="border px-1.5 py-0.5 text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
-                        {isVaultStateLoading ? "checking" : "locked"}
-                      </span>
+          <div className="home-content modern-page mx-auto mt-20 max-w-5xl px-6 pb-20 sm:px-8">
+            {/* Welcome — centered, matching the landing hero type scale */}
+            <div className="home-welcome text-center">
+              <h1 className="text-xl sm:text-2xl md:text-3xl md:w-[70%] mx-auto">
+                {heroHeadline}
+              </h1>
+              <p className="mx-auto mt-4 max-w-2xl font-light leading-relaxed">
+                {heroDescription}
+              </p>
+            </div>
+
+            {showVaultGuidance && vaultSetup && (
+              <div className="home-panel mt-8 border text-left">
+                <div className="flex flex-col gap-4 border-b px-5 py-5 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <div className="inline-flex border px-2.5 py-1 text-xs font-semibold">
+                      {vaultSetup.badge}
+                    </div>
+                    <h2 className="mt-4 text-xl tracking-tight">
+                      {nextTask
+                        ? "Your next step is clear"
+                        : "Your vault setup is almost complete"}
+                    </h2>
+                    <p className="mt-2 max-w-2xl text-sm font-light leading-relaxed text-muted-foreground">
+                      {nextTask
+                        ? nextTask.description
+                        : "You can keep using ZeroDrive now. Secure sharing is optional and can be created when you need it."}
+                    </p>
+                  </div>
+                  <div className="flex flex-col gap-2 sm:min-w-56">
+                    <button
+                      onClick={() => navigate(vaultSetup.primaryActionPath)}
+                      className="border bg-foreground px-4 py-2 text-sm font-semibold text-background transition-colors hover:bg-foreground/90"
+                    >
+                      {vaultSetup.primaryActionLabel}
+                    </button>
+                    {vaultSetup.status !== "needs_key" && (
+                      <button
+                        onClick={handleDismissGuidance}
+                        className="px-4 py-2 text-sm text-muted-foreground hover:text-foreground"
+                      >
+                        Hide setup guidance
+                      </button>
                     )}
                   </div>
-                  <div className="truncate text-xs font-light text-muted-foreground">
-                    {card.subtitle}
+                </div>
+                <div className="grid divide-y sm:grid-cols-2 sm:divide-x sm:divide-y-0">
+                  {vaultSetup.tasks.map((task) => (
+                    <button
+                      key={task.id}
+                      onClick={() =>
+                        task.actionPath && navigate(task.actionPath)
+                      }
+                      className="flex items-start gap-3 px-5 py-4 text-left transition-colors hover:bg-muted/50"
+                    >
+                      <span
+                        className={`mt-0.5 flex h-6 w-6 flex-shrink-0 items-center justify-center border text-xs ${
+                          task.complete
+                            ? "bg-foreground text-background"
+                            : "text-muted-foreground"
+                        }`}
+                      >
+                        {task.complete ? <Check className="h-4 w-4" /> : "•"}
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="flex items-center gap-2 text-sm font-semibold">
+                          {task.label}
+                          {task.optional && (
+                            <span className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
+                              optional
+                            </span>
+                          )}
+                        </span>
+                        <span className="mt-1 block text-xs font-light leading-relaxed text-muted-foreground">
+                          {task.description}
+                        </span>
+                      </span>
+                      <ChevronRight className="mt-1 h-4 w-4 flex-shrink-0 text-muted-foreground" />
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Navigation — the four destinations, uniform cards in a grid */}
+            <div className="mt-8 grid gap-4 sm:grid-cols-2">
+              {navCards.map((card) => {
+                const Icon = card.icon;
+                const isSoftLocked =
+                  !!card.lockedDestination && shouldHoldSharingDestinations;
+                return (
+                  <button
+                    key={card.title}
+                    onClick={() => openNavCard(card)}
+                    className="home-feature flex items-center gap-4 border p-5 text-left transition-colors hover:bg-muted/50"
+                  >
+                    <Icon className="h-6 w-6 flex-shrink-0 text-muted-foreground" />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2 text-[15px] font-semibold">
+                        {card.title}
+                        {isSoftLocked && (
+                          <span className="border px-1.5 py-0.5 text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+                            {isVaultStateLoading ? "checking" : "locked"}
+                          </span>
+                        )}
+                      </div>
+                      <div className="truncate text-xs font-light text-muted-foreground">
+                        {card.subtitle}
+                      </div>
+                    </div>
+                    <ChevronRight className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Recent + security */}
+            <div className="mt-10 grid gap-4 lg:grid-cols-2">
+              <div className="home-panel border">
+                <div className="flex items-center justify-between border-b px-5 py-3.5 text-sm font-medium">
+                  <span>Recent files</span>
+                  <button
+                    onClick={() => navigate("/storage")}
+                    className="text-xs text-[hsl(var(--link))] hover:underline"
+                  >
+                    View all →
+                  </button>
+                </div>
+                {recent.length === 0 ? (
+                  <div className="px-5 py-8 text-center">
+                    <p className="text-sm font-semibold">
+                      Your vault is waiting for its first encrypted file.
+                    </p>
+                    <p className="mx-auto mt-2 max-w-sm text-xs font-light leading-relaxed text-muted-foreground">
+                      Upload from Storage and your browser encrypts the file
+                      before it is stored.
+                    </p>
+                    <button
+                      onClick={() => navigate("/storage")}
+                      className="mt-4 border px-4 py-2 text-sm font-semibold hover:bg-muted/50"
+                    >
+                      Upload first file
+                    </button>
+                  </div>
+                ) : (
+                  recent.map((file) => (
+                    <button
+                      key={file.id}
+                      onClick={() => navigate("/storage")}
+                      className="flex w-full items-center gap-3 border-b px-5 py-2.5 text-left last:border-b-0 hover:bg-muted/50"
+                    >
+                      <img
+                        src={getFileIconPath(file.mimeType, file.name)}
+                        alt=""
+                        className="h-5 w-5 flex-shrink-0"
+                      />
+                      <span className="flex-1 truncate text-sm">
+                        {file.name}
+                      </span>
+                      <span className="text-xs text-muted-foreground">
+                        {new Date(file.uploadedDate).toLocaleDateString()}
+                      </span>
+                    </button>
+                  ))
+                )}
+              </div>
+
+              <div className="home-panel border">
+                <div className="border-b px-5 py-3.5 text-sm font-medium">
+                  Security &amp; setup
+                </div>
+                <div className="flex items-start gap-2.5 border-b px-5 py-3.5 text-sm">
+                  {hasVaultAccess ? (
+                    <Check className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-600" />
+                  ) : (
+                    <Key className="mt-0.5 h-4 w-4 flex-shrink-0 text-muted-foreground" />
+                  )}
+                  <div>
+                    {isVaultStateLoading
+                      ? "Checking vault access"
+                      : hasVaultAccess
+                        ? "End-to-end encryption active"
+                        : "Vault access required"}
+                    <div className="mt-0.5 text-[11.5px] font-light text-muted-foreground">
+                      {isVaultStateLoading
+                        ? "Checking this browser for the key that protects your files."
+                        : hasVaultAccess
+                          ? "Files are encrypted on your device before upload."
+                          : "Create or recover access before this browser can open encrypted files."}
+                    </div>
                   </div>
                 </div>
-                <ChevronRight className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Recent + security */}
-        <div className="mt-10 grid gap-4 lg:grid-cols-2">
-          <div className="border">
-            <div className="flex items-center justify-between border-b px-5 py-3.5 text-sm font-medium">
-              <span>Recent files</span>
-              <button
-                onClick={() => navigate("/storage")}
-                className="text-xs text-[hsl(var(--link))] hover:underline"
-              >
-                View all →
-              </button>
-            </div>
-            {recent.length === 0 ? (
-              <div className="px-5 py-8 text-center">
-                <p className="text-sm font-semibold">
-                  Your vault is waiting for its first encrypted file.
-                </p>
-                <p className="mx-auto mt-2 max-w-sm text-xs font-light leading-relaxed text-muted-foreground">
-                  Upload from Storage and your browser encrypts the file before
-                  it is stored.
-                </p>
+                <div className="flex items-start gap-2.5 border-b px-5 py-3.5 text-sm">
+                  <Key className="mt-0.5 h-4 w-4 flex-shrink-0 text-muted-foreground" />
+                  <div>
+                    Recovery phrase reminder
+                    <div className="mt-0.5 text-[11.5px] font-light text-muted-foreground">
+                      Keep it saved offline. ZeroDrive cannot reset it.
+                    </div>
+                  </div>
+                </div>
                 <button
-                  onClick={() => navigate("/storage")}
-                  className="mt-4 border px-4 py-2 text-sm font-semibold hover:bg-muted/50"
+                  onClick={() => openSharingDestination("share")}
+                  className="flex w-full items-start gap-2.5 px-5 py-3.5 text-left text-sm hover:bg-muted/50"
                 >
-                  Upload first file
+                  {isSharingIdentityActive ? (
+                    <Check className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-600" />
+                  ) : (
+                    <Send className="mt-0.5 h-4 w-4 flex-shrink-0 text-muted-foreground" />
+                  )}
+                  <div>
+                    {isSharingIdentityActive
+                      ? "Sharing identity active"
+                      : "Create sharing identity"}
+                    <div className="mt-0.5 text-[11.5px] font-light text-muted-foreground">
+                      {isSharingIdentityActive
+                        ? "Ready to send and receive private shares."
+                        : "Needed for private shared files."}{" "}
+                      <span className="text-[hsl(var(--link))]">
+                        {isSharingIdentityActive ? "Share →" : "Set up →"}
+                      </span>
+                    </div>
+                  </div>
                 </button>
               </div>
-            ) : (
-              recent.map((file) => (
+            </div>
+          </div>
+          <Dialog
+            open={!!lockedSharingDestination}
+            onOpenChange={(open) => {
+              if (!open) setLockedSharingDestination(null);
+            }}
+          >
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>{lockedDialogCopy.title}</DialogTitle>
+                <DialogDescription className="leading-relaxed">
+                  {lockedDialogCopy.description}
+                </DialogDescription>
+              </DialogHeader>
+              <DialogFooter>
                 <button
-                  key={file.id}
-                  onClick={() => navigate("/storage")}
-                  className="flex w-full items-center gap-3 border-b px-5 py-2.5 text-left last:border-b-0 hover:bg-muted/50"
+                  type="button"
+                  onClick={() => setLockedSharingDestination(null)}
+                  className="border px-4 py-2 text-sm font-semibold hover:bg-muted/50"
                 >
-                  <img
-                    src={getFileIconPath(file.mimeType, file.name)}
-                    alt=""
-                    className="h-5 w-5 flex-shrink-0"
-                  />
-                  <span className="flex-1 truncate text-sm">{file.name}</span>
-                  <span className="text-xs text-muted-foreground">
-                    {new Date(file.uploadedDate).toLocaleDateString()}
-                  </span>
+                  Not now
                 </button>
-              ))
-            )}
-          </div>
-
-          <div className="border">
-            <div className="border-b px-5 py-3.5 text-sm font-medium">
-              Security &amp; setup
-            </div>
-            <div className="flex items-start gap-2.5 border-b px-5 py-3.5 text-sm">
-              {hasVaultAccess ? (
-                <Check className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-600" />
-              ) : (
-                <Key className="mt-0.5 h-4 w-4 flex-shrink-0 text-muted-foreground" />
-              )}
-              <div>
-                {isVaultStateLoading
-                  ? "Checking vault access"
-                  : hasVaultAccess
-                    ? "End-to-end encryption active"
-                    : "Vault access required"}
-                <div className="mt-0.5 text-[11.5px] font-light text-muted-foreground">
-                  {isVaultStateLoading
-                    ? "Checking this browser for the key that protects your files."
-                    : hasVaultAccess
-                      ? "Files are encrypted on your device before upload."
-                      : "Create or recover access before this browser can open encrypted files."}
-                </div>
-              </div>
-            </div>
-            <div className="flex items-start gap-2.5 border-b px-5 py-3.5 text-sm">
-              <Key className="mt-0.5 h-4 w-4 flex-shrink-0 text-muted-foreground" />
-              <div>
-                Recovery phrase reminder
-                <div className="mt-0.5 text-[11.5px] font-light text-muted-foreground">
-                  Keep it saved offline. ZeroDrive cannot reset it.
-                </div>
-              </div>
-            </div>
-            <button
-              onClick={() => openSharingDestination("share")}
-              className="flex w-full items-start gap-2.5 px-5 py-3.5 text-left text-sm hover:bg-muted/50"
-            >
-              {isSharingIdentityActive ? (
-                <Check className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-600" />
-              ) : (
-                <Send className="mt-0.5 h-4 w-4 flex-shrink-0 text-muted-foreground" />
-              )}
-              <div>
-                {isSharingIdentityActive
-                  ? "Sharing identity active"
-                  : "Create sharing identity"}
-                <div className="mt-0.5 text-[11.5px] font-light text-muted-foreground">
-                  {isSharingIdentityActive
-                    ? "Ready to send and receive private shares."
-                    : "Needed for private shared files."}{" "}
-                  <span className="text-[hsl(var(--link))]">
-                    {isSharingIdentityActive ? "Share →" : "Set up →"}
-                  </span>
-                </div>
-              </div>
-            </button>
-          </div>
+                <button
+                  type="button"
+                  disabled={isVaultStateLoading}
+                  onClick={() => {
+                    if (isVaultStateLoading) return;
+                    navigate(
+                      `/recovery-access?returnTo=${encodeURIComponent(
+                        lockedDialogCopy.returnTo,
+                      )}`,
+                    );
+                  }}
+                  className="border bg-foreground px-4 py-2 text-sm font-semibold text-background hover:bg-foreground/90 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {isVaultStateLoading ? "Checking..." : "Set up access"}
+                </button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </div>
       </div>
-      <Dialog
-        open={!!lockedSharingDestination}
-        onOpenChange={(open) => {
-          if (!open) setLockedSharingDestination(null);
-        }}
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{lockedDialogCopy.title}</DialogTitle>
-            <DialogDescription className="leading-relaxed">
-              {lockedDialogCopy.description}
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <button
-              type="button"
-              onClick={() => setLockedSharingDestination(null)}
-              className="border px-4 py-2 text-sm font-semibold hover:bg-muted/50"
-            >
-              Not now
-            </button>
-            <button
-              type="button"
-              disabled={isVaultStateLoading}
-              onClick={() => {
-                if (isVaultStateLoading) return;
-                navigate(
-                  `/recovery-access?returnTo=${encodeURIComponent(
-                    lockedDialogCopy.returnTo,
-                  )}`,
-                );
-              }}
-              className="border bg-foreground px-4 py-2 text-sm font-semibold text-background hover:bg-foreground/90 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {isVaultStateLoading ? "Checking..." : "Set up access"}
-            </button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

@@ -10,7 +10,7 @@ const buttonVariants = cva(
     variants: {
       variant: {
         default:
-          "bg-background text-foreground border hover:bg-foreground hover:text-background",
+          "zd-button-primary bg-background text-foreground border hover:bg-foreground hover:text-background",
         destructive:
           "bg-destructive text-destructive-foreground hover:bg-destructive/90",
         outline: "hover:text-accent-foreground border",
@@ -45,7 +45,10 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
     const Comp = asChild ? Slot : "button";
     return (
       <Comp
-        className={cn(buttonVariants({ variant, size, className }))}
+        className={cn(
+          "zd-button",
+          buttonVariants({ variant, size, className }),
+        )}
         ref={ref}
         {...props}
       />

@@ -36,6 +36,7 @@ import {
 import { PageViewTracker } from "./components/page-view-tracker";
 import { SeoHead } from "./components/seo-head";
 import NotFound from "./pages/not-found";
+import { ComponentPreview } from "./appearance/component-preview";
 
 // Check environment variables on app startup
 const checkEnvironmentVariables = () => {
@@ -71,11 +72,7 @@ const RootRoute: React.FC = () => {
     return null;
   }
 
-  return isAuthenticated ? (
-    <Navigate to="/home" replace />
-  ) : (
-    <LandingPage />
-  );
+  return isAuthenticated ? <Navigate to="/home" replace /> : <LandingPage />;
 };
 
 const KeyManagementRedirect: React.FC = () => {
@@ -98,6 +95,12 @@ function App() {
                 <SeoHead />
                 <PageViewTracker />
                 <Routes>
+                  {process.env.NODE_ENV === "development" && (
+                    <Route
+                      path="/__appearance-preview"
+                      element={<ComponentPreview />}
+                    />
+                  )}
                   <Route path="/" element={<RootRoute />} />
                   <Route path="/oauth/callback" element={<OAuthCallback />} />
                   <Route element={<ProtectedRoute />}>

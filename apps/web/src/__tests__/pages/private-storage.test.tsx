@@ -12,7 +12,11 @@ import {
   getFoldersForUser,
 } from "../../utils/dexieDB";
 import { toast } from "sonner";
-import { useVaultData } from "../../contexts/vault-data-context";
+import {
+  useVaultData,
+  useOptionalVaultData,
+} from "../../contexts/vault-data-context";
+import { ThemeProvider, useTheme } from "../../components/theme-provider";
 import { useUploadQueue } from "../../contexts/upload-queue-context";
 import { clearMnemonic, setMnemonic } from "../../utils/mnemonicManager";
 import {
@@ -76,7 +80,18 @@ jest.mock("../../components/ui/dropdown-menu", () => ({
 }));
 
 jest.mock("../../components/storage/file-preview-dialog", () => ({
-  FilePreviewDialog: () => null,
+  FilePreviewDialog: ({
+    open,
+    fileName,
+  }: {
+    open: boolean;
+    fileName: string;
+  }) =>
+    open ? (
+      <div role="dialog" aria-label="File preview">
+        Previewing {fileName}
+      </div>
+    ) : null,
 }));
 
 jest.mock("../../utils/rsaKeyRecovery", () => ({
@@ -136,6 +151,19 @@ let mockSetDecryptionError: jest.Mock;
 let mockRefreshVaultFromLocal: jest.Mock;
 let mockSetVaultMetadataStatus: jest.Mock;
 
+function AppearanceSwitch() {
+  const { interfaceStyle, setInterfaceStyle } = useTheme();
+  return (
+    <button
+      onClick={() =>
+        setInterfaceStyle(interfaceStyle === "creator" ? "modern" : "creator")
+      }
+    >
+      Switch interface
+    </button>
+  );
+}
+
 const typeConfirmationCode = () => {
   const confirmationCode = screen.getByText((content) =>
     /^[A-Z2-9]{6}$/.test(content),
@@ -149,6 +177,7 @@ const typeConfirmationCode = () => {
 describe("PrivateStorage metadata replacement warning", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    (useOptionalVaultData as jest.Mock).mockReturnValue(null);
     sessionStorage.clear();
     setMnemonic(
       "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
@@ -241,6 +270,94 @@ describe("PrivateStorage metadata replacement warning", () => {
   afterEach(() => {
     clearMnemonic();
     jest.restoreAllMocks();
+  });
+
+  it("preserves the current folder, search, filter and open preview when changing interface", async () => {
+    const vault = mockUseVaultData();
+    const readyVault = {
+      ...vault,
+      state: {
+        ...vault.state,
+        metadataStatus: "ready" as const,
+        folders: [
+          {
+            id: "reports",
+            name: "Reports",
+            parentId: null,
+            userEmail: "owner@example.com",
+            createdDate: new Date("2026-01-01"),
+          },
+        ],
+        files: [
+          {
+            id: "report",
+            name: "report.pdf",
+            mimeType: "application/pdf",
+            folderId: "reports",
+            userEmail: "owner@example.com",
+            uploadedDate: new Date("2026-01-01"),
+          },
+          {
+            id: "image",
+            name: "report.png",
+            mimeType: "image/png",
+            folderId: "reports",
+            userEmail: "owner@example.com",
+            uploadedDate: new Date("2026-01-01"),
+          },
+          {
+            id: "root",
+            name: "root-only.pdf",
+            mimeType: "application/pdf",
+            folderId: null,
+            userEmail: "owner@example.com",
+            uploadedDate: new Date("2026-01-01"),
+          },
+        ],
+      },
+    };
+    mockUseVaultData.mockReturnValue(readyVault);
+    (useOptionalVaultData as jest.Mock).mockReturnValue(readyVault);
+    mockUseApp.mockReturnValue({ ...mockUseApp(), hasDecryptionError: false });
+    render(
+      <ThemeProvider defaultTheme="light">
+        <MemoryRouter>
+          <AppearanceSwitch />
+          <PrivateStorage />
+        </MemoryRouter>
+      </ThemeProvider>,
+    );
+    fireEvent.click(await screen.findByText("Reports"));
+    await screen.findByText("report.pdf");
+    fireEvent.change(screen.getByPlaceholderText("Search files…"), {
+      target: { value: "report" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "PDFs" }));
+    expect(screen.queryByText("report.png")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Preview file" }));
+    expect(
+      screen.getByRole("dialog", { name: "File preview" }),
+    ).toHaveTextContent("report.pdf");
+    const recoveryCalls = (recoverRsaKeysIfNeeded as jest.Mock).mock.calls
+      .length;
+    const metadataCalls = mockFetchAndStoreFileMetadata.mock.calls.length;
+
+    fireEvent.click(screen.getByRole("button", { name: "Switch interface" }));
+    expect(document.documentElement).toHaveAttribute(
+      "data-interface",
+      "modern",
+    );
+    expect(screen.getByPlaceholderText("Search files…")).toHaveValue("report");
+    expect(screen.getByText("Reports")).toBeInTheDocument();
+    expect(screen.getByText("report.pdf")).toBeInTheDocument();
+    expect(screen.queryByText("report.png")).not.toBeInTheDocument();
+    expect(screen.queryByText("root-only.pdf")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("dialog", { name: "File preview" }),
+    ).toHaveTextContent("report.pdf");
+    expect(recoverRsaKeysIfNeeded).toHaveBeenCalledTimes(recoveryCalls);
+    expect(mockFetchAndStoreFileMetadata).toHaveBeenCalledTimes(metadataCalls);
+    expect(mockEnqueueUploads).not.toHaveBeenCalled();
   });
 
   it("blocks replacing an unreadable vault index until the confirmation code is typed", async () => {
