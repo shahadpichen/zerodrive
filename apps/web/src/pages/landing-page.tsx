@@ -34,18 +34,22 @@ function LandingPage({ onAuthChange }: LandingPageProps) {
         <meta itemProp="name" content={SITE_NAME} />
         <meta itemProp="applicationCategory" content="SecurityApplication" />
         <meta itemProp="operatingSystem" content="Modern web browsers" />
-        <span
-          itemProp="offers"
-          itemScope
-          itemType="https://schema.org/Offer"
-        >
+        <span itemProp="offers" itemScope itemType="https://schema.org/Offer">
           <meta itemProp="price" content="0" />
           <meta itemProp="priceCurrency" content="USD" />
         </span>
         <div className="text-center">
           <h1 className="text-2xl md:text-3xl md:w-[70%] mx-auto">
             End-to-End Encrypted File Storage on{" "}
-            <span className="text-black dark:text-white">Google Drive</span>
+            <span>
+              <span className="text-[#4285F4]">G</span>
+              <span className="text-[#EA4335]">o</span>
+              <span className="text-[#FBBC05]">o</span>
+              <span className="text-[#4285F4]">g</span>
+              <span className="text-[#34A853]">l</span>
+              <span className="text-[#EA4335]">e</span>
+            </span>{" "}
+            Drive
           </h1>
 
           <ul className="inline-block text-left list-decimal leading-relaxed font-light mt-6 md:mt-10 pl-6">
